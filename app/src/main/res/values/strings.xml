@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Racha</string>
+    <string name="welcome_title">مرحباً Racha</string>
+    <string name="welcome_subtitle">تطبيقك الشخصي الذكي</string>
+</resources>
