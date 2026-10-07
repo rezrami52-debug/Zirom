@@ -3,4 +3,10 @@
     <string name="app_name">Racha</string>
     <string name="welcome_title">مرحباً Racha</string>
     <string name="welcome_subtitle">تطبيقك الشخصي الذكي</string>
+    <string name="open_settings">الإعدادات</string>
+    <string name="settings_title">الإعدادات</string>
+    <string name="settings_api_key_label">مفتاح Gemini API</string>
+    <string name="settings_api_key_hint">احصل على مفتاحك من aistudio.google.com</string>
+    <string name="save">حفظ</string>
+    <string name="back">رجوع</string>
 </resources>
