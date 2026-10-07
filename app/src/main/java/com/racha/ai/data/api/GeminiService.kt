@@ -1,16 +1,12 @@
 package com.racha.ai.data.api
 
 import com.google.ai.client.generativeai.GenerativeModel
-import com.google.ai.client.generativeai.type.Content
-import com.google.ai.client.generativeai.type.asTextOrNull
-import com.google.ai.client.generativeai.type.model
-import com.google.ai.client.generativeai.type.user
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
 /**
  * خدمة الاتصال بـ Gemini API.
- * تستخدم SDK 0.9.0 مع الواجهة البديلة.
+ * نسخة مبسطة تعمل مع SDK 0.9.0.
  */
 class GeminiService(apiKey: String) {
 
@@ -19,45 +15,24 @@ class GeminiService(apiKey: String) {
         apiKey = apiKey
     )
 
-    private val history = mutableListOf<Content>()
-
+    /**
+     * إرسال رسالة والحصول على الرد.
+     * ملاحظة: لا يوجد سياق حالياً — كل رسالة مستقلة.
+     */
     suspend fun sendMessage(userMessage: String): Result<String> = withContext(Dispatchers.IO) {
         try {
-            // بناء Content بسيط مع role
-            val userContent = Content(
-                role = "user",
-                parts = listOf(
-                    com.google.ai.client.generativeai.type.TextPart(userMessage)
-                )
-            )
-            history.add(userContent)
-
-            // إرسال للموديل
-            val response = model.generateContent(history.toList())
-            val responseText = response.candidates
-                .firstOrNull()
-                ?.content
-                ?.parts
-                ?.firstOrNull()
-                ?.asTextOrNull()
-                ?: "لم أتمكن من توليد رد."
-
-            // أضف رد Gemini إلى السياق
-            val modelContent = Content(
-                role = "model",
-                parts = listOf(
-                    com.google.ai.client.generativeai.type.TextPart(responseText)
-                )
-            )
-            history.add(modelContent)
-
-            Result.success(responseText)
+            val response = model.generateContent(userMessage)
+            val text = response.text ?: "لم أتمكن من توليد رد."
+            Result.success(text)
         } catch (e: Exception) {
             Result.failure(e)
         }
     }
 
+    /**
+     * لا يوجد سياق حالياً.
+     */
     fun clearHistory() {
-        history.clear()
+        // لا شيء
     }
 }
