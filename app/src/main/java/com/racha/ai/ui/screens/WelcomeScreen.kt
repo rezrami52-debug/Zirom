@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Button
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -19,7 +20,8 @@ import com.racha.ai.R
 
 @Composable
 fun WelcomeScreen(
-    onOpenSettings: () -> Unit
+    onOpenSettings: () -> Unit,
+    onOpenChat: () -> Unit
 ) {
     Column(
         modifier = Modifier
@@ -40,7 +42,11 @@ fun WelcomeScreen(
             textAlign = TextAlign.Center
         )
         Spacer(modifier = Modifier.height(32.dp))
-        Button(onClick = onOpenSettings) {
+        Button(onClick = onOpenChat) {
+            Text(text = stringResource(id = R.string.open_chat))
+        }
+        Spacer(modifier = Modifier.height(12.dp))
+        OutlinedButton(onClick = onOpenSettings) {
             Text(text = stringResource(id = R.string.open_settings))
         }
     }

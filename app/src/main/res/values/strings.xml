@@ -9,4 +9,8 @@
     <string name="settings_api_key_hint">احصل على مفتاحك من aistudio.google.com</string>
     <string name="save">حفظ</string>
     <string name="back">رجوع</string>
+    <string name="open_chat">فتح المحادثة</string>
+    <string name="chat_input_hint">اكتب رسالتك...</string>
+    <string name="chat_send">إرسال</string>
+    <string name="chat_thinking">Racha يفكر...</string>
 </resources>
