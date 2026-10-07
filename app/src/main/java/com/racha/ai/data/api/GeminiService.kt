@@ -6,12 +6,12 @@ import kotlinx.coroutines.withContext
 
 /**
  * خدمة الاتصال بـ Gemini API.
- * نستخدم gemini-2.5-flash — الأحدث والمتوافق مع SDK 0.9.0.
+ * نستخدم gemini-3.8-flash — الأحدث والمتوافق مع SDK 0.9.0.
  */
 class GeminiService(apiKey: String) {
 
     private val model = GenerativeModel(
-        modelName = "gemini-2.5-flash",
+        modelName = "gemini-3.8-flash",
         apiKey = apiKey
     )
 
