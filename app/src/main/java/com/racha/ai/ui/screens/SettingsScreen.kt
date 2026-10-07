@@ -18,22 +18,32 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.viewmodel.compose.viewModel
 import com.racha.ai.R
+import kotlinx.coroutines.delay
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SettingsScreen(
-    onBack: () -> Unit
+    onBack: () -> Unit,
+    viewModel: SettingsViewModel = viewModel()
 ) {
-    var apiKey by remember { mutableStateOf("") }
+    val state by viewModel.uiState.collectAsState()
+
+    // إخفاء رسالة الحفظ بعد 3 ثوانٍ
+    LaunchedEffect(state.saveMessage) {
+        if (state.saveMessage != null) {
+            delay(3000)
+            viewModel.clearMessage()
+        }
+    }
 
     Scaffold(
         topBar = {
@@ -62,8 +72,8 @@ fun SettingsScreen(
             )
             Spacer(modifier = Modifier.height(8.dp))
             OutlinedTextField(
-                value = apiKey,
-                onValueChange = { apiKey = it },
+                value = state.apiKey,
+                onValueChange = viewModel::onApiKeyChange,
                 modifier = Modifier.fillMaxWidth(),
                 placeholder = { Text("AIza...") },
                 visualTransformation = PasswordVisualTransformation(),
@@ -76,11 +86,25 @@ fun SettingsScreen(
             )
             Spacer(modifier = Modifier.height(24.dp))
             Button(
-                onClick = { /* سنضيف الحفظ في الجلسة 3 */ },
+                onClick = viewModel::saveApiKey,
                 modifier = Modifier.fillMaxWidth(),
-                enabled = apiKey.isNotBlank()
+                enabled = state.apiKey.isNotBlank()
             ) {
                 Text(stringResource(id = R.string.save))
+            }
+
+            // رسالة الحفظ
+            state.saveMessage?.let { message ->
+                Spacer(modifier = Modifier.height(16.dp))
+                Text(
+                    text = message,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = if (state.isSaved) {
+                        MaterialTheme.colorScheme.primary
+                    } else {
+                        MaterialTheme.colorScheme.error
+                    }
+                )
             }
         }
     }
