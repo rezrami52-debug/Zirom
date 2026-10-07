@@ -3,13 +3,14 @@ package com.racha.ai.data.api
 import com.google.ai.client.generativeai.GenerativeModel
 import com.google.ai.client.generativeai.type.Content
 import com.google.ai.client.generativeai.type.asTextOrNull
-import com.google.ai.client.generativeai.type.content
+import com.google.ai.client.generativeai.type.model
+import com.google.ai.client.generativeai.type.user
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
 /**
  * خدمة الاتصال بـ Gemini API.
- * تدير المحادثة وتحتفظ بالسياق.
+ * تستخدم SDK 0.9.0 مع الواجهة البديلة.
  */
 class GeminiService(apiKey: String) {
 
@@ -20,13 +21,16 @@ class GeminiService(apiKey: String) {
 
     private val history = mutableListOf<Content>()
 
-    /**
-     * إرسال رسالة والحصول على الرد.
-     */
     suspend fun sendMessage(userMessage: String): Result<String> = withContext(Dispatchers.IO) {
         try {
-            // أضف رسالة المستخدم إلى السياق
-            history.add(content(role = "user") { text(userMessage) })
+            // بناء Content بسيط مع role
+            val userContent = Content(
+                role = "user",
+                parts = listOf(
+                    com.google.ai.client.generativeai.type.TextPart(userMessage)
+                )
+            )
+            history.add(userContent)
 
             // إرسال للموديل
             val response = model.generateContent(history.toList())
@@ -39,7 +43,13 @@ class GeminiService(apiKey: String) {
                 ?: "لم أتمكن من توليد رد."
 
             // أضف رد Gemini إلى السياق
-            history.add(content(role = "model") { text(responseText) })
+            val modelContent = Content(
+                role = "model",
+                parts = listOf(
+                    com.google.ai.client.generativeai.type.TextPart(responseText)
+                )
+            )
+            history.add(modelContent)
 
             Result.success(responseText)
         } catch (e: Exception) {
@@ -47,9 +57,6 @@ class GeminiService(apiKey: String) {
         }
     }
 
-    /**
-     * مسح تاريخ المحادثة.
-     */
     fun clearHistory() {
         history.clear()
     }
