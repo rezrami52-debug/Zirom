@@ -6,19 +6,15 @@ import kotlinx.coroutines.withContext
 
 /**
  * خدمة الاتصال بـ Gemini API.
- * نسخة مبسطة تعمل مع SDK 0.9.0.
+ * نستخدم gemini-pro (v1beta) — متوافق مع SDK 0.9.0.
  */
 class GeminiService(apiKey: String) {
 
     private val model = GenerativeModel(
-        modelName = "gemini-1.5-flash",
+        modelName = "gemini-pro",
         apiKey = apiKey
     )
 
-    /**
-     * إرسال رسالة والحصول على الرد.
-     * ملاحظة: لا يوجد سياق حالياً — كل رسالة مستقلة.
-     */
     suspend fun sendMessage(userMessage: String): Result<String> = withContext(Dispatchers.IO) {
         try {
             val response = model.generateContent(userMessage)
@@ -29,9 +25,6 @@ class GeminiService(apiKey: String) {
         }
     }
 
-    /**
-     * لا يوجد سياق حالياً.
-     */
     fun clearHistory() {
         // لا شيء
     }
