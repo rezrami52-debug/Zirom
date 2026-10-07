@@ -16,6 +16,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Send
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.CircularProgressIndicator
@@ -60,6 +61,12 @@ fun ChatScreen(
             TopAppBar(
                 title = { Text(stringResource(id = R.string.app_name)) },
                 actions = {
+                    IconButton(onClick = viewModel::clearHistory) {
+                        Icon(
+                            imageVector = Icons.Filled.Delete,
+                            contentDescription = "مسح المحادثة"
+                        )
+                    }
                     IconButton(onClick = onOpenSettings) {
                         Icon(
                             imageVector = Icons.Filled.Settings,
@@ -128,16 +135,18 @@ fun ChatScreen(
 
 @Composable
 fun MessageBubble(message: Message) {
-    val bubbleColor = if (message.isFromUser) {
-        MaterialTheme.colorScheme.primary
-    } else {
-        MaterialTheme.colorScheme.surfaceVariant
+    val bubbleColor = when {
+        message.isFromUser -> MaterialTheme.colorScheme.primary
+        message.isError -> MaterialTheme.colorScheme.errorContainer
+        else -> MaterialTheme.colorScheme.surfaceVariant
     }
-    val textColor = if (message.isFromUser) {
-        MaterialTheme.colorScheme.onPrimary
-    } else {
-        MaterialTheme.colorScheme.onSurfaceVariant
+
+    val textColor = when {
+        message.isFromUser -> MaterialTheme.colorScheme.onPrimary
+        message.isError -> MaterialTheme.colorScheme.onErrorContainer
+        else -> MaterialTheme.colorScheme.onSurfaceVariant
     }
+
     val alignment = if (message.isFromUser) Alignment.CenterEnd else Alignment.CenterStart
 
     Box(
