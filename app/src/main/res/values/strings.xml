@@ -4,13 +4,16 @@
     <string name="welcome_title">مرحباً Racha</string>
     <string name="welcome_subtitle">تطبيقك الشخصي الذكي</string>
     <string name="open_settings">الإعدادات</string>
+    <string name="open_chat">فتح المحادثة</string>
+    <string name="open_notifications">الإشعارات</string>
     <string name="settings_title">الإعدادات</string>
     <string name="settings_api_key_label">مفتاح Gemini API</string>
     <string name="settings_api_key_hint">احصل على مفتاحك من aistudio.google.com</string>
     <string name="save">حفظ</string>
     <string name="back">رجوع</string>
-    <string name="open_chat">فتح المحادثة</string>
     <string name="chat_input_hint">اكتب رسالتك...</string>
     <string name="chat_send">إرسال</string>
     <string name="chat_thinking">Racha يفكر...</string>
+    <string name="notifications_title">الإشعارات</string>
+    <string name="notifications_empty">لا توجد إشعارات بعد.\n\nفعّل صلاحية "الوصول للإشعارات" من إعدادات النظام.</string>
 </resources>

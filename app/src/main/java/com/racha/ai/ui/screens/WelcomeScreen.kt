@@ -21,7 +21,8 @@ import com.racha.ai.R
 @Composable
 fun WelcomeScreen(
     onOpenSettings: () -> Unit,
-    onOpenChat: () -> Unit
+    onOpenChat: () -> Unit,
+    onOpenNotifications: () -> Unit
 ) {
     Column(
         modifier = Modifier
@@ -44,6 +45,10 @@ fun WelcomeScreen(
         Spacer(modifier = Modifier.height(32.dp))
         Button(onClick = onOpenChat) {
             Text(text = stringResource(id = R.string.open_chat))
+        }
+        Spacer(modifier = Modifier.height(12.dp))
+        OutlinedButton(onClick = onOpenNotifications) {
+            Text(text = stringResource(id = R.string.open_notifications))
         }
         Spacer(modifier = Modifier.height(12.dp))
         OutlinedButton(onClick = onOpenSettings) {

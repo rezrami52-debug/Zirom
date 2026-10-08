@@ -8,11 +8,13 @@ import androidx.compose.runtime.setValue
 import com.racha.ai.ui.screens.SettingsScreen
 import com.racha.ai.ui.screens.WelcomeScreen
 import com.racha.ai.ui.screens.chat.ChatScreen
+import com.racha.ai.ui.screens.notifications.NotificationsScreen
 
 sealed class Screen {
     object Welcome : Screen()
     object Settings : Screen()
     object Chat : Screen()
+    object Notifications : Screen()
 }
 
 @Composable
@@ -22,13 +24,17 @@ fun RachaApp() {
     when (currentScreen) {
         is Screen.Welcome -> WelcomeScreen(
             onOpenSettings = { currentScreen = Screen.Settings },
-            onOpenChat = { currentScreen = Screen.Chat }
+            onOpenChat = { currentScreen = Screen.Chat },
+            onOpenNotifications = { currentScreen = Screen.Notifications }
         )
         is Screen.Settings -> SettingsScreen(
             onBack = { currentScreen = Screen.Welcome }
         )
         is Screen.Chat -> ChatScreen(
             onOpenSettings = { currentScreen = Screen.Settings }
+        )
+        is Screen.Notifications -> NotificationsScreen(
+            onBack = { currentScreen = Screen.Welcome }
         )
     }
 }
