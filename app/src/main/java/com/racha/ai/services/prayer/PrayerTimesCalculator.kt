@@ -1,9 +1,7 @@
 package com.racha.ai.services.prayer
 
 import com.batoulapps.adhan.CalculationMethod
-import com.batoulapps.adhan.CalculationParameters
 import com.batoulapps.adhan.Coordinates
-import com.batoulapps.adhan.Madhab
 import com.batoulapps.adhan.PrayerTimes
 import com.batoulapps.adhan.data.DateComponents
 import com.racha.ai.domain.model.PrayerTimes as RachaPrayerTimes
@@ -20,11 +18,8 @@ object PrayerTimesCalculator {
         val coordinates = Coordinates(latitude, longitude)
         val dateComponents = DateComponents.from(date)
 
-        val params = CalculationParameters(
-            CalculationMethod.MUSLIM_WORLD_LEAGUE.method
-        ).apply {
-            madhab = Madhab.SHAFI
-        }
+        // adhan 1.2.0: parameters يحوي Madhab.SHAFI افتراضياً
+        val params = CalculationMethod.MUSLIM_WORLD_LEAGUE.parameters
 
         val times = PrayerTimes(coordinates, dateComponents, params)
 
