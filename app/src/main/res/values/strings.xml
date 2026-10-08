@@ -18,7 +18,4 @@
     <string name="notifications_title">الإشعارات</string>
     <string name="notifications_empty">لا توجد إشعارات بعد.</string>
     <string name="prayer_title">مواقيت الصلاة</string>
-    <string name="prayer_loading">جاري حساب المواقيت...</string>
-    <string name="prayer_next">الصلاة القادمة</string>
-    <string name="prayer_enable_location">الرجاء تفعيل GPS ومنح صلاحية الموقع لـ Racha.</string>
 </resources>

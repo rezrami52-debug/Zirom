@@ -1,7 +1,7 @@
 package com.racha.ai.ui.screens.prayer
 
+import android.Manifest
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -9,14 +9,11 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
-import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material3.Button
 import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -30,23 +27,34 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.google.accompanist.permissions.ExperimentalPermissionsApi
+import com.google.accompanist.permissions.rememberMultiplePermissionsState
 import com.racha.ai.R
+import com.racha.ai.core.permissions.PermissionHelper
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalPermissionsApi::class)
 @Composable
 fun PrayerScreen(
     onBack: () -> Unit,
     viewModel: PrayerViewModel = viewModel()
 ) {
     val state by viewModel.uiState.collectAsState()
+    val context = LocalContext.current
+
+    val locationPermissions = rememberMultiplePermissionsState(
+        permissions = listOf(
+            Manifest.permission.ACCESS_FINE_LOCATION,
+            Manifest.permission.ACCESS_COARSE_LOCATION
+        )
+    )
 
     Scaffold(
         topBar = {
@@ -54,152 +62,99 @@ fun PrayerScreen(
                 title = { Text(stringResource(id = R.string.prayer_title)) },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
-                        Icon(Icons.Filled.ArrowBack, contentDescription = stringResource(id = R.string.back))
+                        Icon(
+                            imageVector = Icons.Filled.ArrowBack,
+                            contentDescription = stringResource(id = R.string.back)
+                        )
                     }
                 },
                 actions = {
                     IconButton(onClick = viewModel::loadPrayerTimes) {
-                        Icon(Icons.Filled.Refresh, contentDescription = "تحديث")
+                        Icon(
+                            imageVector = Icons.Filled.Refresh,
+                            contentDescription = "تحديث"
+                        )
                     }
                 }
             )
         }
     ) { padding ->
-        Box(
+        Column(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(padding)
+                .padding(16.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
         ) {
             when {
                 state.isLoading -> {
-                    Column(
-                        modifier = Modifier.fillMaxSize(),
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                        verticalArrangement = Arrangement.Center
-                    ) {
-                        CircularProgressIndicator()
-                        Spacer(modifier = Modifier.height(16.dp))
-                        Text(stringResource(id = R.string.prayer_loading))
-                    }
+                    Spacer(modifier = Modifier.height(64.dp))
+                    CircularProgressIndicator()
+                    Spacer(modifier = Modifier.height(16.dp))
+                    Text("جارٍ تحديد موقعك...")
                 }
-                state.errorMessage != null -> {
-                    Column(
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .padding(24.dp),
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                        verticalArrangement = Arrangement.Center
-                    ) {
-                        Text(
-                            text = state.errorMessage ?: "",
-                            textAlign = TextAlign.Center,
-                            color = MaterialTheme.colorScheme.error,
-                            style = MaterialTheme.typography.bodyLarge
-                        )
-                        Spacer(modifier = Modifier.height(16.dp))
-                        Text(
-                            text = stringResource(id = R.string.prayer_enable_location),
-                            textAlign = TextAlign.Center,
-                            style = MaterialTheme.typography.bodyMedium
-                        )
-                    }
-                }
-                state.prayerTimes != null -> {
-                    PrayerTimesContent(state)
-                }
-            }
-        }
-    }
-}
 
-@Composable
-fun PrayerTimesContent(state: PrayerUiState) {
-    val times = state.prayerTimes ?: return
-    val dateFormatter = SimpleDateFormat("HH:mm", Locale.getDefault())
-
-    LazyColumn(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(horizontal = 16.dp),
-        verticalArrangement = Arrangement.spacedBy(8.dp)
-    ) {
-        item { Spacer(modifier = Modifier.height(8.dp)) }
-
-        item {
-            Card(
-                modifier = Modifier.fillMaxWidth(),
-                colors = CardDefaults.cardColors(
-                    containerColor = MaterialTheme.colorScheme.primaryContainer
-                )
-            ) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(16.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Icon(
-                        Icons.Filled.LocationOn,
-                        contentDescription = null,
-                        tint = MaterialTheme.colorScheme.onPrimaryContainer
-                    )
+                state.needsLocationPermission -> {
+                    Spacer(modifier = Modifier.height(48.dp))
                     Text(
-                        text = state.cityName,
-                        modifier = Modifier.padding(start = 8.dp),
-                        style = MaterialTheme.typography.titleMedium,
-                        color = MaterialTheme.colorScheme.onPrimaryContainer
+                        text = state.errorMessage ?: "",
+                        style = MaterialTheme.typography.bodyLarge,
+                        textAlign = TextAlign.Center,
+                        color = MaterialTheme.colorScheme.error
                     )
-                }
-            }
-        }
-
-        if (state.nextPrayerTime != null) {
-            item {
-                Card(
-                    modifier = Modifier.fillMaxWidth(),
-                    colors = CardDefaults.cardColors(
-                        containerColor = MaterialTheme.colorScheme.tertiaryContainer
-                    )
-                ) {
-                    Column(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(16.dp),
-                        horizontalAlignment = Alignment.CenterHorizontally
+                    Spacer(modifier = Modifier.height(24.dp))
+                    Button(
+                        onClick = {
+                            if (locationPermissions.allPermissionsGranted) {
+                                // الصلاحية موجودة، لكن GPS مغلق. نفتح إعدادات الموقع.
+                                PermissionHelper.openLocationSettings(context)
+                            } else {
+                                locationPermissions.launchMultiplePermissionRequest()
+                            }
+                        }
                     ) {
-                        Text(
-                            text = stringResource(id = R.string.prayer_next),
-                            style = MaterialTheme.typography.labelMedium,
-                            color = MaterialTheme.colorScheme.onTertiaryContainer
-                        )
-                        Spacer(modifier = Modifier.height(4.dp))
-                        Text(
-                            text = state.nextPrayerName,
-                            style = MaterialTheme.typography.headlineMedium,
-                            fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.onTertiaryContainer
-                        )
-                        Text(
-                            text = dateFormatter.format(state.nextPrayerTime ?: Date()),
-                            style = MaterialTheme.typography.titleLarge,
-                            color = MaterialTheme.colorScheme.onTertiaryContainer
-                        )
+                        Text("منح صلاحية الموقع")
+                    }
+                    Spacer(modifier = Modifier.height(12.dp))
+                    Button(
+                        onClick = { viewModel.loadPrayerTimes() }
+                    ) {
+                        Text("إعادة المحاولة")
                     }
                 }
+
+                state.prayerTimes != null -> {
+                    val times = state.prayerTimes!!
+                    if (state.cityName.isNotBlank()) {
+                        Text(
+                            text = state.cityName,
+                            style = MaterialTheme.typography.titleLarge
+                        )
+                        Spacer(modifier = Modifier.height(16.dp))
+                    }
+
+                    PrayerRow("الفجر", times.fajr)
+                    PrayerRow("الظهر", times.dhuhr)
+                    PrayerRow("العصر", times.asr)
+                    PrayerRow("المغرب", times.maghrib)
+                    PrayerRow("العشاء", times.isha)
+                }
+
+                else -> {
+                    Text("لا توجد بيانات")
+                }
             }
         }
-
-        items(times.asMap().toList()) { (name, time) ->
-            PrayerTimeRow(name = name, time = time, dateFormatter = dateFormatter)
-        }
-
-        item { Spacer(modifier = Modifier.height(8.dp)) }
     }
 }
 
 @Composable
-fun PrayerTimeRow(name: String, time: Date, dateFormatter: SimpleDateFormat) {
-    Card(modifier = Modifier.fillMaxWidth()) {
+fun PrayerRow(name: String, time: Date) {
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 4.dp)
+    ) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
@@ -212,11 +167,15 @@ fun PrayerTimeRow(name: String, time: Date, dateFormatter: SimpleDateFormat) {
                 style = MaterialTheme.typography.titleMedium
             )
             Text(
-                text = dateFormatter.format(time),
+                text = formatTime(time),
                 style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.Bold,
                 color = MaterialTheme.colorScheme.primary
             )
         }
     }
+}
+
+private fun formatTime(date: Date): String {
+    val formatter = SimpleDateFormat("HH:mm", Locale.getDefault())
+    return formatter.format(date)
 }

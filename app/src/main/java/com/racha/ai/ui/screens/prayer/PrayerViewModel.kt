@@ -13,10 +13,11 @@ import kotlinx.coroutines.launch
 import java.util.Date
 
 data class PrayerUiState(
-    val isLoading: Boolean = true,
+    val isLoading: Boolean = false,
     val prayerTimes: PrayerTimes? = null,
-    val errorMessage: String? = null,
     val cityName: String = "",
+    val errorMessage: String? = null,
+    val needsLocationPermission: Boolean = false,
     val nextPrayerName: String = "",
     val nextPrayerTime: Date? = null
 )
@@ -32,13 +33,19 @@ class PrayerViewModel(application: Application) : AndroidViewModel(application) 
 
     fun loadPrayerTimes() {
         viewModelScope.launch {
-            _uiState.value = _uiState.value.copy(isLoading = true, errorMessage = null)
+            _uiState.value = _uiState.value.copy(
+                isLoading = true,
+                errorMessage = null,
+                needsLocationPermission = false
+            )
 
             val location = LocationHelper.getCurrentLocation(getApplication())
+
             if (location == null) {
                 _uiState.value = _uiState.value.copy(
                     isLoading = false,
-                    errorMessage = "لم نتمكن من تحديد موقعك. تأكد من تفعيل GPS ومنح الصلاحية."
+                    needsLocationPermission = true,
+                    errorMessage = "لا يمكن تحديد موقعك. تأكد من تفعيل GPS ومنح صلاحية الموقع."
                 )
                 return@launch
             }
@@ -46,14 +53,17 @@ class PrayerViewModel(application: Application) : AndroidViewModel(application) 
             try {
                 val times = PrayerTimesCalculator.calculate(
                     latitude = location.latitude,
-                    longitude = location.longitude,
-                    locationName = location.cityName ?: "موقعك"
+                    longitude = location.longitude
                 )
-                val next = times.nextPrayer()
+
+                // احسب الصلاة القادمة
+                val now = Date()
+                val next = findNextPrayer(times, now)
+
                 _uiState.value = _uiState.value.copy(
                     isLoading = false,
                     prayerTimes = times,
-                    cityName = location.cityName ?: "موقعك",
+                    cityName = location.cityName ?: "",
                     nextPrayerName = next?.first ?: "",
                     nextPrayerTime = next?.second
                 )
@@ -64,5 +74,16 @@ class PrayerViewModel(application: Application) : AndroidViewModel(application) 
                 )
             }
         }
+    }
+
+    private fun findNextPrayer(times: PrayerTimes, now: Date): Pair<String, Date>? {
+        val prayers = listOf(
+            "الفجر" to times.fajr,
+            "الظهر" to times.dhuhr,
+            "العصر" to times.asr,
+            "المغرب" to times.maghrib,
+            "العشاء" to times.isha
+        )
+        return prayers.firstOrNull { it.second.after(now) }
     }
 }

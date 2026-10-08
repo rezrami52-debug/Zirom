@@ -14,24 +14,32 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.racha.ai.R
+import com.racha.ai.core.permissions.PermissionHelper
 import com.racha.ai.domain.model.AppNotification
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -44,6 +52,16 @@ fun NotificationsScreen(
     viewModel: NotificationsViewModel = viewModel()
 ) {
     val notifications by viewModel.notifications.collectAsState()
+    val context = LocalContext.current
+
+    // نتحقق من حالة الصلاحية، ونعيدها كل مرة نعود للشاشة
+    var hasPermission by remember { mutableStateOf(PermissionHelper.isNotificationListenerEnabled(context)) }
+
+    DisposableEffect(Unit) {
+        onDispose {
+            // عند مغادرة الشاشة - لا شيء
+        }
+    }
 
     Scaffold(
         topBar = {
@@ -68,33 +86,103 @@ fun NotificationsScreen(
             )
         }
     ) { padding ->
-        if (notifications.isEmpty()) {
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(padding)
-                    .padding(24.dp),
-                contentAlignment = Alignment.Center
-            ) {
-                Text(
-                    text = stringResource(id = R.string.notifications_empty),
-                    style = MaterialTheme.typography.bodyLarge,
-                    textAlign = TextAlign.Center
-                )
-            }
-        } else {
-            LazyColumn(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(padding)
-                    .padding(horizontal = 12.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                item { Spacer(modifier = Modifier.height(8.dp)) }
-                items(notifications, key = { it.id }) { notif ->
-                    NotificationCard(notif)
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(padding)
+        ) {
+            // شريط حالة الصلاحية
+            if (!hasPermission) {
+                Card(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(12.dp),
+                    colors = androidx.compose.material3.CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.errorContainer
+                    )
+                ) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(16.dp)
+                    ) {
+                        Text(
+                            text = "صلاحية الوصول للإشعارات غير مفعّلة",
+                            style = MaterialTheme.typography.titleMedium,
+                            color = MaterialTheme.colorScheme.onErrorContainer
+                        )
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text(
+                            text = "لتفعيلها:\n1) اضغط الزر أدناه\n2) ابحث عن Racha في القائمة\n3) فعّل المفتاح\n\n⚠️ إذا لم يعمل الزر، اضغط \"فتح إعدادات التطبيق\" ثم ابحث عن \"Restricted Settings\" وألغِ التقييد.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onErrorContainer
+                        )
+                        Spacer(modifier = Modifier.height(12.dp))
+                        Button(
+                            onClick = {
+                                PermissionHelper.openNotificationListenerSettings(context)
+                            },
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Text("فتح إعدادات الإشعارات")
+                        }
+                        Spacer(modifier = Modifier.height(8.dp))
+                        OutlinedButton(
+                            onClick = {
+                                PermissionHelper.openAppSettings(context)
+                            },
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Text("فتح إعدادات التطبيق (لإلغاء التقييد)")
+                        }
+                    }
                 }
-                item { Spacer(modifier = Modifier.height(8.dp)) }
+            } else {
+                // شريط أخضر صغير عندما الصلاحية مفعلة
+                Card(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(12.dp),
+                    colors = androidx.compose.material3.CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.primaryContainer
+                    )
+                ) {
+                    Text(
+                        text = "✅ صلاحية الإشعارات مفعّلة",
+                        modifier = Modifier.padding(12.dp),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onPrimaryContainer
+                    )
+                }
+            }
+
+            // قائمة الإشعارات
+            if (notifications.isEmpty()) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(24.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        text = stringResource(id = R.string.notifications_empty),
+                        style = MaterialTheme.typography.bodyLarge,
+                        textAlign = TextAlign.Center
+                    )
+                }
+            } else {
+                LazyColumn(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(horizontal = 12.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    item { Spacer(modifier = Modifier.height(8.dp)) }
+                    items(notifications, key = { it.id }) { notif ->
+                        NotificationCard(notif)
+                    }
+                    item { Spacer(modifier = Modifier.height(8.dp)) }
+                }
             }
         }
     }
