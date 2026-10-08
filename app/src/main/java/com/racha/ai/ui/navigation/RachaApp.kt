@@ -9,12 +9,14 @@ import com.racha.ai.ui.screens.SettingsScreen
 import com.racha.ai.ui.screens.WelcomeScreen
 import com.racha.ai.ui.screens.chat.ChatScreen
 import com.racha.ai.ui.screens.notifications.NotificationsScreen
+import com.racha.ai.ui.screens.prayer.PrayerScreen
 
 sealed class Screen {
     object Welcome : Screen()
     object Settings : Screen()
     object Chat : Screen()
     object Notifications : Screen()
+    object Prayer : Screen()
 }
 
 @Composable
@@ -25,7 +27,8 @@ fun RachaApp() {
         is Screen.Welcome -> WelcomeScreen(
             onOpenSettings = { currentScreen = Screen.Settings },
             onOpenChat = { currentScreen = Screen.Chat },
-            onOpenNotifications = { currentScreen = Screen.Notifications }
+            onOpenNotifications = { currentScreen = Screen.Notifications },
+            onOpenPrayer = { currentScreen = Screen.Prayer }
         )
         is Screen.Settings -> SettingsScreen(
             onBack = { currentScreen = Screen.Welcome }
@@ -34,6 +37,9 @@ fun RachaApp() {
             onOpenSettings = { currentScreen = Screen.Settings }
         )
         is Screen.Notifications -> NotificationsScreen(
+            onBack = { currentScreen = Screen.Welcome }
+        )
+        is Screen.Prayer -> PrayerScreen(
             onBack = { currentScreen = Screen.Welcome }
         )
     }

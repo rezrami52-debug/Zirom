@@ -22,7 +22,8 @@ import com.racha.ai.R
 fun WelcomeScreen(
     onOpenSettings: () -> Unit,
     onOpenChat: () -> Unit,
-    onOpenNotifications: () -> Unit
+    onOpenNotifications: () -> Unit,
+    onOpenPrayer: () -> Unit
 ) {
     Column(
         modifier = Modifier
@@ -45,6 +46,10 @@ fun WelcomeScreen(
         Spacer(modifier = Modifier.height(32.dp))
         Button(onClick = onOpenChat) {
             Text(text = stringResource(id = R.string.open_chat))
+        }
+        Spacer(modifier = Modifier.height(12.dp))
+        Button(onClick = onOpenPrayer) {
+            Text(text = stringResource(id = R.string.open_prayer))
         }
         Spacer(modifier = Modifier.height(12.dp))
         OutlinedButton(onClick = onOpenNotifications) {

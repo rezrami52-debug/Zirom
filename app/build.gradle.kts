@@ -79,4 +79,10 @@ dependencies {
 
     // Gemini AI
     implementation("com.google.ai.client.generativeai:generativeai:0.9.0")
+
+    // Prayer Times
+    implementation("com.batoulapps.adhan:adhan:1.2.0")
+
+    // Play Services Location (للموقع)
+    implementation("com.google.android.gms:play-services-location:21.2.0")
 }
