@@ -17,6 +17,8 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Notifications
+import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material.icons.filled.Send
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.CircularProgressIndicator
@@ -45,6 +47,8 @@ import com.racha.ai.domain.model.Message
 @Composable
 fun ChatScreen(
     onOpenSettings: () -> Unit,
+    onOpenNotifications: () -> Unit,
+    onOpenPrayer: () -> Unit,
     viewModel: ChatViewModel = viewModel()
 ) {
     val state by viewModel.uiState.collectAsState()
@@ -61,6 +65,18 @@ fun ChatScreen(
             TopAppBar(
                 title = { Text(stringResource(id = R.string.app_name)) },
                 actions = {
+                    IconButton(onClick = onOpenPrayer) {
+                        Icon(
+                            imageVector = Icons.Filled.Schedule,
+                            contentDescription = stringResource(id = R.string.prayer_title)
+                        )
+                    }
+                    IconButton(onClick = onOpenNotifications) {
+                        Icon(
+                            imageVector = Icons.Filled.Notifications,
+                            contentDescription = stringResource(id = R.string.notifications_title)
+                        )
+                    }
                     IconButton(onClick = viewModel::clearHistory) {
                         Icon(
                             imageVector = Icons.Filled.Delete,
@@ -140,13 +156,11 @@ fun MessageBubble(message: Message) {
         message.isError -> MaterialTheme.colorScheme.errorContainer
         else -> MaterialTheme.colorScheme.surfaceVariant
     }
-
     val textColor = when {
         message.isFromUser -> MaterialTheme.colorScheme.onPrimary
         message.isError -> MaterialTheme.colorScheme.onErrorContainer
         else -> MaterialTheme.colorScheme.onSurfaceVariant
     }
-
     val alignment = if (message.isFromUser) Alignment.CenterEnd else Alignment.CenterStart
 
     Box(
