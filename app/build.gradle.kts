@@ -75,4 +75,5 @@ dependencies {
 
     implementation("com.google.android.gms:play-services-location:21.2.0")
     implementation("com.google.accompanist:accompanist-permissions:0.34.0")
+    implementation("com.batoulapps.adhan:adhan:1.2.0")
 }
