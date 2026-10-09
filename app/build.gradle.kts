@@ -86,6 +86,9 @@ dependencies {
     // Permissions
     implementation("com.google.accompanist:accompanist-permissions:0.34.0")
 
-    // ✅ WorkManager (جديد — لهذا فشل البناء)
+    // WorkManager (للطقس)
     implementation("androidx.work:work-runtime-ktx:2.9.0")
+
+    // ✅ Adhan (لحساب مواقيت الصلاة — مكتبة batoulapps)
+    implementation("com.batoulapps.adhan:adhan:1.2.1")
 }
