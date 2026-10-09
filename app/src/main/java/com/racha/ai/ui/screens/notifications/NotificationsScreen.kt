@@ -1,8 +1,5 @@
 package com.racha.ai.ui.screens.notifications
 
-import android.content.Intent
-import android.net.Uri
-import android.provider.Settings
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -17,6 +14,8 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.VolumeOff
+import androidx.compose.material.icons.filled.VolumeUp
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -44,6 +43,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.racha.ai.R
 import com.racha.ai.core.permissions.PermissionHelper
 import com.racha.ai.domain.model.AppNotification
+import com.racha.ai.services.tts.TextToSpeechHelper
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -60,6 +60,7 @@ fun NotificationsScreen(
     var hasPermission by remember {
         mutableStateOf(PermissionHelper.isNotificationListenerEnabled(context))
     }
+    var ttsEnabled by remember { mutableStateOf(true) }
 
     Scaffold(
         topBar = {
@@ -74,6 +75,17 @@ fun NotificationsScreen(
                     }
                 },
                 actions = {
+                    IconButton(
+                        onClick = {
+                            ttsEnabled = !ttsEnabled
+                            if (!ttsEnabled) TextToSpeechHelper.stop()
+                        }
+                    ) {
+                        Icon(
+                            imageVector = if (ttsEnabled) Icons.Filled.VolumeUp else Icons.Filled.VolumeOff,
+                            contentDescription = if (ttsEnabled) "إسكات" else "تفعيل الصوت"
+                        )
+                    }
                     IconButton(onClick = viewModel::clearAll) {
                         Icon(
                             imageVector = Icons.Filled.Delete,
@@ -89,6 +101,7 @@ fun NotificationsScreen(
                 .fillMaxSize()
                 .padding(padding)
         ) {
+            // بطاقة حالة الصلاحية
             if (!hasPermission) {
                 Card(
                     modifier = Modifier
@@ -110,7 +123,7 @@ fun NotificationsScreen(
                         )
                         Spacer(modifier = Modifier.height(8.dp))
                         Text(
-                            text = "خطوات التفعيل:\n1) اضغط الزر أدناه\n2) ابحث عن Racha في القائمة\n3) فعّل المفتاح\n\n⚠️ إذا لم يعمل الزر أو كان باهتاً، اضغط الزر الثاني لإلغاء التقييد.",
+                            text = "لتفعيلها:\n1) اضغط الزر أدناه\n2) ابحث عن Racha في القائمة\n3) فعّل المفتاح\n\n⚠️ إذا لم يعمل، اضغط \"فتح إعدادات التطبيق\" ثم ألغِ \"Restricted Settings\".",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onErrorContainer
                         )
@@ -126,19 +139,11 @@ fun NotificationsScreen(
                         Spacer(modifier = Modifier.height(8.dp))
                         OutlinedButton(
                             onClick = {
-                                try {
-                                    val intent = Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES).apply {
-                                        data = Uri.fromParts("package", context.packageName, null)
-                                        flags = Intent.FLAG_ACTIVITY_NEW_TASK
-                                    }
-                                    context.startActivity(intent)
-                                } catch (e: Exception) {
-                                    PermissionHelper.openAppSettings(context)
-                                }
+                                PermissionHelper.openAppSettings(context)
                             },
                             modifier = Modifier.fillMaxWidth()
                         ) {
-                            Text("إلغاء التقييد (Restricted Settings)")
+                            Text("فتح إعدادات التطبيق (لإلغاء التقييد)")
                         }
                     }
                 }
@@ -151,15 +156,23 @@ fun NotificationsScreen(
                         containerColor = MaterialTheme.colorScheme.primaryContainer
                     )
                 ) {
-                    Text(
-                        text = "✅ صلاحية الإشعارات مفعّلة",
-                        modifier = Modifier.padding(12.dp),
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onPrimaryContainer
-                    )
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(12.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = if (ttsEnabled) "✅ الصلاحية مفعّلة • 🔊 القراءة الصوتية مفعّلة" else "✅ الصلاحية مفعّلة • 🔇 الصوت مكتوم",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onPrimaryContainer,
+                            modifier = Modifier.weight(1f)
+                        )
+                    }
                 }
             }
 
+            // قائمة الإشعارات
             if (notifications.isEmpty()) {
                 Box(
                     modifier = Modifier

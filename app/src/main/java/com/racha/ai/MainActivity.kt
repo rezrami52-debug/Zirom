@@ -7,11 +7,17 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.ui.Modifier
+import com.racha.ai.services.tts.TextToSpeechHelper
 import com.racha.ai.ui.navigation.RachaApp
 
 class MainActivity : ComponentActivity() {
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+
+        // تهيئة TTS
+        TextToSpeechHelper.initialize(applicationContext)
+
         setContent {
             MaterialTheme {
                 Surface(
@@ -21,6 +27,14 @@ class MainActivity : ComponentActivity() {
                     RachaApp()
                 }
             }
+        }
+    }
+
+    override fun onDestroy() {
+        super.onDestroy()
+        // ملاحظة: لا نُغلق TTS عند تدوير الشاشة
+        if (isFinishing) {
+            TextToSpeechHelper.shutdown()
         }
     }
 }
