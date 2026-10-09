@@ -1,5 +1,8 @@
 package com.racha.ai.ui.screens.notifications
 
+import android.content.Intent
+import android.net.Uri
+import android.provider.Settings
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -16,6 +19,7 @@ import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -25,7 +29,6 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -54,13 +57,8 @@ fun NotificationsScreen(
     val notifications by viewModel.notifications.collectAsState()
     val context = LocalContext.current
 
-    // نتحقق من حالة الصلاحية، ونعيدها كل مرة نعود للشاشة
-    var hasPermission by remember { mutableStateOf(PermissionHelper.isNotificationListenerEnabled(context)) }
-
-    DisposableEffect(Unit) {
-        onDispose {
-            // عند مغادرة الشاشة - لا شيء
-        }
+    var hasPermission by remember {
+        mutableStateOf(PermissionHelper.isNotificationListenerEnabled(context))
     }
 
     Scaffold(
@@ -91,13 +89,12 @@ fun NotificationsScreen(
                 .fillMaxSize()
                 .padding(padding)
         ) {
-            // شريط حالة الصلاحية
             if (!hasPermission) {
                 Card(
                     modifier = Modifier
                         .fillMaxWidth()
                         .padding(12.dp),
-                    colors = androidx.compose.material3.CardDefaults.cardColors(
+                    colors = CardDefaults.cardColors(
                         containerColor = MaterialTheme.colorScheme.errorContainer
                     )
                 ) {
@@ -113,7 +110,7 @@ fun NotificationsScreen(
                         )
                         Spacer(modifier = Modifier.height(8.dp))
                         Text(
-                            text = "لتفعيلها:\n1) اضغط الزر أدناه\n2) ابحث عن Racha في القائمة\n3) فعّل المفتاح\n\n⚠️ إذا لم يعمل الزر، اضغط \"فتح إعدادات التطبيق\" ثم ابحث عن \"Restricted Settings\" وألغِ التقييد.",
+                            text = "خطوات التفعيل:\n1) اضغط الزر أدناه\n2) ابحث عن Racha في القائمة\n3) فعّل المفتاح\n\n⚠️ إذا لم يعمل الزر أو كان باهتاً، اضغط الزر الثاني لإلغاء التقييد.",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onErrorContainer
                         )
@@ -129,21 +126,28 @@ fun NotificationsScreen(
                         Spacer(modifier = Modifier.height(8.dp))
                         OutlinedButton(
                             onClick = {
-                                PermissionHelper.openAppSettings(context)
+                                try {
+                                    val intent = Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES).apply {
+                                        data = Uri.fromParts("package", context.packageName, null)
+                                        flags = Intent.FLAG_ACTIVITY_NEW_TASK
+                                    }
+                                    context.startActivity(intent)
+                                } catch (e: Exception) {
+                                    PermissionHelper.openAppSettings(context)
+                                }
                             },
                             modifier = Modifier.fillMaxWidth()
                         ) {
-                            Text("فتح إعدادات التطبيق (لإلغاء التقييد)")
+                            Text("إلغاء التقييد (Restricted Settings)")
                         }
                     }
                 }
             } else {
-                // شريط أخضر صغير عندما الصلاحية مفعلة
                 Card(
                     modifier = Modifier
                         .fillMaxWidth()
                         .padding(12.dp),
-                    colors = androidx.compose.material3.CardDefaults.cardColors(
+                    colors = CardDefaults.cardColors(
                         containerColor = MaterialTheme.colorScheme.primaryContainer
                     )
                 ) {
@@ -156,7 +160,6 @@ fun NotificationsScreen(
                 }
             }
 
-            // قائمة الإشعارات
             if (notifications.isEmpty()) {
                 Box(
                     modifier = Modifier
