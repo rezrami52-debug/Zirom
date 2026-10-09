@@ -8,6 +8,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.ui.Modifier
 import com.racha.ai.services.tts.TextToSpeechHelper
+import com.racha.ai.services.weather.WeatherScheduler
 import com.racha.ai.ui.navigation.RachaApp
 
 class MainActivity : ComponentActivity() {
@@ -17,6 +18,9 @@ class MainActivity : ComponentActivity() {
 
         // تهيئة TTS
         TextToSpeechHelper.initialize(applicationContext)
+
+        // جدولة worker الطقس
+        WeatherScheduler.schedule(applicationContext)
 
         setContent {
             MaterialTheme {
@@ -32,7 +36,6 @@ class MainActivity : ComponentActivity() {
 
     override fun onDestroy() {
         super.onDestroy()
-        // ملاحظة: لا نُغلق TTS عند تدوير الشاشة
         if (isFinishing) {
             TextToSpeechHelper.shutdown()
         }

@@ -1,5 +1,6 @@
 package com.racha.ai.ui.navigation
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -22,6 +23,11 @@ sealed class Screen {
 @Composable
 fun RachaApp() {
     var currentScreen by remember { mutableStateOf<Screen>(Screen.Welcome) }
+
+    // التعامل مع زر الرجوع الفيزيائي
+    BackHandler(enabled = currentScreen !is Screen.Welcome) {
+        currentScreen = Screen.Welcome
+    }
 
     when (currentScreen) {
         is Screen.Welcome -> WelcomeScreen(
