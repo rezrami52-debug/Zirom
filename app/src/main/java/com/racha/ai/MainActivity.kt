@@ -10,20 +10,18 @@ import androidx.compose.ui.Modifier
 import com.racha.ai.services.tts.TextToSpeechHelper
 import com.racha.ai.services.weather.WeatherScheduler
 import com.racha.ai.ui.navigation.RachaApp
+import com.racha.ai.ui.theme.RachaTheme
 
 class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        // تهيئة TTS
         TextToSpeechHelper.initialize(applicationContext)
-
-        // جدولة worker الطقس
         WeatherScheduler.schedule(applicationContext)
 
         setContent {
-            MaterialTheme {
+            RachaTheme {
                 Surface(
                     modifier = Modifier.fillMaxSize(),
                     color = MaterialTheme.colorScheme.background

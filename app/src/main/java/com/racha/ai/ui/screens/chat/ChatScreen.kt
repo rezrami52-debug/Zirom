@@ -31,6 +31,7 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -38,6 +39,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.racha.ai.R
@@ -49,9 +51,11 @@ fun ChatScreen(
     onOpenSettings: () -> Unit,
     onOpenNotifications: () -> Unit,
     onOpenPrayer: () -> Unit,
-    viewModel: ChatViewModel = viewModel()
+    viewModel: ChatViewModel = viewModel(),
+    weatherViewModel: WeatherViewModel = viewModel()
 ) {
     val state by viewModel.uiState.collectAsState()
+    val weatherState by weatherViewModel.uiState.collectAsState()
     val listState = rememberLazyListState()
 
     LaunchedEffect(state.messages.size) {
@@ -63,7 +67,12 @@ fun ChatScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text(stringResource(id = R.string.app_name)) },
+                title = {
+                    Text(
+                        stringResource(id = R.string.app_name),
+                        fontWeight = FontWeight.Bold
+                    )
+                },
                 actions = {
                     IconButton(onClick = onOpenPrayer) {
                         Icon(
@@ -89,7 +98,12 @@ fun ChatScreen(
                             contentDescription = stringResource(id = R.string.open_settings)
                         )
                     }
-                }
+                },
+                colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor = MaterialTheme.colorScheme.primary,
+                    titleContentColor = MaterialTheme.colorScheme.onPrimary,
+                    actionIconContentColor = MaterialTheme.colorScheme.onPrimary
+                )
             )
         }
     ) { padding ->
@@ -98,6 +112,10 @@ fun ChatScreen(
                 .fillMaxSize()
                 .padding(padding)
         ) {
+            // شريط الطقس
+            WeatherBanner(weather = weatherState.weather)
+
+            // الرسائل
             LazyColumn(
                 state = listState,
                 modifier = Modifier
@@ -116,6 +134,7 @@ fun ChatScreen(
                 item { Spacer(modifier = Modifier.size(8.dp)) }
             }
 
+            // حقل الإدخال
             Surface(
                 modifier = Modifier.fillMaxWidth(),
                 tonalElevation = 3.dp
@@ -140,7 +159,8 @@ fun ChatScreen(
                     ) {
                         Icon(
                             imageVector = Icons.Filled.Send,
-                            contentDescription = stringResource(id = R.string.chat_send)
+                            contentDescription = stringResource(id = R.string.chat_send),
+                            tint = MaterialTheme.colorScheme.primary
                         )
                     }
                 }
