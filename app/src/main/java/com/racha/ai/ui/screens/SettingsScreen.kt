@@ -1,5 +1,6 @@
 package com.racha.ai.ui.screens
 
+import android.content.Intent
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -178,12 +179,15 @@ fun SettingsScreen(
 
     // حوار اختيار اللغة
     if (showLanguageDialog) {
+        val languages = LocaleManager.getSupportedLanguages()
         AlertDialog(
             onDismissRequest = { showLanguageDialog = false },
             title = { Text(stringResource(id = R.string.settings_language)) },
             text = {
                 Column {
-                    LocaleManager.getSupportedLanguages().forEach { (code, name) ->
+                    for (pair in languages) {
+                        val code = pair.first
+                        val name = pair.second
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
@@ -195,7 +199,7 @@ fun SettingsScreen(
                                     // إعادة تشغيل النشاط لتطبيق اللغة
                                     val intent = context.packageManager
                                         .getLaunchIntentForPackage(context.packageName)
-                                    intent?.addFlags(android.content.Intent.FLAG_ACTIVITY_CLEAR_TOP)
+                                    intent?.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP)
                                     context.startActivity(intent)
                                 }
                                 .padding(vertical = 12.dp),
