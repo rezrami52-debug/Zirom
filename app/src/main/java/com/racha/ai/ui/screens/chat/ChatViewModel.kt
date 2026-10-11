@@ -56,22 +56,6 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    fun reloadApiKey() {
-        val apiKey = securePrefs.getApiKey()
-        if (!apiKey.isNullOrBlank()) {
-            geminiService = GeminiService(apiKey)
-            _uiState.value = _uiState.value.copy(
-                hasApiKey = true,
-                messages = listOf(
-                    Message(
-                        text = "تم تحديث المفتاح. جاهز للمحادثة!",
-                        isFromUser = false
-                    )
-                )
-            )
-        }
-    }
-
     fun onInputChange(newText: String) {
         _uiState.value = _uiState.value.copy(inputText = newText)
     }
@@ -113,9 +97,28 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                     )
                 },
                 onFailure = { error ->
+                    val errorMessage = error.message ?: ""
+                    val userFriendlyMessage = when {
+                        errorMessage.contains("503") ||
+                        errorMessage.contains("UNAVAILABLE") ||
+                        errorMessage.contains("high demand") ->
+                            "⚠️ Gemini مزدحم حالياً. حاول مرة أخرى بعد قليل."
+
+                        errorMessage.contains("API key") ||
+                        errorMessage.contains("API_KEY") ->
+                            "⚠️ المفتاح غير صالح. تحقق من الإعدادات."
+
+                        errorMessage.contains("quota") ||
+                        errorMessage.contains("QUOTA") ->
+                            "⚠️ استُهلكت الحصة اليومية. حاول غداً."
+
+                        else ->
+                            "⚠️ خطأ: ${error.message ?: "غير معروف"}"
+                    }
+
                     _uiState.value = _uiState.value.copy(
                         messages = _uiState.value.messages + Message(
-                            text = "خطأ: ${error.message ?: "غير معروف"}",
+                            text = userFriendlyMessage,
                             isFromUser = false,
                             isError = true
                         ),
