@@ -27,7 +27,9 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -37,6 +39,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -62,10 +65,20 @@ fun NotificationsScreen(
     }
     var ttsEnabled by remember { mutableStateOf(true) }
 
+    // عند فتح الشاشة: ضع علامة "مقروء"
+    LaunchedEffect(Unit) {
+        viewModel.markAllRead()
+    }
+
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text(stringResource(id = R.string.notifications_title)) },
+                title = {
+                    Text(
+                        stringResource(id = R.string.notifications_title),
+                        fontWeight = FontWeight.Bold
+                    )
+                },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
                         Icon(
@@ -92,7 +105,13 @@ fun NotificationsScreen(
                             contentDescription = "مسح الكل"
                         )
                     }
-                }
+                },
+                colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor = MaterialTheme.colorScheme.primary,
+                    titleContentColor = MaterialTheme.colorScheme.onPrimary,
+                    navigationIconContentColor = MaterialTheme.colorScheme.onPrimary,
+                    actionIconContentColor = MaterialTheme.colorScheme.onPrimary
+                )
             )
         }
     ) { padding ->
@@ -145,29 +164,6 @@ fun NotificationsScreen(
                         ) {
                             Text("فتح إعدادات التطبيق (لإلغاء التقييد)")
                         }
-                    }
-                }
-            } else {
-                Card(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(12.dp),
-                    colors = CardDefaults.cardColors(
-                        containerColor = MaterialTheme.colorScheme.primaryContainer
-                    )
-                ) {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(12.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Text(
-                            text = if (ttsEnabled) "✅ الصلاحية مفعّلة • 🔊 القراءة الصوتية مفعّلة" else "✅ الصلاحية مفعّلة • 🔇 الصوت مكتوم",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onPrimaryContainer,
-                            modifier = Modifier.weight(1f)
-                        )
                     }
                 }
             }

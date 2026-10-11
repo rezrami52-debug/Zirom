@@ -1,5 +1,6 @@
 package com.racha.ai.ui.screens.chat
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -7,6 +8,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -14,6 +16,7 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Delete
@@ -38,11 +41,13 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.racha.ai.R
+import com.racha.ai.data.repository.NotificationRepository
 import com.racha.ai.domain.model.Message
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -56,6 +61,7 @@ fun ChatScreen(
 ) {
     val state by viewModel.uiState.collectAsState()
     val weatherState by weatherViewModel.uiState.collectAsState()
+    val unreadCount by NotificationRepository.unreadCount.collectAsState()
     val listState = rememberLazyListState()
 
     LaunchedEffect(state.messages.size) {
@@ -80,11 +86,23 @@ fun ChatScreen(
                             contentDescription = stringResource(id = R.string.prayer_title)
                         )
                     }
+                    // أيقونة الإشعارات مع شارة خضراء
                     IconButton(onClick = onOpenNotifications) {
-                        Icon(
-                            imageVector = Icons.Filled.Notifications,
-                            contentDescription = stringResource(id = R.string.notifications_title)
-                        )
+                        Box {
+                            Icon(
+                                imageVector = Icons.Filled.Notifications,
+                                contentDescription = stringResource(id = R.string.notifications_title)
+                            )
+                            if (unreadCount > 0) {
+                                Box(
+                                    modifier = Modifier
+                                        .align(Alignment.TopEnd)
+                                        .offset(x = 4.dp, y = (-4).dp)
+                                        .size(10.dp)
+                                        .background(color = Color(0xFF4CAF50), shape = CircleShape)
+                                )
+                            }
+                        }
                     }
                     IconButton(onClick = viewModel::clearHistory) {
                         Icon(
@@ -112,10 +130,8 @@ fun ChatScreen(
                 .fillMaxSize()
                 .padding(padding)
         ) {
-            // شريط الطقس
             WeatherBanner(weather = weatherState.weather)
 
-            // الرسائل
             LazyColumn(
                 state = listState,
                 modifier = Modifier
@@ -134,7 +150,6 @@ fun ChatScreen(
                 item { Spacer(modifier = Modifier.size(8.dp)) }
             }
 
-            // حقل الإدخال
             Surface(
                 modifier = Modifier.fillMaxWidth(),
                 tonalElevation = 3.dp

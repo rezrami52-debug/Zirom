@@ -6,8 +6,16 @@ import com.racha.ai.domain.model.AppNotification
 import kotlinx.coroutines.flow.StateFlow
 
 class NotificationsViewModel : ViewModel() {
+
     val notifications: StateFlow<List<AppNotification>> =
         NotificationRepository.notifications
+
+    val unreadCount: StateFlow<Int> =
+        NotificationRepository.unreadCount
+
+    fun markAllRead() {
+        NotificationRepository.markAllRead()
+    }
 
     fun clearAll() {
         NotificationRepository.clear()
