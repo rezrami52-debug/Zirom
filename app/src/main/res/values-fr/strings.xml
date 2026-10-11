@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Racha</string>
+    <string name="welcome_title">Bienvenue à Racha</string>
+    <string name="welcome_subtitle">Votre assistant personnel intelligent</string>
+    <string name="open_settings">Paramètres</string>
+    <string name="open_chat">Ouvrir le chat</string>
+    <string name="open_notifications">Notifications</string>
+    <string name="open_prayer">Heures de prière</string>
+    <string name="settings_title">Paramètres</string>
+    <string name="settings_api_key_label">Clé API Gemini</string>
+    <string name="settings_api_key_hint">Obtenez votre clé sur aistudio.google.com</string>
+    <string name="save">Enregistrer</string>
+    <string name="back">Retour</string>
+    <string name="chat_input_hint">Écrivez votre message...</string>
+    <string name="chat_send">Envoyer</string>
+    <string name="chat_thinking">Racha réfléchit...</string>
+    <string name="notifications_title">Notifications</string>
+    <string name="notifications_empty">Aucune notification pour le moment.</string>
+    <string name="prayer_title">Heures de prière</string>
+    <string name="settings_language">Langue</string>
+    <string name="language_arabic">العربية</string>
+    <string name="language_english">English</string>
+    <string name="language_french">Français</string>
+</resources>

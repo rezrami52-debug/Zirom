@@ -18,4 +18,8 @@
     <string name="notifications_title">الإشعارات</string>
     <string name="notifications_empty">لا توجد إشعارات بعد.</string>
     <string name="prayer_title">مواقيت الصلاة</string>
+    <string name="settings_language">اللغة</string>
+    <string name="language_arabic">العربية</string>
+    <string name="language_english">English</string>
+    <string name="language_french">Français</string>
 </resources>
