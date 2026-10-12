@@ -4,6 +4,7 @@ import android.util.Log
 import com.google.ai.client.generativeai.GenerativeModel
 import com.google.ai.client.generativeai.type.Content
 import com.google.ai.client.generativeai.type.TextPart
+import com.racha.ai.core.tools.ToolRegistry
 import com.racha.ai.data.local.ChatMessageEntity
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
@@ -17,7 +18,6 @@ class GeminiService(private val apiKey: String) {
         private const val MAX_RETRIES = 3
         private const val INITIAL_DELAY_MS = 2000L
 
-        // ✅ إزالة "const" لأن trimIndent() ليست constant
         private val BASE_PERSONALITY = """
             أنت "Racha"، رفيق شخصي ذكي ودافئ.
 
@@ -30,10 +30,6 @@ class GeminiService(private val apiKey: String) {
             - تفهم المشاعر.
             - لا تتظاهر بمعرفة ما لا تعرفه.
             - لا تنفذ شيئاً حسّاساً دون إذن صريح.
-
-            مهمتك:
-            - أن تكون رفيقاً حقيقياً، لا chatbot رسمياً.
-            - أن تستخدم معلومات صاحبك لردود سياقية ودافئة.
         """.trimIndent()
     }
 
@@ -51,7 +47,6 @@ class GeminiService(private val apiKey: String) {
             try {
                 Log.d(TAG, "محاولة ${attempt + 1}/$MAX_RETRIES")
 
-                // ✅ apiKey في نطاق الكلاس (private val)
                 val model = GenerativeModel(
                     modelName = MODEL_NAME,
                     apiKey = apiKey,
@@ -101,22 +96,28 @@ class GeminiService(private val apiKey: String) {
         )
     }
 
+    /**
+     * بناء System Prompt كامل.
+     */
     private fun buildSystemPrompt(userProfileContext: String): String {
-        if (userProfileContext.isBlank()) {
-            return BASE_PERSONALITY
+        val sb = StringBuilder()
+        sb.append(BASE_PERSONALITY)
+
+        if (userProfileContext.isNotBlank()) {
+            sb.append("\n\n[معلومات عن صاحبك]\n")
+            sb.append(userProfileContext)
+            sb.append("\n\n[تعليمات مهمة]\n")
+            sb.append("- استخدم هذه المعلومات لصياغة ردود دافئة وسياقية.\n")
+            sb.append("- مثال: إن كانت الساعة 8 صباحاً، ذكّره بالفطور.\n")
+            sb.append("- مثال: إن كانت الساعة 17:00، ذكّره بانتهاء العمل.\n")
+            sb.append("- لا تكرر السؤال كل مرة، لكن أظهر أنك تعرفه.\n")
         }
-        return """
-            $BASE_PERSONALITY
 
-            [معلومات عن صاحبك]
-            $userProfileContext
+        // ✅ إضافة الأدوات
+        sb.append("\n\n")
+        sb.append(ToolRegistry.getToolsPrompt())
 
-            [تعليمات مهمة]
-            - استخدم هذه المعلومات لصياغة ردود دافئة وسياقية.
-            - مثال: إن كانت الساعة 8 صباحاً، ذكّره بالفطور.
-            - مثال: إن كانت الساعة 17:00، ذكّره بانتهاء العمل.
-            - لا تكرر السؤال كل مرة، لكن أظهر أنك تعرفه.
-        """.trimIndent()
+        return sb.toString()
     }
 
     fun clearHistory() {

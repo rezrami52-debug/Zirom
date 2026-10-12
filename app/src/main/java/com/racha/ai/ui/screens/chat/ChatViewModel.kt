@@ -4,6 +4,7 @@ import android.app.Application
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.racha.ai.core.security.SecurePreferences
+import com.racha.ai.core.tools.ToolExecutor
 import com.racha.ai.data.api.GeminiService
 import com.racha.ai.data.local.ChatMessageEntity
 import com.racha.ai.data.repository.ChatMemoryRepository
@@ -29,6 +30,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
     private val securePrefs = SecurePreferences(application)
     private val memory = ChatMemoryRepository(application)
     private val profileRepo = UserProfileRepository(application)
+    private val toolExecutor = ToolExecutor(application)
     private var geminiService: GeminiService? = null
 
     private val _uiState = MutableStateFlow(ChatUiState())
@@ -127,14 +129,25 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
             val recent = memory.getRecentForContext()
             val history = recent.filter { it.id != userMessage.id }
 
-            // ✅ الملف الشخصي
             val profileContext = profileRepo.getPromptContext()
 
             val result = service.sendMessageWithContext(history, text, profileContext)
 
             result.fold(
                 onSuccess = { reply ->
-                    saveMessageEntity(Message(text = reply, isFromUser = false))
+                    // ✅ كشف: هل الرد JSON لأداة؟
+                    if (toolExecutor.isToolCall(reply)) {
+                        val toolResult = toolExecutor.execute(reply)
+                        saveMessageEntity(
+                            Message(
+                                text = toolResult.message,
+                                isFromUser = false,
+                                isError = !toolResult.success
+                            )
+                        )
+                    } else {
+                        saveMessageEntity(Message(text = reply, isFromUser = false))
+                    }
                     _uiState.value = _uiState.value.copy(isSending = false)
                 },
                 onFailure = { error ->
@@ -172,9 +185,6 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    /**
-     * إعادة تحميل حالة الملف الشخصي (بعد رجوع المستخدم من تعديله).
-     */
     fun refreshProfileStatus() {
         checkProfile()
     }
