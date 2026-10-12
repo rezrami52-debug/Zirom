@@ -5,6 +5,7 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.racha.ai.domain.model.PrayerTimes
 import com.racha.ai.services.location.LocationHelper
+import com.racha.ai.services.prayer.PrayerAlarmScheduler
 import com.racha.ai.services.prayer.PrayerTimesCalculator
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -19,7 +20,8 @@ data class PrayerUiState(
     val errorMessage: String? = null,
     val needsLocationPermission: Boolean = false,
     val nextPrayerName: String = "",
-    val nextPrayerTime: Date? = null
+    val nextPrayerTime: Date? = null,
+    val alarmsScheduled: Boolean = false
 )
 
 class PrayerViewModel(application: Application) : AndroidViewModel(application) {
@@ -40,7 +42,6 @@ class PrayerViewModel(application: Application) : AndroidViewModel(application) 
             )
 
             val location = LocationHelper.getCurrentLocation(getApplication())
-
             if (location == null) {
                 _uiState.value = _uiState.value.copy(
                     isLoading = false,
@@ -56,7 +57,9 @@ class PrayerViewModel(application: Application) : AndroidViewModel(application) 
                     longitude = location.longitude
                 )
 
-                // احسب الصلاة القادمة
+                // جدولة إشعارات الصلاة
+                PrayerAlarmScheduler.scheduleAll(getApplication(), times)
+
                 val now = Date()
                 val next = findNextPrayer(times, now)
 
@@ -65,7 +68,8 @@ class PrayerViewModel(application: Application) : AndroidViewModel(application) 
                     prayerTimes = times,
                     cityName = location.cityName ?: "",
                     nextPrayerName = next?.first ?: "",
-                    nextPrayerTime = next?.second
+                    nextPrayerTime = next?.second,
+                    alarmsScheduled = true
                 )
             } catch (e: Exception) {
                 _uiState.value = _uiState.value.copy(

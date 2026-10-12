@@ -37,5 +37,20 @@
             </intent-filter>
         </service>
 
+        <!-- مستقبل إشعارات الصلاة -->
+        <receiver
+            android:name=".services.prayer.PrayerAlarmReceiver"
+            android:exported="false" />
+
+        <!-- مستقبل إعادة التشغيل -->
+        <receiver
+            android:name=".services.prayer.BootReceiver"
+            android:enabled="true"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+            </intent-filter>
+        </receiver>
+
     </application>
 </manifest>
