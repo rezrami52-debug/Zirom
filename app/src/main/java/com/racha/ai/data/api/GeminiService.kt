@@ -17,7 +17,10 @@ class GeminiService(apiKey: String) {
         private const val MAX_RETRIES = 3
         private const val INITIAL_DELAY_MS = 2000L
 
-        private val SYSTEM_PROMPT = """
+        /**
+         * الشخصية الأساسية لـ Racha.
+         */
+        private const val BASE_PERSONALITY = """
             أنت "Racha"، رفيق شخصي ذكي ودافئ.
 
             شخصيتك:
@@ -29,25 +32,37 @@ class GeminiService(apiKey: String) {
             - تفهم المشاعر.
             - لا تتظاهر بمعرفة ما لا تعرفه.
             - لا تنفذ شيئاً حسّاساً دون إذن صريح.
+
+            مهمتك:
+            - أن تكون رفيقاً حقيقياً، لا chatbot رسمياً.
+            - أن تستخدم معلومات صاحبك لردود سياقية ودافئة.
         """.trimIndent()
     }
 
-    private val model = GenerativeModel(
-        modelName = MODEL_NAME,
-        apiKey = apiKey,
-        systemInstruction = Content(parts = listOf(TextPart(SYSTEM_PROMPT)))
-    )
-
+    /**
+     * إرسال رسالة مع سياق المحادثة + الملف الشخصي.
+     */
     suspend fun sendMessageWithContext(
         history: List<ChatMessageEntity>,
-        userMessage: String
+        userMessage: String,
+        userProfileContext: String = ""
     ): Result<String> = withContext(Dispatchers.IO) {
         var lastException: Exception? = null
         var delayMs = INITIAL_DELAY_MS
 
+        // بناء الـ System Prompt ديناميكياً
+        val systemPrompt = buildSystemPrompt(userProfileContext)
+
         repeat(MAX_RETRIES) { attempt ->
             try {
-                Log.d(TAG, "محاولة ${attempt + 1}/$MAX_RETRIES — سياق: ${history.size}")
+                Log.d(TAG, "محاولة ${attempt + 1}/$MAX_RETRIES — سياق: ${history.size} رسالة, profile=${userProfileContext.isNotBlank()}")
+
+                // إنشاء الموديل في كل محاولة (لأن System Prompt قد يكون تغيّر)
+                val model = GenerativeModel(
+                    modelName = MODEL_NAME,
+                    apiKey = apiKey,
+                    systemInstruction = Content(parts = listOf(TextPart(systemPrompt)))
+                )
 
                 val contents = mutableListOf<Content>()
                 for (msg in history) {
@@ -66,7 +81,6 @@ class GeminiService(apiKey: String) {
                     )
                 )
 
-                // ✅ الإصلاح: استخدام spread operator
                 val response = model.generateContent(*contents.toTypedArray())
                 val text = response.text ?: "لم أتمكن من توليد رد."
                 return@withContext Result.success(text)
@@ -91,6 +105,27 @@ class GeminiService(apiKey: String) {
         return@withContext Result.failure(
             lastException ?: Exception("فشلت جميع المحاولات")
         )
+    }
+
+    /**
+     * بناء System Prompt كامل مع الشخصية + الملف الشخصي.
+     */
+    private fun buildSystemPrompt(userProfileContext: String): String {
+        if (userProfileContext.isBlank()) {
+            return BASE_PERSONALITY
+        }
+        return """
+            $BASE_PERSONALITY
+
+            [معلومات عن صاحبك]
+            $userProfileContext
+
+            [تعليمات مهمة]
+            - استخدم هذه المعلومات لصياغة ردود دافئة وسياقية.
+            - مثال: إن كانت الساعة 8 صباحاً، ذكّره بالفطور.
+            - مثال: إن كانت الساعة 17:00، ذكّره بانتهاء العمل.
+            - لا تكرر السؤال كل مرة، لكن أظهر أنك تعرفه.
+        """.trimIndent()
     }
 
     fun clearHistory() {

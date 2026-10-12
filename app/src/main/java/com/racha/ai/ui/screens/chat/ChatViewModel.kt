@@ -7,6 +7,7 @@ import com.racha.ai.core.security.SecurePreferences
 import com.racha.ai.data.api.GeminiService
 import com.racha.ai.data.local.ChatMessageEntity
 import com.racha.ai.data.repository.ChatMemoryRepository
+import com.racha.ai.data.repository.UserProfileRepository
 import com.racha.ai.domain.model.Message
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -19,13 +20,15 @@ data class ChatUiState(
     val inputText: String = "",
     val isSending: Boolean = false,
     val hasApiKey: Boolean = true,
-    val isLoadingHistory: Boolean = true
+    val isLoadingHistory: Boolean = true,
+    val hasProfile: Boolean = false
 )
 
 class ChatViewModel(application: Application) : AndroidViewModel(application) {
 
     private val securePrefs = SecurePreferences(application)
     private val memory = ChatMemoryRepository(application)
+    private val profileRepo = UserProfileRepository(application)
     private var geminiService: GeminiService? = null
 
     private val _uiState = MutableStateFlow(ChatUiState())
@@ -36,6 +39,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
     init {
         initializeGemini()
         observeHistory()
+        checkProfile()
     }
 
     private fun initializeGemini() {
@@ -48,6 +52,13 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         } else {
             geminiService = GeminiService(apiKey)
             _uiState.value = _uiState.value.copy(hasApiKey = true)
+        }
+    }
+
+    private fun checkProfile() {
+        viewModelScope.launch {
+            val isFilled = profileRepo.isFilled()
+            _uiState.value = _uiState.value.copy(hasProfile = isFilled)
         }
     }
 
@@ -64,10 +75,8 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                     )
                 }
 
-                // إذا كانت فارغة وأول مرة، أضف ترحيباً (خارج collectLatest)
                 if (messages.isEmpty() && !welcomeInitialized && _uiState.value.hasApiKey) {
                     welcomeInitialized = true
-                    // ✅ الإصلاح: launch منفصل للـ suspend function
                     launch {
                         val welcomeText = "أهلاً بك! أنا Racha، رفيقك الشخصي. كيف حالك اليوم؟"
                         val welcome = Message(text = welcomeText, isFromUser = false)
@@ -118,7 +127,10 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
             val recent = memory.getRecentForContext()
             val history = recent.filter { it.id != userMessage.id }
 
-            val result = service.sendMessageWithContext(history, text)
+            // ✅ الملف الشخصي
+            val profileContext = profileRepo.getPromptContext()
+
+            val result = service.sendMessageWithContext(history, text, profileContext)
 
             result.fold(
                 onSuccess = { reply ->
@@ -158,5 +170,12 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch {
             memory.clearAll()
         }
+    }
+
+    /**
+     * إعادة تحميل حالة الملف الشخصي (بعد رجوع المستخدم من تعديله).
+     */
+    fun refreshProfileStatus() {
+        checkProfile()
     }
 }
