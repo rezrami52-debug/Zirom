@@ -9,7 +9,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
 
-class GeminiService(apiKey: String) {
+class GeminiService(private val apiKey: String) {
 
     companion object {
         private const val TAG = "RachaGemini"
@@ -17,10 +17,8 @@ class GeminiService(apiKey: String) {
         private const val MAX_RETRIES = 3
         private const val INITIAL_DELAY_MS = 2000L
 
-        /**
-         * الشخصية الأساسية لـ Racha.
-         */
-        private const val BASE_PERSONALITY = """
+        // ✅ إزالة "const" لأن trimIndent() ليست constant
+        private val BASE_PERSONALITY = """
             أنت "Racha"، رفيق شخصي ذكي ودافئ.
 
             شخصيتك:
@@ -39,9 +37,6 @@ class GeminiService(apiKey: String) {
         """.trimIndent()
     }
 
-    /**
-     * إرسال رسالة مع سياق المحادثة + الملف الشخصي.
-     */
     suspend fun sendMessageWithContext(
         history: List<ChatMessageEntity>,
         userMessage: String,
@@ -50,14 +45,13 @@ class GeminiService(apiKey: String) {
         var lastException: Exception? = null
         var delayMs = INITIAL_DELAY_MS
 
-        // بناء الـ System Prompt ديناميكياً
         val systemPrompt = buildSystemPrompt(userProfileContext)
 
         repeat(MAX_RETRIES) { attempt ->
             try {
-                Log.d(TAG, "محاولة ${attempt + 1}/$MAX_RETRIES — سياق: ${history.size} رسالة, profile=${userProfileContext.isNotBlank()}")
+                Log.d(TAG, "محاولة ${attempt + 1}/$MAX_RETRIES")
 
-                // إنشاء الموديل في كل محاولة (لأن System Prompt قد يكون تغيّر)
+                // ✅ apiKey في نطاق الكلاس (private val)
                 val model = GenerativeModel(
                     modelName = MODEL_NAME,
                     apiKey = apiKey,
@@ -107,9 +101,6 @@ class GeminiService(apiKey: String) {
         )
     }
 
-    /**
-     * بناء System Prompt كامل مع الشخصية + الملف الشخصي.
-     */
     private fun buildSystemPrompt(userProfileContext: String): String {
         if (userProfileContext.isBlank()) {
             return BASE_PERSONALITY
