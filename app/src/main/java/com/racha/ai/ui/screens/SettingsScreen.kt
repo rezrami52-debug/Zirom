@@ -14,6 +14,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Person
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
@@ -60,6 +61,7 @@ import kotlinx.coroutines.launch
 @Composable
 fun SettingsScreen(
     onBack: () -> Unit,
+    onOpenProfile: () -> Unit,
     viewModel: SettingsViewModel = viewModel()
 ) {
     val state by viewModel.uiState.collectAsState()
@@ -117,7 +119,46 @@ fun SettingsScreen(
                 .padding(16.dp)
                 .verticalScroll(rememberScrollState())
         ) {
-            // ===== قسم اللغة =====
+            // ===== ملفي الشخصي =====
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable { onOpenProfile() },
+                colors = CardDefaults.cardColors(
+                    containerColor = MaterialTheme.colorScheme.primaryContainer
+                )
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(16.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(
+                        imageVector = Icons.Filled.Person,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.primary
+                    )
+                    Spacer(modifier = Modifier.padding(8.dp))
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = "ملفي الشخصي",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold
+                        )
+                        Text(
+                            text = "أخبر Racha عن نفسك",
+                            style = MaterialTheme.typography.bodySmall
+                        )
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(24.dp))
+            HorizontalDivider()
+            Spacer(modifier = Modifier.height(24.dp))
+
+            // ===== اللغة =====
             Text(
                 text = stringResource(id = R.string.settings_language),
                 style = MaterialTheme.typography.titleMedium,
@@ -155,7 +196,7 @@ fun SettingsScreen(
             HorizontalDivider()
             Spacer(modifier = Modifier.height(24.dp))
 
-            // ===== قسم مفتاح API =====
+            // ===== مفتاح API =====
             Text(
                 text = stringResource(id = R.string.settings_api_key_label),
                 style = MaterialTheme.typography.titleMedium,
@@ -198,16 +239,11 @@ fun SettingsScreen(
             HorizontalDivider()
             Spacer(modifier = Modifier.height(24.dp))
 
-            // ===== قسم أدوات الاختبار =====
+            // ===== أدوات الاختبار =====
             Text(
                 text = "أدوات الاختبار",
                 style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.Bold
-            )
-            Spacer(modifier = Modifier.height(8.dp))
-            Text(
-                text = "استخدم هذه الأزرار للتأكد من أن الإشعارات تعمل.",
-                style = MaterialTheme.typography.bodySmall
             )
             Spacer(modifier = Modifier.height(12.dp))
 
@@ -220,9 +256,7 @@ fun SettingsScreen(
             ) {
                 Text("🔔 اختبار: إشعار الصلاة المسبق")
             }
-
             Spacer(modifier = Modifier.height(8.dp))
-
             OutlinedButton(
                 onClick = {
                     PrayerAlarmReceiver.triggerManually(context, "الفجر", isPreAlert = false)
@@ -232,17 +266,10 @@ fun SettingsScreen(
             ) {
                 Text("🕌 اختبار: إشعار وقت الأذان")
             }
-
             Spacer(modifier = Modifier.height(8.dp))
-
             OutlinedButton(
                 onClick = {
-                    val item = RoutineItem(
-                        title = "اختبار",
-                        emoji = "⏰",
-                        hour = 0,
-                        minute = 0
-                    )
+                    val item = RoutineItem(title = "اختبار", emoji = "⏰", hour = 0, minute = 0)
                     RoutineAlarmScheduler.triggerTest(context, item, isPreAlert = false)
                     testMessage = "✅ تم إرسال إشعار اختبار الروتين"
                 },
@@ -250,9 +277,7 @@ fun SettingsScreen(
             ) {
                 Text("⏰ اختبار: إشعار روتين")
             }
-
             Spacer(modifier = Modifier.height(8.dp))
-
             OutlinedButton(
                 onClick = {
                     scope.launch {
@@ -297,7 +322,6 @@ fun SettingsScreen(
                                     appPrefs.setLanguage(code)
                                     currentLanguage = code
                                     showLanguageDialog = false
-
                                     val intent = context.packageManager
                                         .getLaunchIntentForPackage(context.packageName)
                                     intent?.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP)

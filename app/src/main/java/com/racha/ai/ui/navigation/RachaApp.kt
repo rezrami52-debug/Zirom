@@ -14,6 +14,7 @@ import com.racha.ai.ui.screens.chat.ChatScreen
 import com.racha.ai.ui.screens.notifications.NotificationsScreen
 import com.racha.ai.ui.screens.onboarding.OnboardingScreen
 import com.racha.ai.ui.screens.prayer.PrayerScreen
+import com.racha.ai.ui.screens.profile.ProfileScreen
 import com.racha.ai.ui.screens.routine.RoutineScreen
 
 sealed class Screen {
@@ -23,6 +24,7 @@ sealed class Screen {
     object Notifications : Screen()
     object Prayer : Screen()
     object Routine : Screen()
+    object Profile : Screen()
     object Welcome : Screen()
 }
 
@@ -55,7 +57,11 @@ fun RachaApp() {
             onOpenRoutine = { currentScreen = Screen.Routine }
         )
         is Screen.Settings -> SettingsScreen(
-            onBack = { currentScreen = Screen.Chat }
+            onBack = { currentScreen = Screen.Chat },
+            onOpenProfile = { currentScreen = Screen.Profile }
+        )
+        is Screen.Profile -> ProfileScreen(
+            onBack = { currentScreen = Screen.Settings }
         )
         is Screen.Notifications -> NotificationsScreen(
             onBack = { currentScreen = Screen.Chat }
