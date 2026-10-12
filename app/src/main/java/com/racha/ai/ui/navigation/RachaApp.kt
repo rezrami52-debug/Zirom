@@ -3,15 +3,15 @@ package com.racha.ai.ui.navigation
 import android.graphics.Bitmap
 import androidx.activity.compose.BackHandler
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.platform.LocalContext
+import com.racha.ai.core.faceauth.BiometricLockScreen
 import com.racha.ai.core.faceauth.FaceAuthRepository
 import com.racha.ai.core.faceauth.FaceCaptureScreen
-import com.racha.ai.core.faceauth.FaceEmbeddingService
 import com.racha.ai.core.preferences.AppPreferences
 import com.racha.ai.ui.screens.SettingsScreen
 import com.racha.ai.ui.screens.WelcomeScreen
@@ -21,9 +21,6 @@ import com.racha.ai.ui.screens.onboarding.OnboardingScreen
 import com.racha.ai.ui.screens.prayer.PrayerScreen
 import com.racha.ai.ui.screens.profile.ProfileScreen
 import com.racha.ai.ui.screens.routine.RoutineScreen
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
 
 sealed class Screen {
     object Onboarding : Screen()
@@ -34,6 +31,7 @@ sealed class Screen {
     object Routine : Screen()
     object Profile : Screen()
     object FaceEnrollment : Screen()
+    object BiometricLock : Screen()
     object Welcome : Screen()
 }
 
@@ -42,32 +40,44 @@ fun RachaApp() {
     val context = LocalContext.current
     val appPrefs = remember { AppPreferences(context) }
     val faceRepo = remember { FaceAuthRepository(context) }
-    val embeddingService = remember { FaceEmbeddingService(context) }
-    val scope = rememberCoroutineScope()
 
-    val startScreen: Screen = if (appPrefs.isOnboardingComplete()) {
-        Screen.Chat
-    } else {
-        Screen.Onboarding
+    val startScreen: Screen = when {
+        faceRepo.isFaceAuthEnabled() -> Screen.BiometricLock
+        appPrefs.isOnboardingComplete() -> Screen.Chat
+        else -> Screen.Onboarding
     }
 
     var currentScreen by remember { mutableStateOf<Screen>(startScreen) }
 
-    BackHandler(enabled = currentScreen !is Screen.Chat && currentScreen !is Screen.Onboarding) {
+    BackHandler(
+        enabled = currentScreen !is Screen.Chat &&
+                  currentScreen !is Screen.Onboarding &&
+                  currentScreen !is Screen.BiometricLock
+    ) {
         currentScreen = Screen.Chat
     }
 
     when (currentScreen) {
+        is Screen.BiometricLock -> BiometricLockScreen(
+            onSuccess = { currentScreen = Screen.Chat },
+            onCancel = {
+                // إغلاق التطبيق
+                android.os.Process.killProcess(android.os.Process.myPid())
+            }
+        )
+
         is Screen.Onboarding -> OnboardingScreen(
             onComplete = { currentScreen = Screen.Chat },
             onOpenApiKeySettings = { currentScreen = Screen.Settings }
         )
+
         is Screen.Chat -> ChatScreen(
             onOpenSettings = { currentScreen = Screen.Settings },
             onOpenNotifications = { currentScreen = Screen.Notifications },
             onOpenPrayer = { currentScreen = Screen.Prayer },
             onOpenRoutine = { currentScreen = Screen.Routine }
         )
+
         is Screen.Settings -> SettingsScreen(
             onBack = { currentScreen = Screen.Chat },
             onOpenProfile = { currentScreen = Screen.Profile },
@@ -78,15 +88,9 @@ fun RachaApp() {
         )
         is Screen.FaceEnrollment -> FaceCaptureScreen(
             onCaptured = { bitmap: Bitmap ->
-                scope.launch {
-                    // استخراج embedding في Thread منفصل (لا يجمد الواجهة)
-                    val embedding = withContext(Dispatchers.Default) {
-                        embeddingService.extractEmbedding(bitmap)
-                    }
-                    faceRepo.saveFaceImage(bitmap, embedding)
-                    faceRepo.setFaceAuthEnabled(true)
-                    currentScreen = Screen.Settings
-                }
+                faceRepo.saveFaceImage(bitmap)
+                faceRepo.setFaceAuthEnabled(true)
+                currentScreen = Screen.Settings
             },
             onCancel = { currentScreen = Screen.Settings }
         )

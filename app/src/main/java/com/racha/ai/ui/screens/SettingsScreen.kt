@@ -15,7 +15,9 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.filled.PhotoCamera
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
@@ -77,6 +79,7 @@ fun SettingsScreen(
     var showLanguageDialog by remember { mutableStateOf(false) }
     var testMessage by remember { mutableStateOf<String?>(null) }
     var faceEnabled by remember { mutableStateOf(faceRepo.isFaceAuthEnabled()) }
+    var showDisableDialog by remember { mutableStateOf(false) }
 
     LaunchedEffect(state.saveMessage) {
         if (state.saveMessage != null) {
@@ -161,11 +164,17 @@ fun SettingsScreen(
 
             Spacer(modifier = Modifier.height(12.dp))
 
-            // ===== تسجيل الوجه =====
+            // ===== الحماية بالبصمة =====
             Card(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .clickable { onOpenFaceEnrollment() },
+                    .clickable {
+                        if (faceEnabled) {
+                            showDisableDialog = true
+                        } else {
+                            onOpenFaceEnrollment()
+                        }
+                    },
                 colors = CardDefaults.cardColors(
                     containerColor = if (faceEnabled)
                         MaterialTheme.colorScheme.primaryContainer
@@ -179,16 +188,23 @@ fun SettingsScreen(
                         .padding(16.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Text("📸", style = MaterialTheme.typography.headlineSmall)
+                    Icon(
+                        imageVector = if (faceEnabled) Icons.Filled.Lock else Icons.Filled.PhotoCamera,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.primary
+                    )
                     Spacer(modifier = Modifier.width(12.dp))
                     Column(modifier = Modifier.weight(1f)) {
                         Text(
-                            text = "حماية بالوجه",
+                            text = "حماية Racha",
                             style = MaterialTheme.typography.titleMedium,
                             fontWeight = FontWeight.Bold
                         )
                         Text(
-                            text = if (faceEnabled) "✅ مفعّلة" else "التقط صورة وجهك لتفعيلها",
+                            text = if (faceEnabled)
+                                "✅ مفعّلة — اضغط للتعطيل"
+                            else
+                                "التقط صورة + سجّل بصمة للتفعيل",
                             style = MaterialTheme.typography.bodySmall
                         )
                     }
@@ -343,6 +359,34 @@ fun SettingsScreen(
 
             Spacer(modifier = Modifier.height(32.dp))
         }
+    }
+
+    // حوار تعطيل الحماية
+    if (showDisableDialog) {
+        AlertDialog(
+            onDismissRequest = { showDisableDialog = false },
+            title = { Text("تعطيل الحماية؟") },
+            text = {
+                Text("بعد التعطيل، لن يُطلب منك التحقق عند فتح Racha. هل أنت متأكد؟")
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        faceRepo.deleteFaceImage()
+                        faceRepo.setFaceAuthEnabled(false)
+                        faceEnabled = false
+                        showDisableDialog = false
+                    }
+                ) {
+                    Text("تعطيل")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showDisableDialog = false }) {
+                    Text("إلغاء")
+                }
+            }
+        )
     }
 
     // حوار اختيار اللغة
