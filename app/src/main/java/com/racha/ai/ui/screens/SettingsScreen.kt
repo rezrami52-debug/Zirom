@@ -49,7 +49,9 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.racha.ai.R
 import com.racha.ai.core.locale.LocaleManager
 import com.racha.ai.core.preferences.AppPreferences
+import com.racha.ai.data.local.RoutineItem
 import com.racha.ai.services.prayer.PrayerAlarmReceiver
+import com.racha.ai.services.routine.RoutineAlarmScheduler
 import com.racha.ai.services.weather.WeatherWorker
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -209,24 +211,7 @@ fun SettingsScreen(
             )
             Spacer(modifier = Modifier.height(12.dp))
 
-           OutlinedButton(
-    onClick = {
-        val item = com.racha.ai.data.local.RoutineItem(
-            title = "اختبار",
-            emoji = "⏰",
-            hour = 0, minute = 0
-        )
-        com.racha.ai.services.routine.RoutineAlarmScheduler.triggerTest(
-            context, item, isPreAlert = false
-        )
-        testMessage = "✅ تم إرسال إشعار اختبار الروتين"
-    },
-    modifier = Modifier.fillMaxWidth()
-) {
-    Text("⏰ اختبار: إشعار روتين")
-}
-
-Spacer(modifier = Modifier.height(8.dp)) OutlinedButton(
+            OutlinedButton(
                 onClick = {
                     PrayerAlarmReceiver.triggerManually(context, "الفجر", isPreAlert = true)
                     testMessage = "✅ تم إرسال إشعار اختبار مسبق"
@@ -246,6 +231,24 @@ Spacer(modifier = Modifier.height(8.dp)) OutlinedButton(
                 modifier = Modifier.fillMaxWidth()
             ) {
                 Text("🕌 اختبار: إشعار وقت الأذان")
+            }
+
+            Spacer(modifier = Modifier.height(8.dp))
+
+            OutlinedButton(
+                onClick = {
+                    val item = RoutineItem(
+                        title = "اختبار",
+                        emoji = "⏰",
+                        hour = 0,
+                        minute = 0
+                    )
+                    RoutineAlarmScheduler.triggerTest(context, item, isPreAlert = false)
+                    testMessage = "✅ تم إرسال إشعار اختبار الروتين"
+                },
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Text("⏰ اختبار: إشعار روتين")
             }
 
             Spacer(modifier = Modifier.height(8.dp))
