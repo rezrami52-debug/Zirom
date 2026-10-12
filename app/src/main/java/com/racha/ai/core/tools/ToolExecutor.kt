@@ -5,18 +5,12 @@ import android.media.AudioManager
 import android.util.Log
 import org.json.JSONObject
 
-/**
- * ينفذ الأدوات المطلوبة من Gemini.
- */
 class ToolExecutor(private val context: Context) {
 
     companion object {
         private const val TAG = "RachaToolExecutor"
     }
 
-    /**
-     * البيانات الراجعة من تنفيذ أداة.
-     */
     data class ToolResult(
         val success: Boolean,
         val message: String
@@ -29,15 +23,38 @@ class ToolExecutor(private val context: Context) {
         val trimmed = text.trim()
         if (!trimmed.startsWith("{") || !trimmed.endsWith("}")) return false
         return try {
-            val json = JSONObject(trimmed)
-            json.has("tool")
+            JSONObject(trimmed).has("tool")
         } catch (e: Exception) {
             false
         }
     }
 
     /**
-     * تنفيذ أداة من JSON.
+     * هل هذه أداة تحتاج تدفقاً خاصاً (مثل الكاميرا)؟
+     */
+    fun isSpecialTool(text: String): Boolean {
+        return try {
+            val json = JSONObject(text.trim())
+            val tool = json.getString("tool")
+            ToolRegistry.specialTools.contains(tool)
+        } catch (e: Exception) {
+            false
+        }
+    }
+
+    /**
+     * استخراج اسم الأداة.
+     */
+    fun getToolName(text: String): String? {
+        return try {
+            JSONObject(text.trim()).getString("tool")
+        } catch (e: Exception) {
+            null
+        }
+    }
+
+    /**
+     * تنفيذ أداة عادية (فورية).
      */
     fun execute(jsonText: String): ToolResult {
         return try {
@@ -58,45 +75,33 @@ class ToolExecutor(private val context: Context) {
         }
     }
 
-    /**
-     * الوضع الصامت.
-     */
     private fun setSilent(): ToolResult {
         return try {
-            val audioManager = context.getSystemService(Context.AUDIO_SERVICE) as AudioManager
-            audioManager.ringerMode = AudioManager.RINGER_MODE_SILENT
+            val am = context.getSystemService(Context.AUDIO_SERVICE) as AudioManager
+            am.ringerMode = AudioManager.RINGER_MODE_SILENT
             ToolResult(true, "✅ تم تفعيل الوضع الصامت")
         } catch (e: Exception) {
-            Log.e(TAG, "فشل تفعيل الصامت", e)
-            ToolResult(false, "⚠️ فشل تفعيل الصامت: ${e.message}")
+            ToolResult(false, "⚠️ فشل: ${e.message}")
         }
     }
 
-    /**
-     * الوضع العادي (مع صوت).
-     */
     private fun setNormal(): ToolResult {
         return try {
-            val audioManager = context.getSystemService(Context.AUDIO_SERVICE) as AudioManager
-            audioManager.ringerMode = AudioManager.RINGER_MODE_NORMAL
-            ToolResult(true, "🔔 تم تفعيل الوضع العادي (مع صوت)")
+            val am = context.getSystemService(Context.AUDIO_SERVICE) as AudioManager
+            am.ringerMode = AudioManager.RINGER_MODE_NORMAL
+            ToolResult(true, "🔔 تم تفعيل الوضع العادي")
         } catch (e: Exception) {
-            Log.e(TAG, "فشل تفعيل العادي", e)
-            ToolResult(false, "⚠️ فشل تفعيل العادي: ${e.message}")
+            ToolResult(false, "⚠️ فشل: ${e.message}")
         }
     }
 
-    /**
-     * وضع الاهتزاز.
-     */
     private fun setVibrate(): ToolResult {
         return try {
-            val audioManager = context.getSystemService(Context.AUDIO_SERVICE) as AudioManager
-            audioManager.ringerMode = AudioManager.RINGER_MODE_VIBRATE
+            val am = context.getSystemService(Context.AUDIO_SERVICE) as AudioManager
+            am.ringerMode = AudioManager.RINGER_MODE_VIBRATE
             ToolResult(true, "📳 تم تفعيل وضع الاهتزاز")
         } catch (e: Exception) {
-            Log.e(TAG, "فشل تفعيل الاهتزاز", e)
-            ToolResult(false, "⚠️ فشل تفعيل الاهتزاز: ${e.message}")
+            ToolResult(false, "⚠️ فشل: ${e.message}")
         }
     }
 }

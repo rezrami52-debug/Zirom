@@ -11,7 +11,7 @@
     <uses-permission android:name="android.permission.USE_EXACT_ALARM" />
     <uses-permission android:name="android.permission.WAKE_LOCK" />
     <uses-permission android:name="android.permission.CAMERA" />
-    <uses-feature android:name="android.hardware.camera.front" android:required="false" />
+    <uses-feature android:name="android.hardware.camera" android:required="false" />
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
 
     <application
@@ -31,6 +31,12 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+
+        <!-- ✅ نشاط التقاط الصور -->
+        <activity
+            android:name=".core.tools.PhotoCaptureActivity"
+            android:exported="false"
+            android:theme="@style/Theme.Racha" />
 
         <service
             android:name=".services.notification.RachaNotificationListener"
@@ -61,7 +67,6 @@
 
     </application>
 
-    <!-- ✅ queries خارج <application> -->
     <queries>
         <intent>
             <action android:name="android.speech.RecognitionService" />

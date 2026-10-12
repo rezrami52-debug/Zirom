@@ -5,21 +5,18 @@ package com.racha.ai.core.tools
  */
 object ToolRegistry {
 
-    /**
-     * الأدوات متاحة الآن (بعد كل جلسة نضيف).
-     */
     val availableTools = listOf(
-        "set_silent",       // وضع صامت
-        "set_normal",       // وضع عادي
-        "set_vibrate",      // وضع اهتزاز
-        "take_photo",       // التقاط صورة (يُفعّل في الجلسة 3)
-        "system_report"     // تقرير النظام (يُفعّل في الجلسة 4)
+        "set_silent",
+        "set_normal",
+        "set_vibrate",
+        "open_camera"
     )
 
     /**
-     * تعليمات الأدوات لـ Gemini.
-     * تُضاف إلى System Prompt.
+     * الأدوات الحساسة (تحتاج تدفق خاص).
      */
+    val specialTools = setOf("open_camera")
+
     fun getToolsPrompt(): String = """
         [الأدوات المتاحة]
         
@@ -33,6 +30,9 @@ object ToolRegistry {
         
         3. لوضع الاهتزاز:
            {"tool": "set_vibrate", "params": {}}
+        
+        4. لفتح الكاميرا أو التقاط صورة:
+           {"tool": "open_camera", "params": {}}
         
         [قواعد مهمة]
         - إذا كان الطلب سؤالاً (مثل "لماذا الهاتف صامت؟")، أجب بالعربية طبيعياً ولا تستخدم JSON.

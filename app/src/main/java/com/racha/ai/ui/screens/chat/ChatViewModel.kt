@@ -22,7 +22,8 @@ data class ChatUiState(
     val isSending: Boolean = false,
     val hasApiKey: Boolean = true,
     val isLoadingHistory: Boolean = true,
-    val hasProfile: Boolean = false
+    val hasProfile: Boolean = false,
+    val pendingSpecialTool: String? = null   // ✅ للأدوات التي تحتاج Intent
 )
 
 class ChatViewModel(application: Application) : AndroidViewModel(application) {
@@ -128,27 +129,38 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
 
             val recent = memory.getRecentForContext()
             val history = recent.filter { it.id != userMessage.id }
-
             val profileContext = profileRepo.getPromptContext()
 
             val result = service.sendMessageWithContext(history, text, profileContext)
 
             result.fold(
                 onSuccess = { reply ->
-                    // ✅ كشف: هل الرد JSON لأداة؟
+                    // كشف الأدوات
                     if (toolExecutor.isToolCall(reply)) {
-                        val toolResult = toolExecutor.execute(reply)
-                        saveMessageEntity(
-                            Message(
-                                text = toolResult.message,
-                                isFromUser = false,
-                                isError = !toolResult.success
+                        if (toolExecutor.isSpecialTool(reply)) {
+                            // ✅ أداة خاصة — تحتاج Intent
+                            val toolName = toolExecutor.getToolName(reply)
+                            _uiState.value = _uiState.value.copy(
+                                isSending = false,
+                                pendingSpecialTool = toolName
                             )
-                        )
+                            // لا نحفظ رسالة، سنحفظ عند التنفيذ
+                        } else {
+                            // أداة عادية — تنفيذ فوري
+                            val toolResult = toolExecutor.execute(reply)
+                            saveMessageEntity(
+                                Message(
+                                    text = toolResult.message,
+                                    isFromUser = false,
+                                    isError = !toolResult.success
+                                )
+                            )
+                            _uiState.value = _uiState.value.copy(isSending = false)
+                        }
                     } else {
                         saveMessageEntity(Message(text = reply, isFromUser = false))
+                        _uiState.value = _uiState.value.copy(isSending = false)
                     }
-                    _uiState.value = _uiState.value.copy(isSending = false)
                 },
                 onFailure = { error ->
                     val errorMessage = error.message ?: ""
@@ -165,6 +177,37 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                 }
             )
         }
+    }
+
+    /**
+     * يُستدعى بعد تنفيذ أداة خاصة (نجاح).
+     */
+    fun onSpecialToolCompleted(success: Boolean, message: String) {
+        viewModelScope.launch {
+            saveMessageEntity(
+                Message(
+                    text = message,
+                    isFromUser = false,
+                    isError = !success
+                )
+            )
+        }
+        _uiState.value = _uiState.value.copy(pendingSpecialTool = null)
+    }
+
+    /**
+     * يُستدعى عند إلغاء أداة خاصة.
+     */
+    fun onSpecialToolCancelled() {
+        viewModelScope.launch {
+            saveMessageEntity(
+                Message(
+                    text = "❌ تم إلغاء العملية",
+                    isFromUser = false
+                )
+            )
+        }
+        _uiState.value = _uiState.value.copy(pendingSpecialTool = null)
     }
 
     private suspend fun saveMessageEntity(message: Message) {

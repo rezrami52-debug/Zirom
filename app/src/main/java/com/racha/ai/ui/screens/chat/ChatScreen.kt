@@ -1,8 +1,10 @@
 package com.racha.ai.ui.screens.chat
 
 import android.Manifest
+import android.content.Intent
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -61,6 +63,7 @@ import com.google.accompanist.permissions.ExperimentalPermissionsApi
 import com.google.accompanist.permissions.isGranted
 import com.google.accompanist.permissions.rememberPermissionState
 import com.racha.ai.R
+import com.racha.ai.core.tools.PhotoCaptureActivity
 import com.racha.ai.core.voice.VoiceInputHelper
 import com.racha.ai.data.repository.NotificationRepository
 import com.racha.ai.domain.model.Message
@@ -83,27 +86,48 @@ fun ChatScreen(
     val context = LocalContext.current
     val micPermission = rememberPermissionState(Manifest.permission.RECORD_AUDIO)
 
-    // حالة الصوت
     var isListening by remember { mutableStateOf(false) }
     var voiceError by remember { mutableStateOf<String?>(null) }
 
     val voiceHelper = remember { VoiceInputHelper(context) }
 
-    // تحرير الموارد
+    // ✅ Launcher للكاميرا
+    val cameraLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.StartActivityForResult()
+    ) { result ->
+        // عند العودة من PhotoCaptureActivity
+        if (result.resultCode == android.app.Activity.RESULT_OK) {
+            viewModel.onSpecialToolCompleted(
+                success = true,
+                message = "📸 تم حفظ الصورة في مجلد Racha"
+            )
+        } else {
+            viewModel.onSpecialToolCancelled()
+        }
+    }
+
+    // ✅ مراقبة الأدوات الخاصة
+    LaunchedEffect(state.pendingSpecialTool) {
+        when (state.pendingSpecialTool) {
+            "open_camera" -> {
+                val intent = Intent(context, PhotoCaptureActivity::class.java)
+                cameraLauncher.launch(intent)
+            }
+        }
+    }
+
     DisposableEffect(Unit) {
         onDispose {
             voiceHelper.destroy()
         }
     }
 
-    // تمرير تلقائي
     LaunchedEffect(state.messages.size) {
         if (state.messages.isNotEmpty()) {
             listState.animateScrollToItem(state.messages.size - 1)
         }
     }
 
-    // مسح رسالة الخطأ بعد 3 ثوانٍ
     LaunchedEffect(voiceError) {
         if (voiceError != null) {
             kotlinx.coroutines.delay(3000)
@@ -122,10 +146,7 @@ fun ChatScreen(
                 },
                 actions = {
                     IconButton(onClick = onOpenRoutine) {
-                        Icon(
-                            imageVector = Icons.Filled.Checklist,
-                            contentDescription = "روتيني"
-                        )
+                        Icon(imageVector = Icons.Filled.Checklist, contentDescription = "روتيني")
                     }
                     IconButton(onClick = onOpenPrayer) {
                         Icon(
@@ -151,10 +172,7 @@ fun ChatScreen(
                         }
                     }
                     IconButton(onClick = viewModel::clearHistory) {
-                        Icon(
-                            imageVector = Icons.Filled.Delete,
-                            contentDescription = "مسح المحادثة"
-                        )
+                        Icon(imageVector = Icons.Filled.Delete, contentDescription = "مسح")
                     }
                     IconButton(onClick = onOpenSettings) {
                         Icon(
@@ -178,7 +196,6 @@ fun ChatScreen(
         ) {
             WeatherBanner(weather = weatherState.weather)
 
-            // شريط "أستمع" عند تفعيل الصوت
             if (isListening) {
                 Card(
                     modifier = Modifier
@@ -208,7 +225,6 @@ fun ChatScreen(
                 }
             }
 
-            // رسالة خطأ الصوت
             voiceError?.let { error ->
                 Card(
                     modifier = Modifier
@@ -226,7 +242,6 @@ fun ChatScreen(
                 }
             }
 
-            // قائمة الرسائل
             LazyColumn(
                 state = listState,
                 modifier = Modifier
@@ -245,7 +260,6 @@ fun ChatScreen(
                 item { Spacer(modifier = Modifier.size(8.dp)) }
             }
 
-            // حقل الإدخال + زر الميكروفون
             Surface(
                 modifier = Modifier.fillMaxWidth(),
                 tonalElevation = 3.dp
@@ -265,7 +279,6 @@ fun ChatScreen(
                     )
                     Spacer(modifier = Modifier.width(4.dp))
 
-                    // ✅ زر الميكروفون
                     IconButton(
                         onClick = {
                             if (isListening) {
@@ -273,22 +286,17 @@ fun ChatScreen(
                                 isListening = false
                                 return@IconButton
                             }
-
                             if (!micPermission.status.isGranted) {
                                 micPermission.launchPermissionRequest()
                                 return@IconButton
                             }
-
                             isListening = true
                             voiceHelper.startListening(
                                 languageTag = "ar-TN",
-                                onReady = {
-                                    // جاهز
-                                },
+                                onReady = {},
                                 onResult = { text ->
                                     isListening = false
                                     viewModel.onInputChange(text)
-                                    // إرسال تلقائي بعد 300ms
                                     android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
                                         viewModel.sendMessage()
                                     }, 300)
@@ -297,9 +305,7 @@ fun ChatScreen(
                                     isListening = false
                                     voiceError = error
                                 },
-                                onEnd = {
-                                    // انتهى بدون نتيجة
-                                }
+                                onEnd = {}
                             )
                         }
                     ) {
@@ -313,7 +319,6 @@ fun ChatScreen(
                         )
                     }
 
-                    // زر الإرسال
                     IconButton(
                         onClick = viewModel::sendMessage,
                         enabled = state.inputText.isNotBlank() && !state.isSending
