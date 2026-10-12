@@ -8,15 +8,17 @@ import androidx.room.RoomDatabase
 @Database(
     entities = [
         RoutineItem::class,
-        ChatMessageEntity::class
+        ChatMessageEntity::class,
+        UserProfile::class
     ],
-    version = 2,
+    version = 3,
     exportSchema = false
 )
 abstract class RachaDatabase : RoomDatabase() {
 
     abstract fun routineDao(): RoutineDao
     abstract fun chatMessageDao(): ChatMessageDao
+    abstract fun userProfileDao(): UserProfileDao
 
     companion object {
         @Volatile
