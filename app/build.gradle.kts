@@ -50,6 +50,11 @@ android {
         kotlinCompilerExtensionVersion = "1.5.11"
     }
 
+    // ✅ لا نضغط ملفات TFLite
+    androidResources {
+        noCompress += "tflite"
+    }
+
     packaging {
         resources {
             excludes += "/META-INF/{AL2.0,LGPL2.1}"
@@ -98,13 +103,17 @@ dependencies {
     implementation("androidx.room:room-ktx:2.6.1")
     ksp("androidx.room:room-compiler:2.6.1")
 
-    // ✅ CameraX (جديد — للتعرف على الوجه)
+    // CameraX
     val cameraXVersion = "1.3.4"
     implementation("androidx.camera:camera-core:$cameraXVersion")
     implementation("androidx.camera:camera-camera2:$cameraXVersion")
     implementation("androidx.camera:camera-lifecycle:$cameraXVersion")
     implementation("androidx.camera:camera-view:$cameraXVersion")
 
-    // ✅ ML Kit Face Detection (لكشف الوجه أثناء التقاط الصورة)
+    // ML Kit Face Detection
     implementation("com.google.mlkit:face-detection:16.1.7")
+
+    // ✅ TensorFlow Lite (جديد — للتعرف على الوجه)
+    implementation("org.tensorflow:tensorflow-lite:2.14.0")
+    implementation("org.tensorflow:tensorflow-lite-support:0.4.4")
 }
