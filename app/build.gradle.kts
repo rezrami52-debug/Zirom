@@ -2,6 +2,7 @@ plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
     id("org.jetbrains.kotlin.plugin.serialization")
+    id("com.google.devtools.ksp") version "1.9.23-1.0.19"
 }
 
 android {
@@ -89,6 +90,11 @@ dependencies {
     // WorkManager (للطقس)
     implementation("androidx.work:work-runtime-ktx:2.9.0")
 
-    // ✅ Adhan (لحساب مواقيت الصلاة — مكتبة batoulapps)
+    // Adhan (مواقيت الصلاة)
     implementation("com.batoulapps.adhan:adhan:1.2.1")
+
+    // ✅ Room (قاعدة البيانات — جديد)
+    implementation("androidx.room:room-runtime:2.6.1")
+    implementation("androidx.room:room-ktx:2.6.1")
+    ksp("androidx.room:room-compiler:2.6.1")
 }

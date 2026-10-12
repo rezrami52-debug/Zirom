@@ -8,12 +8,15 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.ui.Modifier
+import androidx.lifecycle.lifecycleScope
 import com.racha.ai.core.locale.LocaleManager
 import com.racha.ai.core.preferences.AppPreferences
+import com.racha.ai.data.repository.RoutineRepository
 import com.racha.ai.services.tts.TextToSpeechHelper
 import com.racha.ai.services.weather.WeatherScheduler
 import com.racha.ai.ui.navigation.RachaApp
 import com.racha.ai.ui.theme.RachaTheme
+import kotlinx.coroutines.launch
 
 class MainActivity : ComponentActivity() {
 
@@ -28,6 +31,11 @@ class MainActivity : ComponentActivity() {
 
         TextToSpeechHelper.initialize(applicationContext)
         WeatherScheduler.schedule(applicationContext)
+
+        // تهيئة الروتين الافتراضي (أول مرة فقط)
+        lifecycleScope.launch {
+            RoutineRepository(applicationContext).initializeDefaultIfEmpty()
+        }
 
         setContent {
             RachaTheme {
