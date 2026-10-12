@@ -2,8 +2,8 @@ package com.racha.ai
 
 import android.content.Context
 import android.os.Bundle
-import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.appcompat.app.AppCompatActivity
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
@@ -18,7 +18,7 @@ import com.racha.ai.ui.navigation.RachaApp
 import com.racha.ai.ui.theme.RachaTheme
 import kotlinx.coroutines.launch
 
-class MainActivity : ComponentActivity() {
+class MainActivity : AppCompatActivity() {
 
     override fun attachBaseContext(newBase: Context) {
         val appPrefs = AppPreferences(newBase)
@@ -32,7 +32,6 @@ class MainActivity : ComponentActivity() {
         TextToSpeechHelper.initialize(applicationContext)
         WeatherScheduler.schedule(applicationContext)
 
-        // تهيئة الروتين الافتراضي (أول مرة فقط)
         lifecycleScope.launch {
             RoutineRepository(applicationContext).initializeDefaultIfEmpty()
         }
