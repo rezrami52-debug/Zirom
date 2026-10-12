@@ -19,6 +19,7 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Checklist
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.Schedule
@@ -56,6 +57,7 @@ fun ChatScreen(
     onOpenSettings: () -> Unit,
     onOpenNotifications: () -> Unit,
     onOpenPrayer: () -> Unit,
+    onOpenRoutine: () -> Unit,
     viewModel: ChatViewModel = viewModel(),
     weatherViewModel: WeatherViewModel = viewModel()
 ) {
@@ -80,13 +82,18 @@ fun ChatScreen(
                     )
                 },
                 actions = {
+                    IconButton(onClick = onOpenRoutine) {
+                        Icon(
+                            imageVector = Icons.Filled.Checklist,
+                            contentDescription = "روتيني"
+                        )
+                    }
                     IconButton(onClick = onOpenPrayer) {
                         Icon(
                             imageVector = Icons.Filled.Schedule,
                             contentDescription = stringResource(id = R.string.prayer_title)
                         )
                     }
-                    // أيقونة الإشعارات مع شارة خضراء
                     IconButton(onClick = onOpenNotifications) {
                         Box {
                             Icon(

@@ -14,6 +14,7 @@ import com.racha.ai.ui.screens.chat.ChatScreen
 import com.racha.ai.ui.screens.notifications.NotificationsScreen
 import com.racha.ai.ui.screens.onboarding.OnboardingScreen
 import com.racha.ai.ui.screens.prayer.PrayerScreen
+import com.racha.ai.ui.screens.routine.RoutineScreen
 
 sealed class Screen {
     object Onboarding : Screen()
@@ -21,6 +22,7 @@ sealed class Screen {
     object Settings : Screen()
     object Notifications : Screen()
     object Prayer : Screen()
+    object Routine : Screen()
     object Welcome : Screen()
 }
 
@@ -29,7 +31,6 @@ fun RachaApp() {
     val context = LocalContext.current
     val appPrefs = remember { AppPreferences(context) }
 
-    // الشاشة الابتدائية
     val startScreen: Screen = if (appPrefs.isOnboardingComplete()) {
         Screen.Chat
     } else {
@@ -37,11 +38,8 @@ fun RachaApp() {
     }
 
     var currentScreen by remember { mutableStateOf<Screen>(startScreen) }
-    var previousScreen by remember { mutableStateOf<Screen?>(null) }
 
-    // التعامل مع زر الرجوع الفيزيائي
     BackHandler(enabled = currentScreen !is Screen.Chat && currentScreen !is Screen.Onboarding) {
-        // الرجوع للمحادثة دائماً (ما عدا Onboarding)
         currentScreen = Screen.Chat
     }
 
@@ -53,7 +51,8 @@ fun RachaApp() {
         is Screen.Chat -> ChatScreen(
             onOpenSettings = { currentScreen = Screen.Settings },
             onOpenNotifications = { currentScreen = Screen.Notifications },
-            onOpenPrayer = { currentScreen = Screen.Prayer }
+            onOpenPrayer = { currentScreen = Screen.Prayer },
+            onOpenRoutine = { currentScreen = Screen.Routine }
         )
         is Screen.Settings -> SettingsScreen(
             onBack = { currentScreen = Screen.Chat }
@@ -62,6 +61,9 @@ fun RachaApp() {
             onBack = { currentScreen = Screen.Chat }
         )
         is Screen.Prayer -> PrayerScreen(
+            onBack = { currentScreen = Screen.Chat }
+        )
+        is Screen.Routine -> RoutineScreen(
             onBack = { currentScreen = Screen.Chat }
         )
         is Screen.Welcome -> WelcomeScreen(
