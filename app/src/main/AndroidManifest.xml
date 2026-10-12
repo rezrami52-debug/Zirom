@@ -12,8 +12,6 @@
     <uses-permission android:name="android.permission.WAKE_LOCK" />
     <uses-permission android:name="android.permission.CAMERA" />
     <uses-feature android:name="android.hardware.camera.front" android:required="false" />
-
-    <!-- ✅ صلاحية الميكروفون للصوت -->
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
 
     <application
@@ -61,11 +59,13 @@
             android:name=".services.routine.RoutineAlarmReceiver"
             android:exported="false" />
 
-        <queries>
-            <intent>
-                <action android:name="android.speech.RecognitionService" />
-            </intent>
-        </queries>
-
     </application>
+
+    <!-- ✅ queries خارج <application> -->
+    <queries>
+        <intent>
+            <action android:name="android.speech.RecognitionService" />
+        </intent>
+    </queries>
+
 </manifest>
