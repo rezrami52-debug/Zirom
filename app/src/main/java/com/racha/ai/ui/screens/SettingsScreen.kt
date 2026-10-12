@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
@@ -48,6 +49,7 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.racha.ai.R
+import com.racha.ai.core.faceauth.FaceAuthRepository
 import com.racha.ai.core.locale.LocaleManager
 import com.racha.ai.core.preferences.AppPreferences
 import com.racha.ai.data.local.RoutineItem
@@ -62,16 +64,19 @@ import kotlinx.coroutines.launch
 fun SettingsScreen(
     onBack: () -> Unit,
     onOpenProfile: () -> Unit,
+    onOpenFaceEnrollment: () -> Unit,
     viewModel: SettingsViewModel = viewModel()
 ) {
     val state by viewModel.uiState.collectAsState()
     val context = LocalContext.current
     val appPrefs = remember { AppPreferences(context) }
+    val faceRepo = remember { FaceAuthRepository(context) }
     val scope = rememberCoroutineScope()
 
     var currentLanguage by remember { mutableStateOf(appPrefs.getLanguage()) }
     var showLanguageDialog by remember { mutableStateOf(false) }
     var testMessage by remember { mutableStateOf<String?>(null) }
+    var faceEnabled by remember { mutableStateOf(faceRepo.isFaceAuthEnabled()) }
 
     LaunchedEffect(state.saveMessage) {
         if (state.saveMessage != null) {
@@ -119,7 +124,7 @@ fun SettingsScreen(
                 .padding(16.dp)
                 .verticalScroll(rememberScrollState())
         ) {
-            // ===== ملفي الشخصي =====
+            // ===== الملف الشخصي =====
             Card(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -139,7 +144,7 @@ fun SettingsScreen(
                         contentDescription = null,
                         tint = MaterialTheme.colorScheme.primary
                     )
-                    Spacer(modifier = Modifier.padding(8.dp))
+                    Spacer(modifier = Modifier.width(12.dp))
                     Column(modifier = Modifier.weight(1f)) {
                         Text(
                             text = "ملفي الشخصي",
@@ -148,6 +153,42 @@ fun SettingsScreen(
                         )
                         Text(
                             text = "أخبر Racha عن نفسك",
+                            style = MaterialTheme.typography.bodySmall
+                        )
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(12.dp))
+
+            // ===== تسجيل الوجه =====
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable { onOpenFaceEnrollment() },
+                colors = CardDefaults.cardColors(
+                    containerColor = if (faceEnabled)
+                        MaterialTheme.colorScheme.primaryContainer
+                    else
+                        MaterialTheme.colorScheme.surfaceVariant
+                )
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(16.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text("📸", style = MaterialTheme.typography.headlineSmall)
+                    Spacer(modifier = Modifier.width(12.dp))
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = "حماية بالوجه",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold
+                        )
+                        Text(
+                            text = if (faceEnabled) "✅ مفعّلة" else "التقط صورة وجهك لتفعيلها",
                             style = MaterialTheme.typography.bodySmall
                         )
                     }
