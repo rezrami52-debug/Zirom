@@ -5,22 +5,27 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.racha.ai.core.security.SecurePreferences
 import com.racha.ai.data.api.GeminiService
+import com.racha.ai.data.local.ChatMessageEntity
+import com.racha.ai.data.repository.ChatMemoryRepository
 import com.racha.ai.domain.model.Message
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
 
 data class ChatUiState(
     val messages: List<Message> = emptyList(),
     val inputText: String = "",
     val isSending: Boolean = false,
-    val hasApiKey: Boolean = true
+    val hasApiKey: Boolean = true,
+    val isLoadingHistory: Boolean = true
 )
 
 class ChatViewModel(application: Application) : AndroidViewModel(application) {
 
     private val securePrefs = SecurePreferences(application)
+    private val memory = ChatMemoryRepository(application)
     private var geminiService: GeminiService? = null
 
     private val _uiState = MutableStateFlow(ChatUiState())
@@ -28,6 +33,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
 
     init {
         initializeGemini()
+        observeHistory()
     }
 
     private fun initializeGemini() {
@@ -35,24 +41,44 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         if (apiKey.isNullOrBlank()) {
             _uiState.value = _uiState.value.copy(
                 hasApiKey = false,
-                messages = listOf(
-                    Message(
-                        text = "لم يتم إدخال مفتاح Gemini API بعد. الرجاء فتح الإعدادات وإدخال المفتاح.",
-                        isFromUser = false
-                    )
-                )
+                isLoadingHistory = false
             )
         } else {
             geminiService = GeminiService(apiKey)
-            _uiState.value = _uiState.value.copy(
-                hasApiKey = true,
-                messages = listOf(
+            _uiState.value = _uiState.value.copy(hasApiKey = true)
+        }
+    }
+
+    /**
+     * يستمع لجدول الرسائل في DB، ويعرضها فوراً.
+     */
+    private fun observeHistory() {
+        viewModelScope.launch {
+            memory.getConversation().collectLatest { entities ->
+                val messages = entities.map { entity ->
                     Message(
-                        text = "مرحباً بك! أنا Racha، مساعدك الشخصي. كيف أساعدك اليوم؟",
+                        id = entity.id,
+                        text = entity.text,
+                        isFromUser = entity.isFromUser,
+                        timestamp = entity.timestamp,
+                        isError = entity.isError
+                    )
+                }
+
+                // إذا كانت القائمة فارغة (أول استخدام)، أضف ترحيباً
+                if (messages.isEmpty() && !_uiState.value.hasApiKey.not()) {
+                    val welcome = Message(
+                        text = "أهلاً بك! أنا Racha، رفيقك الشخصي. كيف حالك اليوم؟",
                         isFromUser = false
                     )
-                )
-            )
+                    saveMessage(welcome)
+                } else {
+                    _uiState.value = _uiState.value.copy(
+                        messages = messages,
+                        isLoadingHistory = false
+                    )
+                }
+            }
         }
     }
 
@@ -66,78 +92,61 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
 
         val service = geminiService
         if (service == null) {
-            _uiState.value = _uiState.value.copy(
-                messages = _uiState.value.messages + Message(
-                    text = "لا يمكن الإرسال: مفتاح API غير موجود.",
-                    isFromUser = false,
-                    isError = true
-                ),
-                inputText = ""
-            )
+            saveMessage(Message(text = "لم يتم إدخال مفتاح API بعد.", isFromUser = false, isError = true))
+            _uiState.value = _uiState.value.copy(inputText = "")
             return
         }
 
-        val userMessage = Message(text = text, isFromUser = true)
-        _uiState.value = _uiState.value.copy(
-            messages = _uiState.value.messages + userMessage,
-            inputText = "",
-            isSending = true
-        )
-
         viewModelScope.launch {
-            val result = service.sendMessage(text)
+            // 1. حفظ رسالة المستخدم
+            val userMessage = Message(text = text, isFromUser = true)
+            saveMessage(userMessage)
+            _uiState.value = _uiState.value.copy(inputText = "", isSending = true)
+
+            // 2. استرجاع السياق (آخر 20 رسالة، بدون رسالة المستخدم الحالية)
+            val recent = memory.getRecentForContext()
+            val history = recent.filter { it.id != userMessage.id }
+
+            // 3. إرسال لـ Gemini
+            val result = service.sendMessageWithContext(history, text)
+
             result.fold(
                 onSuccess = { reply ->
-                    _uiState.value = _uiState.value.copy(
-                        messages = _uiState.value.messages + Message(
-                            text = reply,
-                            isFromUser = false
-                        ),
-                        isSending = false
-                    )
+                    saveMessage(Message(text = reply, isFromUser = false))
+                    _uiState.value = _uiState.value.copy(isSending = false)
                 },
                 onFailure = { error ->
                     val errorMessage = error.message ?: ""
-                    val userFriendlyMessage = when {
+                    val userFriendly = when {
                         errorMessage.contains("503") ||
-                        errorMessage.contains("UNAVAILABLE") ||
-                        errorMessage.contains("high demand") ->
-                            "⚠️ Gemini مزدحم حالياً. حاول مرة أخرى بعد قليل."
-
+                        errorMessage.contains("UNAVAILABLE") -> "⚠️ Gemini مزدحم حالياً. حاول بعد قليل."
                         errorMessage.contains("API key") ||
-                        errorMessage.contains("API_KEY") ->
-                            "⚠️ المفتاح غير صالح. تحقق من الإعدادات."
-
-                        errorMessage.contains("quota") ||
-                        errorMessage.contains("QUOTA") ->
-                            "⚠️ استُهلكت الحصة اليومية. حاول غداً."
-
-                        else ->
-                            "⚠️ خطأ: ${error.message ?: "غير معروف"}"
+                        errorMessage.contains("API_KEY") -> "⚠️ المفتاح غير صالح."
+                        errorMessage.contains("quota") -> "⚠️ استُهلكت الحصة اليومية."
+                        else -> "⚠️ خطأ: ${error.message ?: "غير معروف"}"
                     }
-
-                    _uiState.value = _uiState.value.copy(
-                        messages = _uiState.value.messages + Message(
-                            text = userFriendlyMessage,
-                            isFromUser = false,
-                            isError = true
-                        ),
-                        isSending = false
-                    )
+                    saveMessage(Message(text = userFriendly, isFromUser = false, isError = true))
+                    _uiState.value = _uiState.value.copy(isSending = false)
                 }
             )
         }
     }
 
-    fun clearHistory() {
-        geminiService?.clearHistory()
-        _uiState.value = _uiState.value.copy(
-            messages = listOf(
-                Message(
-                    text = "تم مسح المحادثة. كيف أساعدك؟",
-                    isFromUser = false
-                )
+    private suspend fun saveMessage(message: Message) {
+        memory.saveMessage(
+            ChatMessageEntity(
+                id = message.id,
+                text = message.text,
+                isFromUser = message.isFromUser,
+                isError = message.isError,
+                timestamp = message.timestamp
             )
         )
+    }
+
+    fun clearHistory() {
+        viewModelScope.launch {
+            memory.clearAll()
+        }
     }
 }
