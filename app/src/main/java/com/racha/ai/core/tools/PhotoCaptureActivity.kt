@@ -1,6 +1,7 @@
 package com.racha.ai.core.tools
 
 import android.Manifest
+import android.app.Activity
 import android.content.ContentValues
 import android.content.pm.PackageManager
 import android.graphics.Bitmap
@@ -67,7 +68,6 @@ class PhotoCaptureActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        // تحقق من الصلاحية
         if (allPermissionsGranted()) {
             setupUI()
         } else {
@@ -88,16 +88,21 @@ class PhotoCaptureActivity : AppCompatActivity() {
                                     "✅ تم حفظ الصورة في مجلد Racha",
                                     Toast.LENGTH_LONG
                                 ).show()
+                                // ✅ إرجاع النجاح
+                                setResult(Activity.RESULT_OK)
                             } else {
                                 Toast.makeText(
                                     this@PhotoCaptureActivity,
                                     "⚠️ فشل حفظ الصورة",
                                     Toast.LENGTH_LONG
                                 ).show()
+                                setResult(Activity.RESULT_CANCELED)
                             }
                             finish()
                         },
                         onCancel = {
+                            // ✅ إلغاء
+                            setResult(Activity.RESULT_CANCELED)
                             finish()
                         }
                     )
@@ -124,14 +129,12 @@ class PhotoCaptureActivity : AppCompatActivity() {
                 setupUI()
             } else {
                 Toast.makeText(this, "⚠️ صلاحية الكاميرا مطلوبة", Toast.LENGTH_LONG).show()
+                setResult(Activity.RESULT_CANCELED)
                 finish()
             }
         }
     }
 
-    /**
-     * حفظ الصورة في Pictures/Racha/.
-     */
     private fun savePhoto(bitmap: Bitmap): Boolean {
         return try {
             val timestamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US).format(Date())
@@ -204,7 +207,6 @@ fun CameraCaptureScreen(
     }
 
     Box(modifier = Modifier.fillMaxSize()) {
-        // معاينة الكاميرا
         AndroidView(
             factory = { ctx ->
                 PreviewView(ctx).also { pv -> previewView = pv }
@@ -212,7 +214,6 @@ fun CameraCaptureScreen(
             modifier = Modifier.fillMaxSize()
         )
 
-        // الحالة العلوية
         Column(
             modifier = Modifier
                 .align(Alignment.TopCenter)
@@ -232,7 +233,6 @@ fun CameraCaptureScreen(
             )
         }
 
-        // الأزرار السفلية
         Column(
             modifier = Modifier
                 .align(Alignment.BottomCenter)
@@ -285,9 +285,6 @@ fun CameraCaptureScreen(
     }
 }
 
-/**
- * تحويل ImageProxy إلى Bitmap مع التدوير.
- */
 private fun imageProxyToBitmap(image: ImageProxy): Bitmap? {
     return try {
         val buffer: ByteBuffer = image.planes[0].buffer
