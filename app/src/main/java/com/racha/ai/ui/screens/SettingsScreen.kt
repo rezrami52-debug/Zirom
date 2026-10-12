@@ -209,7 +209,24 @@ fun SettingsScreen(
             )
             Spacer(modifier = Modifier.height(12.dp))
 
-            OutlinedButton(
+           OutlinedButton(
+    onClick = {
+        val item = com.racha.ai.data.local.RoutineItem(
+            title = "اختبار",
+            emoji = "⏰",
+            hour = 0, minute = 0
+        )
+        com.racha.ai.services.routine.RoutineAlarmScheduler.triggerTest(
+            context, item, isPreAlert = false
+        )
+        testMessage = "✅ تم إرسال إشعار اختبار الروتين"
+    },
+    modifier = Modifier.fillMaxWidth()
+) {
+    Text("⏰ اختبار: إشعار روتين")
+}
+
+Spacer(modifier = Modifier.height(8.dp)) OutlinedButton(
                 onClick = {
                     PrayerAlarmReceiver.triggerManually(context, "الفجر", isPreAlert = true)
                     testMessage = "✅ تم إرسال إشعار اختبار مسبق"

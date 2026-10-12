@@ -37,12 +37,10 @@
             </intent-filter>
         </service>
 
-        <!-- مستقبل إشعارات الصلاة -->
         <receiver
             android:name=".services.prayer.PrayerAlarmReceiver"
             android:exported="false" />
 
-        <!-- مستقبل إعادة التشغيل -->
         <receiver
             android:name=".services.prayer.BootReceiver"
             android:enabled="true"
@@ -51,6 +49,11 @@
                 <action android:name="android.intent.action.BOOT_COMPLETED" />
             </intent-filter>
         </receiver>
+
+        <!-- ✅ مستقبل الروتين -->
+        <receiver
+            android:name=".services.routine.RoutineAlarmReceiver"
+            android:exported="false" />
 
     </application>
 </manifest>
