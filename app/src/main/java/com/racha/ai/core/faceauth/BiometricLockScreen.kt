@@ -1,6 +1,5 @@
 package com.racha.ai.core.faceauth
 
-import android.os.Build
 import androidx.biometric.BiometricManager
 import androidx.biometric.BiometricPrompt
 import androidx.compose.foundation.layout.Arrangement
@@ -23,11 +22,17 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import androidx.fragment.app.FragmentActivity
+import com.racha.ai.core.preferences.AppPreferences
+import com.racha.ai.data.repository.LockAttemptRepository
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 
 @Composable
 fun BiometricLockScreen(
@@ -35,11 +40,21 @@ fun BiometricLockScreen(
     onCancel: () -> Unit
 ) {
     val context = LocalContext.current
+    val lifecycleOwner = LocalLifecycleOwner.current
+
     var statusText by remember { mutableStateOf("يجب التحقق من هويتك لفتح Racha") }
     var hasPrompted by remember { mutableStateOf(false) }
+    var failureCount by remember { mutableStateOf(0) }
 
-    // تشغيل Prompt تلقائياً عند الظهور
+    val appPrefs = remember { AppPreferences(context) }
+    val attemptRepo = remember { LockAttemptRepository(context) }
+
     LaunchedEffect(Unit) {
+        // تنظيف الصور القديمة
+        CoroutineScope(Dispatchers.IO).launch {
+            attemptRepo.cleanupOld(appPrefs.getIntruderRetentionDays())
+        }
+
         if (hasPrompted) return@LaunchedEffect
         hasPrompted = true
 
@@ -48,7 +63,6 @@ fun BiometricLockScreen(
             return@LaunchedEffect
         }
 
-        // تحقق من توفر البصمة/الوجه
         val biometricManager = BiometricManager.from(context)
         val authenticators = BiometricManager.Authenticators.BIOMETRIC_STRONG or
                              BiometricManager.Authenticators.BIOMETRIC_WEAK
@@ -68,7 +82,6 @@ fun BiometricLockScreen(
             return@LaunchedEffect
         }
 
-        // إعداد Prompt
         val executor = ContextCompat.getMainExecutor(context)
         val promptInfo = BiometricPrompt.PromptInfo.Builder()
             .setTitle("🔒 Racha")
@@ -86,12 +99,38 @@ fun BiometricLockScreen(
                 override fun onAuthenticationSucceeded(result: BiometricPrompt.AuthenticationResult) {
                     super.onAuthenticationSucceeded(result)
                     statusText = "✅ تم التحقق"
+                    // تسجيل النجاح
+                    CoroutineScope(Dispatchers.IO).launch {
+                        attemptRepo.recordAttempt(success = true)
+                    }
                     onSuccess()
                 }
 
                 override fun onAuthenticationFailed() {
                     super.onAuthenticationFailed()
-                    statusText = "❌ لم يتم التعرف. حاول مرة أخرى."
+                    failureCount++
+                    statusText = "❌ لم يتم التعرف. حاول مرة أخرى ($failureCount)"
+
+                    // ✅ هل وصلنا للحد الأدنى؟
+                    val threshold = appPrefs.getIntruderThreshold()
+                    val intruderEnabled = appPrefs.isIntruderPhotoEnabled()
+
+                    if (intruderEnabled && failureCount == threshold) {
+                        // التقاط صورة المتسلل
+                        statusText = "🔍 جاري التحقق من المحيط..."
+
+                        IntruderPhotoCapture.capture(
+                            context = context,
+                            lifecycleOwner = lifecycleOwner
+                        ) { file ->
+                            CoroutineScope(Dispatchers.IO).launch {
+                                attemptRepo.recordAttempt(
+                                    success = false,
+                                    photoPath = file?.absolutePath
+                                )
+                            }
+                        }
+                    }
                 }
 
                 override fun onAuthenticationError(errorCode: Int, errString: CharSequence) {

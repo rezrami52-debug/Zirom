@@ -18,6 +18,7 @@ import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.PhotoCamera
+import androidx.compose.material.icons.filled.Security
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
@@ -30,6 +31,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
@@ -67,6 +69,7 @@ fun SettingsScreen(
     onBack: () -> Unit,
     onOpenProfile: () -> Unit,
     onOpenFaceEnrollment: () -> Unit,
+    onOpenSecurityLog: () -> Unit,
     viewModel: SettingsViewModel = viewModel()
 ) {
     val state by viewModel.uiState.collectAsState()
@@ -80,6 +83,10 @@ fun SettingsScreen(
     var testMessage by remember { mutableStateOf<String?>(null) }
     var faceEnabled by remember { mutableStateOf(faceRepo.isFaceAuthEnabled()) }
     var showDisableDialog by remember { mutableStateOf(false) }
+
+    // إعدادات الأمان
+    var intruderEnabled by remember { mutableStateOf(appPrefs.isIntruderPhotoEnabled()) }
+    var intruderThreshold by remember { mutableStateOf(appPrefs.getIntruderThreshold()) }
 
     LaunchedEffect(state.saveMessage) {
         if (state.saveMessage != null) {
@@ -142,22 +149,11 @@ fun SettingsScreen(
                         .padding(16.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Icon(
-                        imageVector = Icons.Filled.Person,
-                        contentDescription = null,
-                        tint = MaterialTheme.colorScheme.primary
-                    )
+                    Icon(Icons.Filled.Person, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
                     Spacer(modifier = Modifier.width(12.dp))
                     Column(modifier = Modifier.weight(1f)) {
-                        Text(
-                            text = "ملفي الشخصي",
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.Bold
-                        )
-                        Text(
-                            text = "أخبر Racha عن نفسك",
-                            style = MaterialTheme.typography.bodySmall
-                        )
+                        Text("ملفي الشخصي", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                        Text("أخبر Racha عن نفسك", style = MaterialTheme.typography.bodySmall)
                     }
                 }
             }
@@ -169,11 +165,8 @@ fun SettingsScreen(
                 modifier = Modifier
                     .fillMaxWidth()
                     .clickable {
-                        if (faceEnabled) {
-                            showDisableDialog = true
-                        } else {
-                            onOpenFaceEnrollment()
-                        }
+                        if (faceEnabled) showDisableDialog = true
+                        else onOpenFaceEnrollment()
                     },
                 colors = CardDefaults.cardColors(
                     containerColor = if (faceEnabled)
@@ -195,16 +188,9 @@ fun SettingsScreen(
                     )
                     Spacer(modifier = Modifier.width(12.dp))
                     Column(modifier = Modifier.weight(1f)) {
+                        Text("حماية Racha", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
                         Text(
-                            text = "حماية Racha",
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.Bold
-                        )
-                        Text(
-                            text = if (faceEnabled)
-                                "✅ مفعّلة — اضغط للتعطيل"
-                            else
-                                "التقط صورة + سجّل بصمة للتفعيل",
+                            text = if (faceEnabled) "✅ مفعّلة — اضغط للتعطيل" else "التقط صورة + سجّل بصمة",
                             style = MaterialTheme.typography.bodySmall
                         )
                     }
@@ -215,20 +201,114 @@ fun SettingsScreen(
             HorizontalDivider()
             Spacer(modifier = Modifier.height(24.dp))
 
+            // ===== الأمان =====
+            Text("الأمان", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+            Spacer(modifier = Modifier.height(12.dp))
+
+            // تبديل التقاط صورة المتسلل
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(16.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(Icons.Filled.Security, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+                    Spacer(modifier = Modifier.width(12.dp))
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text("التقاط صورة المتسلل", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
+                        Text("صورة بعد عدد محاولات فاشلة", style = MaterialTheme.typography.bodySmall)
+                    }
+                    Switch(
+                        checked = intruderEnabled,
+                        onCheckedChange = {
+                            intruderEnabled = it
+                            appPrefs.setIntruderPhotoEnabled(it)
+                        }
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(8.dp))
+
+            // عدد المحاولات
+            if (intruderEnabled) {
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
+                ) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(16.dp)
+                    ) {
+                        Text("عدد المحاولات قبل التصوير", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
+                        Spacer(modifier = Modifier.height(8.dp))
+
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Button(
+                                onClick = {
+                                    if (intruderThreshold > 1) {
+                                        intruderThreshold--
+                                        appPrefs.setIntruderThreshold(intruderThreshold)
+                                    }
+                                },
+                                enabled = intruderThreshold > 1
+                            ) {
+                                Text("−")
+                            }
+                            Spacer(modifier = Modifier.width(16.dp))
+                            Text(
+                                text = "$intruderThreshold",
+                                style = MaterialTheme.typography.headlineSmall,
+                                fontWeight = FontWeight.Bold
+                            )
+                            Spacer(modifier = Modifier.width(16.dp))
+                            Button(
+                                onClick = {
+                                    if (intruderThreshold < 10) {
+                                        intruderThreshold++
+                                        appPrefs.setIntruderThreshold(intruderThreshold)
+                                    }
+                                },
+                                enabled = intruderThreshold < 10
+                            ) {
+                                Text("+")
+                            }
+                        }
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(8.dp))
+
+            // زر سجل الأمان
+            OutlinedButton(
+                onClick = onOpenSecurityLog,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Icon(Icons.Filled.Security, contentDescription = null)
+                Spacer(modifier = Modifier.width(8.dp))
+                Text("📋 عرض سجل المحاولات")
+            }
+
+            Spacer(modifier = Modifier.height(24.dp))
+            HorizontalDivider()
+            Spacer(modifier = Modifier.height(24.dp))
+
             // ===== اللغة =====
-            Text(
-                text = stringResource(id = R.string.settings_language),
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.Bold
-            )
+            Text(stringResource(id = R.string.settings_language), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
             Spacer(modifier = Modifier.height(8.dp))
             Card(
                 modifier = Modifier
                     .fillMaxWidth()
                     .clickable { showLanguageDialog = true },
-                colors = CardDefaults.cardColors(
-                    containerColor = MaterialTheme.colorScheme.surfaceVariant
-                )
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
             ) {
                 Row(
                     modifier = Modifier
@@ -241,11 +321,7 @@ fun SettingsScreen(
                         style = MaterialTheme.typography.bodyLarge,
                         modifier = Modifier.weight(1f)
                     )
-                    Text(
-                        text = "تغيير",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.primary
-                    )
+                    Text("تغيير", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.primary)
                 }
             }
 
@@ -255,7 +331,7 @@ fun SettingsScreen(
 
             // ===== مفتاح API =====
             Text(
-                text = stringResource(id = R.string.settings_api_key_label),
+                stringResource(id = R.string.settings_api_key_label),
                 style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.Bold
             )
@@ -270,7 +346,7 @@ fun SettingsScreen(
             )
             Spacer(modifier = Modifier.height(8.dp))
             Text(
-                text = stringResource(id = R.string.settings_api_key_hint),
+                stringResource(id = R.string.settings_api_key_hint),
                 style = MaterialTheme.typography.bodySmall
             )
             Spacer(modifier = Modifier.height(16.dp))
@@ -297,11 +373,7 @@ fun SettingsScreen(
             Spacer(modifier = Modifier.height(24.dp))
 
             // ===== أدوات الاختبار =====
-            Text(
-                text = "أدوات الاختبار",
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.Bold
-            )
+            Text("أدوات الاختبار", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
             Spacer(modifier = Modifier.height(12.dp))
 
             OutlinedButton(
@@ -366,9 +438,7 @@ fun SettingsScreen(
         AlertDialog(
             onDismissRequest = { showDisableDialog = false },
             title = { Text("تعطيل الحماية؟") },
-            text = {
-                Text("بعد التعطيل، لن يُطلب منك التحقق عند فتح Racha. هل أنت متأكد؟")
-            },
+            text = { Text("بعد التعطيل، لن يُطلب منك التحقق عند فتح Racha.") },
             confirmButton = {
                 TextButton(
                     onClick = {
@@ -415,17 +485,9 @@ fun SettingsScreen(
                                 .padding(vertical = 12.dp),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Text(
-                                text = name,
-                                style = MaterialTheme.typography.bodyLarge,
-                                modifier = Modifier.weight(1f)
-                            )
+                            Text(name, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
                             if (code == currentLanguage) {
-                                Icon(
-                                    imageVector = Icons.Filled.Check,
-                                    contentDescription = null,
-                                    tint = MaterialTheme.colorScheme.primary
-                                )
+                                Icon(Icons.Filled.Check, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
                             }
                         }
                     }

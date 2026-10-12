@@ -3,7 +3,6 @@ package com.racha.ai.ui.navigation
 import android.graphics.Bitmap
 import androidx.activity.compose.BackHandler
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -21,6 +20,7 @@ import com.racha.ai.ui.screens.onboarding.OnboardingScreen
 import com.racha.ai.ui.screens.prayer.PrayerScreen
 import com.racha.ai.ui.screens.profile.ProfileScreen
 import com.racha.ai.ui.screens.routine.RoutineScreen
+import com.racha.ai.ui.screens.security.SecurityLogScreen
 
 sealed class Screen {
     object Onboarding : Screen()
@@ -32,6 +32,7 @@ sealed class Screen {
     object Profile : Screen()
     object FaceEnrollment : Screen()
     object BiometricLock : Screen()
+    object SecurityLog : Screen()
     object Welcome : Screen()
 }
 
@@ -61,7 +62,6 @@ fun RachaApp() {
         is Screen.BiometricLock -> BiometricLockScreen(
             onSuccess = { currentScreen = Screen.Chat },
             onCancel = {
-                // إغلاق التطبيق
                 android.os.Process.killProcess(android.os.Process.myPid())
             }
         )
@@ -81,11 +81,14 @@ fun RachaApp() {
         is Screen.Settings -> SettingsScreen(
             onBack = { currentScreen = Screen.Chat },
             onOpenProfile = { currentScreen = Screen.Profile },
-            onOpenFaceEnrollment = { currentScreen = Screen.FaceEnrollment }
+            onOpenFaceEnrollment = { currentScreen = Screen.FaceEnrollment },
+            onOpenSecurityLog = { currentScreen = Screen.SecurityLog }
         )
+
         is Screen.Profile -> ProfileScreen(
             onBack = { currentScreen = Screen.Settings }
         )
+
         is Screen.FaceEnrollment -> FaceCaptureScreen(
             onCaptured = { bitmap: Bitmap ->
                 faceRepo.saveFaceImage(bitmap)
@@ -94,6 +97,11 @@ fun RachaApp() {
             },
             onCancel = { currentScreen = Screen.Settings }
         )
+
+        is Screen.SecurityLog -> SecurityLogScreen(
+            onBack = { currentScreen = Screen.Settings }
+        )
+
         is Screen.Notifications -> NotificationsScreen(
             onBack = { currentScreen = Screen.Chat }
         )

@@ -4,9 +4,6 @@ import android.content.Context
 import androidx.security.crypto.EncryptedSharedPreferences
 import androidx.security.crypto.MasterKey
 
-/**
- * تفضيلات عامة للتطبيق (ليس سرية، لكن نحفظها مع التشفير).
- */
 class AppPreferences(context: Context) {
 
     private val masterKey = MasterKey.Builder(context)
@@ -21,48 +18,55 @@ class AppPreferences(context: Context) {
         EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM
     )
 
-    /**
-     * هل أكمل المستخدم الـ Onboarding؟
-     */
-    fun isOnboardingComplete(): Boolean {
-        return prefs.getBoolean(KEY_ONBOARDING_COMPLETE, false)
-    }
-
+    // ===== Onboarding =====
+    fun isOnboardingComplete(): Boolean = prefs.getBoolean(KEY_ONBOARDING_COMPLETE, false)
     fun setOnboardingComplete(complete: Boolean) {
         prefs.edit().putBoolean(KEY_ONBOARDING_COMPLETE, complete).apply()
     }
 
-    /**
-     * هل فعّل المستخدم صلاحية الإشعارات (من وجهة نظر Onboarding)؟
-     */
-    fun isNotificationsEnabled(): Boolean {
-        return prefs.getBoolean(KEY_NOTIFICATIONS_ENABLED, false)
-    }
-
+    fun isNotificationsEnabled(): Boolean = prefs.getBoolean(KEY_NOTIFICATIONS_ENABLED, false)
     fun setNotificationsEnabled(enabled: Boolean) {
         prefs.edit().putBoolean(KEY_NOTIFICATIONS_ENABLED, enabled).apply()
     }
 
-    /**
-     * هل فعّل المستخدم صلاحية الموقع؟
-     */
-    fun isLocationEnabled(): Boolean {
-        return prefs.getBoolean(KEY_LOCATION_ENABLED, false)
-    }
-
+    fun isLocationEnabled(): Boolean = prefs.getBoolean(KEY_LOCATION_ENABLED, false)
     fun setLocationEnabled(enabled: Boolean) {
         prefs.edit().putBoolean(KEY_LOCATION_ENABLED, enabled).apply()
     }
 
-    /**
-     * لغة التطبيق
-     */
-    fun getLanguage(): String {
-        return prefs.getString(KEY_LANGUAGE, "ar") ?: "ar"
-    }
-
+    // ===== اللغة =====
+    fun getLanguage(): String = prefs.getString(KEY_LANGUAGE, "ar") ?: "ar"
     fun setLanguage(lang: String) {
         prefs.edit().putString(KEY_LANGUAGE, lang).apply()
+    }
+
+    // ===== الأمان — محاولات الفتح =====
+    /**
+     * عدد المحاولات الفاشلة قبل التقاط صورة.
+     * الافتراضي: 5
+     */
+    fun getIntruderThreshold(): Int = prefs.getInt(KEY_INTRUDER_THRESHOLD, 5)
+    fun setIntruderThreshold(value: Int) {
+        val clamped = value.coerceIn(1, 10)
+        prefs.edit().putInt(KEY_INTRUDER_THRESHOLD, clamped).apply()
+    }
+
+    /**
+     * هل التقاط صورة المتسلل مفعّل؟
+     */
+    fun isIntruderPhotoEnabled(): Boolean = prefs.getBoolean(KEY_INTRUDER_ENABLED, true)
+    fun setIntruderPhotoEnabled(enabled: Boolean) {
+        prefs.edit().putBoolean(KEY_INTRUDER_ENABLED, enabled).apply()
+    }
+
+    /**
+     * كم يوماً تُحفظ الصور قبل الحذف التلقائي؟
+     * الافتراضي: 7
+     */
+    fun getIntruderRetentionDays(): Int = prefs.getInt(KEY_INTRUDER_RETENTION_DAYS, 7)
+    fun setIntruderRetentionDays(days: Int) {
+        val clamped = days.coerceIn(1, 30)
+        prefs.edit().putInt(KEY_INTRUDER_RETENTION_DAYS, clamped).apply()
     }
 
     companion object {
@@ -70,5 +74,8 @@ class AppPreferences(context: Context) {
         private const val KEY_NOTIFICATIONS_ENABLED = "notifications_enabled"
         private const val KEY_LOCATION_ENABLED = "location_enabled"
         private const val KEY_LANGUAGE = "language"
+        private const val KEY_INTRUDER_THRESHOLD = "intruder_threshold"
+        private const val KEY_INTRUDER_ENABLED = "intruder_enabled"
+        private const val KEY_INTRUDER_RETENTION_DAYS = "intruder_retention_days"
     }
 }
