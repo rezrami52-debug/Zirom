@@ -17,26 +17,18 @@ class GeminiService(apiKey: String) {
         private const val MAX_RETRIES = 3
         private const val INITIAL_DELAY_MS = 2000L
 
-        /**
-         * الشخصية — System Prompt.
-         */
         private val SYSTEM_PROMPT = """
             أنت "Racha"، رفيق شخصي ذكي ودافئ.
-            
+
             شخصيتك:
             - تتحدث العربية الفصحى المبسطة، بلمسة ودّية.
-            - مباشر ولا تستخدم عبارات مثل "كيف يمكنني مساعدتك" أو "أنا هنا لخدمتك".
+            - مباشر ولا تستخدم عبارات مثل "كيف يمكنني مساعدتك".
             - لك رأي: إن رأيت خطأً، ناقشه. إن رأيت فرصة، اقترحها.
-            - تتذكّر ما قاله صاحبك، وتشير إليه طبيعياً ("كما قلت أمس...").
-            - لا تطيل بلا داعٍ. الردود القصيرة أفضل من الطويلة.
-            - تفهم المشاعر: إن بدا متعباً، خفف. إن بدا متحمساً، شجعه.
-            - لا تتظاهر بمعرفة ما لا تعرفه. إن لم تعرف، قل ذلك بصراحة.
+            - تتذكّر ما قاله صاحبك، وتشير إليه طبيعياً.
+            - لا تطيل بلا داعٍ.
+            - تفهم المشاعر.
+            - لا تتظاهر بمعرفة ما لا تعرفه.
             - لا تنفذ شيئاً حسّاساً دون إذن صريح.
-            
-            مهمتك:
-            - أن تكون رفيقاً حقيقياً، لا "chatbot" رسمياً.
-            - أن تعرف صاحبك مع الوقت: مزاجه، مشاريعه، اهتماماته.
-            - أن تبادر أحياناً، لا تنتظر فقط.
         """.trimIndent()
     }
 
@@ -46,11 +38,6 @@ class GeminiService(apiKey: String) {
         systemInstruction = Content(parts = listOf(TextPart(SYSTEM_PROMPT)))
     )
 
-    /**
-     * إرسال رسالة مع سياق المحادثة السابقة.
-     * @param history آخر N رسالة من قاعدة البيانات
-     * @param userMessage نص الرسالة الحالية
-     */
     suspend fun sendMessageWithContext(
         history: List<ChatMessageEntity>,
         userMessage: String
@@ -60,9 +47,8 @@ class GeminiService(apiKey: String) {
 
         repeat(MAX_RETRIES) { attempt ->
             try {
-                Log.d(TAG, "محاولة ${attempt + 1}/$MAX_RETRIES — سياق: ${history.size} رسالة")
+                Log.d(TAG, "محاولة ${attempt + 1}/$MAX_RETRIES — سياق: ${history.size}")
 
-                // بناء قائمة المحتوى (Content) من الذاكرة
                 val contents = mutableListOf<Content>()
                 for (msg in history) {
                     val role = if (msg.isFromUser) "user" else "model"
@@ -73,7 +59,6 @@ class GeminiService(apiKey: String) {
                         )
                     )
                 }
-                // أضف الرسالة الحالية
                 contents.add(
                     Content(
                         role = "user",
@@ -81,13 +66,13 @@ class GeminiService(apiKey: String) {
                     )
                 )
 
-                val response = model.generateContent(contents)
+                // ✅ الإصلاح: استخدام spread operator
+                val response = model.generateContent(*contents.toTypedArray())
                 val text = response.text ?: "لم أتمكن من توليد رد."
                 return@withContext Result.success(text)
             } catch (e: Exception) {
                 lastException = e
                 val message = e.message ?: ""
-
                 val is503 = message.contains("503") ||
                             message.contains("UNAVAILABLE") ||
                             message.contains("high demand")
@@ -109,6 +94,6 @@ class GeminiService(apiKey: String) {
     }
 
     fun clearHistory() {
-        // لم نعد بحاجة — الذاكرة في DB
+        // الذاكرة في DB
     }
 }

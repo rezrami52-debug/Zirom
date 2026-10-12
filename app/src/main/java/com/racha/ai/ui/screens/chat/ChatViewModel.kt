@@ -31,6 +31,8 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
     private val _uiState = MutableStateFlow(ChatUiState())
     val uiState: StateFlow<ChatUiState> = _uiState.asStateFlow()
 
+    private var welcomeInitialized = false
+
     init {
         initializeGemini()
         observeHistory()
@@ -49,9 +51,6 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    /**
-     * يستمع لجدول الرسائل في DB، ويعرضها فوراً.
-     */
     private fun observeHistory() {
         viewModelScope.launch {
             memory.getConversation().collectLatest { entities ->
@@ -65,13 +64,23 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                     )
                 }
 
-                // إذا كانت القائمة فارغة (أول استخدام)، أضف ترحيباً
-                if (messages.isEmpty() && !_uiState.value.hasApiKey.not()) {
-                    val welcome = Message(
-                        text = "أهلاً بك! أنا Racha، رفيقك الشخصي. كيف حالك اليوم؟",
-                        isFromUser = false
-                    )
-                    saveMessage(welcome)
+                // إذا كانت فارغة وأول مرة، أضف ترحيباً (خارج collectLatest)
+                if (messages.isEmpty() && !welcomeInitialized && _uiState.value.hasApiKey) {
+                    welcomeInitialized = true
+                    // ✅ الإصلاح: launch منفصل للـ suspend function
+                    launch {
+                        val welcomeText = "أهلاً بك! أنا Racha، رفيقك الشخصي. كيف حالك اليوم؟"
+                        val welcome = Message(text = welcomeText, isFromUser = false)
+                        memory.saveMessage(
+                            ChatMessageEntity(
+                                id = welcome.id,
+                                text = welcome.text,
+                                isFromUser = false,
+                                isError = false,
+                                timestamp = welcome.timestamp
+                            )
+                        )
+                    }
                 } else {
                     _uiState.value = _uiState.value.copy(
                         messages = messages,
@@ -92,27 +101,28 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
 
         val service = geminiService
         if (service == null) {
-            saveMessage(Message(text = "لم يتم إدخال مفتاح API بعد.", isFromUser = false, isError = true))
+            viewModelScope.launch {
+                saveMessageEntity(
+                    Message(text = "لم يتم إدخال مفتاح API بعد.", isFromUser = false, isError = true)
+                )
+            }
             _uiState.value = _uiState.value.copy(inputText = "")
             return
         }
 
         viewModelScope.launch {
-            // 1. حفظ رسالة المستخدم
             val userMessage = Message(text = text, isFromUser = true)
-            saveMessage(userMessage)
+            saveMessageEntity(userMessage)
             _uiState.value = _uiState.value.copy(inputText = "", isSending = true)
 
-            // 2. استرجاع السياق (آخر 20 رسالة، بدون رسالة المستخدم الحالية)
             val recent = memory.getRecentForContext()
             val history = recent.filter { it.id != userMessage.id }
 
-            // 3. إرسال لـ Gemini
             val result = service.sendMessageWithContext(history, text)
 
             result.fold(
                 onSuccess = { reply ->
-                    saveMessage(Message(text = reply, isFromUser = false))
+                    saveMessageEntity(Message(text = reply, isFromUser = false))
                     _uiState.value = _uiState.value.copy(isSending = false)
                 },
                 onFailure = { error ->
@@ -125,14 +135,14 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                         errorMessage.contains("quota") -> "⚠️ استُهلكت الحصة اليومية."
                         else -> "⚠️ خطأ: ${error.message ?: "غير معروف"}"
                     }
-                    saveMessage(Message(text = userFriendly, isFromUser = false, isError = true))
+                    saveMessageEntity(Message(text = userFriendly, isFromUser = false, isError = true))
                     _uiState.value = _uiState.value.copy(isSending = false)
                 }
             )
         }
     }
 
-    private suspend fun saveMessage(message: Message) {
+    private suspend fun saveMessageEntity(message: Message) {
         memory.saveMessage(
             ChatMessageEntity(
                 id = message.id,
