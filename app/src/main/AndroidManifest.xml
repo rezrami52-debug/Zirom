@@ -10,10 +10,11 @@
     <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />
     <uses-permission android:name="android.permission.USE_EXACT_ALARM" />
     <uses-permission android:name="android.permission.WAKE_LOCK" />
-
-    <!-- ✅ كاميرا للتعرف على الوجه -->
     <uses-permission android:name="android.permission.CAMERA" />
     <uses-feature android:name="android.hardware.camera.front" android:required="false" />
+
+    <!-- ✅ صلاحية الميكروفون للصوت -->
+    <uses-permission android:name="android.permission.RECORD_AUDIO" />
 
     <application
         android:allowBackup="false"
@@ -59,6 +60,12 @@
         <receiver
             android:name=".services.routine.RoutineAlarmReceiver"
             android:exported="false" />
+
+        <queries>
+            <intent>
+                <action android:name="android.speech.RecognitionService" />
+            </intent>
+        </queries>
 
     </application>
 </manifest>

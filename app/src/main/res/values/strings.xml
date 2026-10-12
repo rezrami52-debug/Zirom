@@ -22,4 +22,7 @@
     <string name="language_arabic">العربية</string>
     <string name="language_english">English</string>
     <string name="language_french">Français</string>
+    <string name="voice_listening">🎤 أستمع إليك...</string>
+    <string name="voice_ready">🎤 جاهز للاستماع</string>
+    <string name="voice_hint">اضغط للتحدث</string>
 </resources>

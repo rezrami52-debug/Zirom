@@ -1,5 +1,6 @@
 package com.racha.ai.ui.screens.chat
 
+import android.Manifest
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -22,6 +23,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Checklist
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material.icons.filled.Send
@@ -40,21 +42,30 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.google.accompanist.permissions.ExperimentalPermissionsApi
+import com.google.accompanist.permissions.isGranted
+import com.google.accompanist.permissions.rememberPermissionState
 import com.racha.ai.R
+import com.racha.ai.core.voice.VoiceInputHelper
 import com.racha.ai.data.repository.NotificationRepository
 import com.racha.ai.domain.model.Message
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalPermissionsApi::class)
 @Composable
 fun ChatScreen(
     onOpenSettings: () -> Unit,
@@ -69,9 +80,34 @@ fun ChatScreen(
     val unreadCount by NotificationRepository.unreadCount.collectAsState()
     val listState = rememberLazyListState()
 
+    val context = LocalContext.current
+    val micPermission = rememberPermissionState(Manifest.permission.RECORD_AUDIO)
+
+    // حالة الصوت
+    var isListening by remember { mutableStateOf(false) }
+    var voiceError by remember { mutableStateOf<String?>(null) }
+
+    val voiceHelper = remember { VoiceInputHelper(context) }
+
+    // تحرير الموارد
+    DisposableEffect(Unit) {
+        onDispose {
+            voiceHelper.destroy()
+        }
+    }
+
+    // تمرير تلقائي
     LaunchedEffect(state.messages.size) {
         if (state.messages.isNotEmpty()) {
             listState.animateScrollToItem(state.messages.size - 1)
+        }
+    }
+
+    // مسح رسالة الخطأ بعد 3 ثوانٍ
+    LaunchedEffect(voiceError) {
+        if (voiceError != null) {
+            kotlinx.coroutines.delay(3000)
+            voiceError = null
         }
     }
 
@@ -142,25 +178,55 @@ fun ChatScreen(
         ) {
             WeatherBanner(weather = weatherState.weather)
 
-            // تنبيه "املأ ملفك"
-            if (!state.hasProfile && state.hasApiKey) {
+            // شريط "أستمع" عند تفعيل الصوت
+            if (isListening) {
                 Card(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(horizontal = 12.dp, vertical = 6.dp)
-                        .clickable { onOpenSettings() },
+                        .padding(horizontal = 12.dp, vertical = 6.dp),
                     colors = CardDefaults.cardColors(
-                        containerColor = MaterialTheme.colorScheme.tertiaryContainer
+                        containerColor = MaterialTheme.colorScheme.primaryContainer
+                    )
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(12.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(20.dp),
+                            strokeWidth = 2.dp
+                        )
+                        Spacer(modifier = Modifier.width(12.dp))
+                        Text(
+                            text = stringResource(id = R.string.voice_listening),
+                            style = MaterialTheme.typography.bodyMedium,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                }
+            }
+
+            // رسالة خطأ الصوت
+            voiceError?.let { error ->
+                Card(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 12.dp, vertical = 6.dp),
+                    colors = CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.errorContainer
                     )
                 ) {
                     Text(
-                        text = "💡 املأ ملفك الشخصي ليعرفك Racha أفضل. اضغط هنا.",
+                        text = "⚠️ $error",
                         modifier = Modifier.padding(12.dp),
                         style = MaterialTheme.typography.bodySmall
                     )
                 }
             }
 
+            // قائمة الرسائل
             LazyColumn(
                 state = listState,
                 modifier = Modifier
@@ -179,6 +245,7 @@ fun ChatScreen(
                 item { Spacer(modifier = Modifier.size(8.dp)) }
             }
 
+            // حقل الإدخال + زر الميكروفون
             Surface(
                 modifier = Modifier.fillMaxWidth(),
                 tonalElevation = 3.dp
@@ -196,7 +263,57 @@ fun ChatScreen(
                         placeholder = { Text(stringResource(id = R.string.chat_input_hint)) },
                         maxLines = 4
                     )
-                    Spacer(modifier = Modifier.width(8.dp))
+                    Spacer(modifier = Modifier.width(4.dp))
+
+                    // ✅ زر الميكروفون
+                    IconButton(
+                        onClick = {
+                            if (isListening) {
+                                voiceHelper.stopListening()
+                                isListening = false
+                                return@IconButton
+                            }
+
+                            if (!micPermission.status.isGranted) {
+                                micPermission.launchPermissionRequest()
+                                return@IconButton
+                            }
+
+                            isListening = true
+                            voiceHelper.startListening(
+                                languageTag = "ar-TN",
+                                onReady = {
+                                    // جاهز
+                                },
+                                onResult = { text ->
+                                    isListening = false
+                                    viewModel.onInputChange(text)
+                                    // إرسال تلقائي بعد 300ms
+                                    android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
+                                        viewModel.sendMessage()
+                                    }, 300)
+                                },
+                                onError = { error ->
+                                    isListening = false
+                                    voiceError = error
+                                },
+                                onEnd = {
+                                    // انتهى بدون نتيجة
+                                }
+                            )
+                        }
+                    ) {
+                        Icon(
+                            imageVector = Icons.Filled.Mic,
+                            contentDescription = "صوت",
+                            tint = if (isListening)
+                                MaterialTheme.colorScheme.error
+                            else
+                                MaterialTheme.colorScheme.primary
+                        )
+                    }
+
+                    // زر الإرسال
                     IconButton(
                         onClick = viewModel::sendMessage,
                         enabled = state.inputText.isNotBlank() && !state.isSending
