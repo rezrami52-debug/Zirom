@@ -9,6 +9,8 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Check
@@ -21,6 +23,7 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
@@ -33,6 +36,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -45,7 +49,10 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.racha.ai.R
 import com.racha.ai.core.locale.LocaleManager
 import com.racha.ai.core.preferences.AppPreferences
+import com.racha.ai.services.prayer.PrayerAlarmReceiver
+import com.racha.ai.services.weather.WeatherWorker
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -56,14 +63,23 @@ fun SettingsScreen(
     val state by viewModel.uiState.collectAsState()
     val context = LocalContext.current
     val appPrefs = remember { AppPreferences(context) }
+    val scope = rememberCoroutineScope()
 
     var currentLanguage by remember { mutableStateOf(appPrefs.getLanguage()) }
     var showLanguageDialog by remember { mutableStateOf(false) }
+    var testMessage by remember { mutableStateOf<String?>(null) }
 
     LaunchedEffect(state.saveMessage) {
         if (state.saveMessage != null) {
             delay(3000)
             viewModel.clearMessage()
+        }
+    }
+
+    LaunchedEffect(testMessage) {
+        if (testMessage != null) {
+            delay(3000)
+            testMessage = null
         }
     }
 
@@ -97,8 +113,9 @@ fun SettingsScreen(
                 .fillMaxSize()
                 .padding(padding)
                 .padding(16.dp)
+                .verticalScroll(rememberScrollState())
         ) {
-            // قسم اللغة
+            // ===== قسم اللغة =====
             Text(
                 text = stringResource(id = R.string.settings_language),
                 style = MaterialTheme.typography.titleMedium,
@@ -136,7 +153,7 @@ fun SettingsScreen(
             HorizontalDivider()
             Spacer(modifier = Modifier.height(24.dp))
 
-            // قسم مفتاح API
+            // ===== قسم مفتاح API =====
             Text(
                 text = stringResource(id = R.string.settings_api_key_label),
                 style = MaterialTheme.typography.titleMedium,
@@ -174,6 +191,71 @@ fun SettingsScreen(
                             else MaterialTheme.colorScheme.error
                 )
             }
+
+            Spacer(modifier = Modifier.height(24.dp))
+            HorizontalDivider()
+            Spacer(modifier = Modifier.height(24.dp))
+
+            // ===== قسم أدوات الاختبار =====
+            Text(
+                text = "أدوات الاختبار",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold
+            )
+            Spacer(modifier = Modifier.height(8.dp))
+            Text(
+                text = "استخدم هذه الأزرار للتأكد من أن الإشعارات تعمل.",
+                style = MaterialTheme.typography.bodySmall
+            )
+            Spacer(modifier = Modifier.height(12.dp))
+
+            OutlinedButton(
+                onClick = {
+                    PrayerAlarmReceiver.triggerManually(context, "الفجر", isPreAlert = true)
+                    testMessage = "✅ تم إرسال إشعار اختبار مسبق"
+                },
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Text("🔔 اختبار: إشعار الصلاة المسبق")
+            }
+
+            Spacer(modifier = Modifier.height(8.dp))
+
+            OutlinedButton(
+                onClick = {
+                    PrayerAlarmReceiver.triggerManually(context, "الفجر", isPreAlert = false)
+                    testMessage = "✅ تم إرسال إشعار اختبار الأذان"
+                },
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Text("🕌 اختبار: إشعار وقت الأذان")
+            }
+
+            Spacer(modifier = Modifier.height(8.dp))
+
+            OutlinedButton(
+                onClick = {
+                    scope.launch {
+                        val ok = WeatherWorker.triggerManually(context)
+                        testMessage = if (ok) "✅ تم إرسال إشعار الطقس"
+                                     else "⚠️ فشل — تأكد من صلاحية الموقع"
+                    }
+                },
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Text("🌤️ اختبار: إشعار الطقس")
+            }
+
+            testMessage?.let { message ->
+                Spacer(modifier = Modifier.height(12.dp))
+                Text(
+                    text = message,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.primary
+                )
+            }
+
+            Spacer(modifier = Modifier.height(32.dp))
         }
     }
 
@@ -196,7 +278,6 @@ fun SettingsScreen(
                                     currentLanguage = code
                                     showLanguageDialog = false
 
-                                    // إعادة تشغيل النشاط لتطبيق اللغة
                                     val intent = context.packageManager
                                         .getLaunchIntentForPackage(context.packageName)
                                     intent?.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP)
