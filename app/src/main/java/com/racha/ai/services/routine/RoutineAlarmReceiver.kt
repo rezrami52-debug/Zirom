@@ -14,6 +14,7 @@ import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.ContextCompat
 import com.racha.ai.data.local.RoutineItem
 import com.racha.ai.services.tts.TextToSpeechHelper
+import java.util.Calendar
 
 class RoutineAlarmReceiver : BroadcastReceiver() {
 
@@ -23,14 +24,56 @@ class RoutineAlarmReceiver : BroadcastReceiver() {
         private const val NOTIFICATION_ID_BASE = 3000
 
         fun triggerManually(context: Context, item: RoutineItem, isPreAlert: Boolean) {
-            val (title, body) = if (isPreAlert) {
-                "⏰ اقتراب موعد (اختبار)" to "باقي 10 دقائق على: ${item.title}"
-            } else {
-                "${item.emoji} حان الوقت (اختبار)" to "حان وقت: ${item.title}"
-            }
-            sendNotification(context, title, body, item.id.hashCode())
+            val message = buildMessage(context, item, isPreAlert)
+            val title = buildTitle(item, isPreAlert)
+
+            sendNotification(context, title, message, item.id.hashCode())
             TextToSpeechHelper.initialize(context.applicationContext)
-            TextToSpeechHelper.speak(body)
+            TextToSpeechHelper.speak(message)
+        }
+
+        /**
+         * يبني رسالة ودّية حسب نوع العنصر.
+         */
+        private fun buildMessage(
+            context: Context,
+            item: RoutineItem,
+            isPreAlert: Boolean
+        ): String {
+            val hour = Calendar.getInstance().get(Calendar.HOUR_OF_DAY)
+            val category = RoutineMessagesProvider.getCategory(item.title)
+
+            // إذا كان النوع معروفاً، استخدم رسالة ودّية
+            if (category != null) {
+                val subType = RoutineMessagesProvider.getSubTypeByTime(item.title, hour)
+                val message = RoutineMessagesProvider.getMessage(context, category, subType)
+                if (message != null) {
+                    return if (isPreAlert) {
+                        "⏰ بعد 10 دقائق:\n$message"
+                    } else {
+                        message
+                    }
+                }
+            }
+
+            // Fallback
+            return if (isPreAlert) {
+                "⏰ بعد 10 دقائق: ${item.title}"
+            } else {
+                "${item.emoji} ${item.title}"
+            }
+        }
+
+        /**
+         * يبني عنوان الإشعار.
+         */
+        private fun buildTitle(item: RoutineItem, isPreAlert: Boolean): String {
+            val emoji = item.emoji
+            return if (isPreAlert) {
+                "$emoji Racha — تذكير لطيف"
+            } else {
+                "$emoji Racha"
+            }
         }
 
         private fun sendNotification(context: Context, title: String, body: String, id: Int) {
@@ -51,7 +94,7 @@ class RoutineAlarmReceiver : BroadcastReceiver() {
                     "روتيني اليومي",
                     NotificationManager.IMPORTANCE_HIGH
                 ).apply {
-                    description = "تذكيرات الروتين اليومي"
+                    description = "تذكيرات ودّية للروتين"
                 }
                 manager.createNotificationChannel(channel)
             }
@@ -59,7 +102,7 @@ class RoutineAlarmReceiver : BroadcastReceiver() {
             val notification = NotificationCompat.Builder(context, CHANNEL_ID)
                 .setSmallIcon(android.R.drawable.ic_popup_reminder)
                 .setContentTitle(title)
-                .setContentText(body)
+                .setContentText(body.lines().firstOrNull() ?: body)
                 .setStyle(NotificationCompat.BigTextStyle().bigText(body))
                 .setPriority(NotificationCompat.PRIORITY_HIGH)
                 .setAutoCancel(true)
@@ -79,14 +122,18 @@ class RoutineAlarmReceiver : BroadcastReceiver() {
         val id = intent.getStringExtra(RoutineAlarmScheduler.EXTRA_ROUTINE_ID) ?: return
         val isPreAlert = intent.getBooleanExtra(RoutineAlarmScheduler.EXTRA_IS_PRE_ALERT, false)
 
-        val (nTitle, body) = if (isPreAlert) {
-            "⏰ اقتراب موعد" to "باقي 10 دقائق على: $title"
-        } else {
-            "$emoji حان الوقت" to "حان وقت: $title"
-        }
+        val item = RoutineItem(
+            id = id,
+            title = title,
+            emoji = emoji,
+            hour = 0, minute = 0
+        )
 
-        sendNotification(context, nTitle, body, id.hashCode())
+        val message = buildMessage(context, item, isPreAlert)
+        val notifTitle = buildTitle(item, isPreAlert)
+
+        sendNotification(context, notifTitle, message, id.hashCode())
         TextToSpeechHelper.initialize(context.applicationContext)
-        TextToSpeechHelper.speak(body)
+        TextToSpeechHelper.speak(message)
     }
 }
