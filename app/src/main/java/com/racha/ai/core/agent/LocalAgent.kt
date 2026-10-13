@@ -3,56 +3,46 @@ package com.racha.ai.core.agent
 import android.content.Context
 import android.media.AudioManager
 import android.util.Log
+import java.text.SimpleDateFormat
+import java.util.Calendar
+import java.util.Date
+import java.util.Locale
 
-/**
- * معالج الأوامر المحلية.
- * ينفذ الأوامر البسيطة بدون internet.
- * الأوامر المعقدة → NeedsLLM.
- */
 class LocalAgent(private val context: Context) {
 
     companion object {
         private const val TAG = "RachaLocalAgent"
     }
 
-    /**
-     * معالجة أمر.
-     */
     fun processCommand(input: String): CommandResult {
-        val normalized = IntentMatcher.normalize(input)
-
-        Log.d(TAG, "معالجة: '$input' → '$normalized'")
+        Log.d(TAG, "معالجة: '$input'")
 
         // ===== الصوت =====
 
-        // إلغاء الصامت (يجب أن يأتي قبل "صامت")
         if (IntentMatcher.isNegation(input) &&
             IntentMatcher.containsAny(input, "صامت", "سكوت", "صمت", "silent")) {
             return executeSilent(false)
         }
 
-        // الوضع الصامت
         if (IntentMatcher.containsAny(input, "صامت", "سكوت", "صمت", "silent") &&
             !IntentMatcher.isQuestion(input)) {
             return executeSilent(true)
         }
 
-        // الاهتزاز
         if (IntentMatcher.containsAny(input, "اهتزاز", "vibrate") &&
             !IntentMatcher.isQuestion(input)) {
             return executeVibrate()
         }
 
-        // الوضع العادي (مع صوت)
-        if (IntentMatcher.containsAny(input, "عادي", "صوت", "رنين", "normal") &&
-            IntentMatcher.isNegation(input).not() &&
+        if (IntentMatcher.containsAny(input, "عادي", "رنين", "normal") &&
+            !IntentMatcher.isNegation(input) &&
             !IntentMatcher.isQuestion(input)) {
             return executeNormal()
         }
 
         // ===== الكاميرا =====
 
-        if (IntentMatcher.containsAny(input, "كاميرا", "تصوير", "صور", "photo", "camera") &&
+        if (IntentMatcher.containsAny(input, "كاميرا", "تصوير", "التقط", "صورة", "صور", "photo", "camera") &&
             !IntentMatcher.isQuestion(input)) {
             return CommandResult.NeedsAction(
                 action = "open_camera",
@@ -60,18 +50,51 @@ class LocalAgent(private val context: Context) {
             )
         }
 
-        // ===== الوقت =====
+        // ===== الوقت (سؤال) =====
 
-        if (IntentMatcher.containsAny(input, "وقت", "ساعه", "time") &&
-            IntentMatcher.isQuestion(input)) {
+        if (IntentMatcher.containsAny(input, "وقت", "ساعه", "الساعه", "time")) {
             return getCurrentTime()
         }
 
-        // ===== البطارية =====
+        // ===== التاريخ (سؤال) =====
 
-        if (IntentMatcher.containsAny(input, "بطاريه", "شحن", "battery") &&
-            IntentMatcher.isQuestion(input)) {
+        if (IntentMatcher.containsAny(input, "تاريخ", "اليوم", "date")) {
+            return getCurrentDate()
+        }
+
+        // ===== البطارية (سؤال) =====
+
+        if (IntentMatcher.containsAny(input, "بطاريه", "شحن", "battery")) {
             return getBatteryStatus()
+        }
+
+        // ===== من أنت (سؤال شخصي - رد محلي) =====
+
+        if (IntentMatcher.containsAny(input, "من انت", "من انا", "ما انت")) {
+            return CommandResult.Executed(
+                "أنا Racha، رفيقك الشخصي الذكي. أنا هنا لأساعدك في يومك. 💙"
+            )
+        }
+
+        // ===== شكراً =====
+
+        if (IntentMatcher.containsAny(input, "شكرا", "مشكور", "thanks")) {
+            return CommandResult.Executed(
+                "العفو! أنا هنا دائماً. 🌟"
+            )
+        }
+
+        // ===== تحية =====
+
+        if (IntentMatcher.containsAny(input, "مرحبا", "السلام", "اهلا", "hi", "hello")) {
+            val hour = Calendar.getInstance().get(Calendar.HOUR_OF_DAY)
+            val greeting = when (hour) {
+                in 5..11 -> "صباح الخير! ☀️"
+                in 12..16 -> "نهارك سعيد! 🌤️"
+                in 17..20 -> "مساء الخير! 🌆"
+                else -> "طابت ليلتك! 🌙"
+            }
+            return CommandResult.Executed("$greeting كيف حالك اليوم؟")
         }
 
         // ===== لم يُفهم → LLM =====
@@ -79,9 +102,6 @@ class LocalAgent(private val context: Context) {
         return CommandResult.NeedsLLM(input)
     }
 
-    /**
-     * الوضع الصامت / العادي.
-     */
     private fun executeSilent(silent: Boolean): CommandResult {
         return try {
             val am = context.getSystemService(Context.AUDIO_SERVICE) as AudioManager
@@ -91,10 +111,8 @@ class LocalAgent(private val context: Context) {
                 AudioManager.RINGER_MODE_NORMAL
 
             CommandResult.Executed(
-                message = if (silent)
-                    "✅ تم تفعيل الوضع الصامت"
-                else
-                    "🔔 تم تفعيل الوضع العادي"
+                message = if (silent) "✅ تم تفعيل الوضع الصامت"
+                          else "🔔 تم تفعيل الوضع العادي"
             )
         } catch (e: Exception) {
             Log.e(TAG, "فشل الصوت", e)
@@ -102,9 +120,6 @@ class LocalAgent(private val context: Context) {
         }
     }
 
-    /**
-     * الوضع العادي.
-     */
     private fun executeNormal(): CommandResult {
         return try {
             val am = context.getSystemService(Context.AUDIO_SERVICE) as AudioManager
@@ -115,9 +130,6 @@ class LocalAgent(private val context: Context) {
         }
     }
 
-    /**
-     * الاهتزاز.
-     */
     private fun executeVibrate(): CommandResult {
         return try {
             val am = context.getSystemService(Context.AUDIO_SERVICE) as AudioManager
@@ -128,14 +140,11 @@ class LocalAgent(private val context: Context) {
         }
     }
 
-    /**
-     * الوقت الحالي.
-     */
     private fun getCurrentTime(): CommandResult {
         return try {
-            val cal = java.util.Calendar.getInstance()
-            val hour = cal.get(java.util.Calendar.HOUR_OF_DAY)
-            val minute = cal.get(java.util.Calendar.MINUTE)
+            val cal = Calendar.getInstance()
+            val hour = cal.get(Calendar.HOUR_OF_DAY)
+            val minute = cal.get(Calendar.MINUTE)
             val h = hour.toString().padStart(2, '0')
             val m = minute.toString().padStart(2, '0')
 
@@ -152,20 +161,22 @@ class LocalAgent(private val context: Context) {
         }
     }
 
-    /**
-     * حالة البطارية.
-     */
+    private fun getCurrentDate(): CommandResult {
+        return try {
+            val dateFormat = SimpleDateFormat("EEEE، d MMMM yyyy", Locale("ar"))
+            val date = dateFormat.format(Date())
+            CommandResult.Executed("📅 اليوم: $date")
+        } catch (e: Exception) {
+            CommandResult.Failed("⚠️ فشل: ${e.message}")
+        }
+    }
+
     private fun getBatteryStatus(): CommandResult {
         return try {
             val bm = context.getSystemService(Context.BATTERY_SERVICE) as android.os.BatteryManager
             val level = bm.getIntProperty(android.os.BatteryManager.BATTERY_PROPERTY_CAPACITY)
 
-            val emoji = when {
-                level >= 80 -> "🔋"
-                level >= 50 -> "🔋"
-                level >= 20 -> "🪫"
-                else -> "🪫"
-            }
+            val emoji = if (level >= 50) "🔋" else "🪫"
 
             val message = when {
                 level >= 80 -> "$emoji البطارية ممتلئة تقريباً ($level%)"
