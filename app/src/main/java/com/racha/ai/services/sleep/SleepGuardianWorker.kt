@@ -17,9 +17,6 @@ import com.racha.ai.core.preferences.AppPreferences
 import com.racha.ai.services.tts.TextToSpeechHelper
 import java.util.Calendar
 
-/**
- * حارس النوم — يفحص هل الهاتف يُستخدم متأخراً، ويُرسل تذكيراً لطيفاً.
- */
 class SleepGuardianWorker(
     context: Context,
     params: WorkerParameters
@@ -29,9 +26,10 @@ class SleepGuardianWorker(
         private const val TAG = "RachaSleepGuardian"
         private const val CHANNEL_ID = "racha_sleep_guardian"
         private const val NOTIFICATION_ID = 5001
-        private const val WORK_NAME = "racha_sleep_guardian_worker"
 
-        // كم دقيقة قبل اعتبار "الهاتف يُستخدم"؟
+        // ✅ بدون private — للوصول من Scheduler
+        const val WORK_NAME = "racha_sleep_guardian_worker"
+
         private const val USAGE_WINDOW_MINUTES = 15
     }
 
@@ -39,25 +37,21 @@ class SleepGuardianWorker(
         val context = applicationContext
         val prefs = AppPreferences(context)
 
-        // 1. هل مفعّل؟
         if (!prefs.isSleepGuardianEnabled()) {
             Log.d(TAG, "معطّل")
             return Result.success()
         }
 
-        // 2. هل الوقت مناسب؟ (بعد الساعة المحددة)
         val now = Calendar.getInstance()
         val currentHour = now.get(Calendar.HOUR_OF_DAY)
         val startHour = prefs.getSleepGuardianStartHour()
 
-        // نعتبر الوقت مناسباً إذا كنا بين startHour و 4 صباحاً
         val isNightTime = currentHour >= startHour || currentHour < 4
         if (!isNightTime) {
             Log.d(TAG, "ليس وقت النوم (الساعة: $currentHour)")
             return Result.success()
         }
 
-        // 3. هل أرسلناه الليلة؟
         val todayStart = getTodayStartMillis()
         val lastSent = prefs.getLastSleepGuardianSentDate()
         if (lastSent > todayStart) {
@@ -65,24 +59,17 @@ class SleepGuardianWorker(
             return Result.success()
         }
 
-        // 4. هل الهاتف يُستخدم؟
         if (!isPhoneInUse(context)) {
             Log.d(TAG, "الهاتف غير مستخدم — لا نُرسل")
             return Result.success()
         }
 
-        // 5. كل الشروط متحققة → أرسل
         sendSleepReminder(context, currentHour)
-
-        // 6. سجّل الإرسال
         prefs.setLastSleepGuardianSentDate(System.currentTimeMillis())
 
         return Result.success()
     }
 
-    /**
-     * هل الهاتف يُستخدم في آخر N دقيقة؟
-     */
     private fun isPhoneInUse(context: Context): Boolean {
         return try {
             val usageStats = context.getSystemService(Context.USAGE_STATS_SERVICE) as? UsageStatsManager
@@ -99,8 +86,7 @@ class SleepGuardianWorker(
 
             if (stats.isNullOrEmpty()) return false
 
-            // هل هناك تطبيق استُخدم مؤخراً؟
-            val recentThreshold = endTime - (5 * 60 * 1000L) // آخر 5 دقائق
+            val recentThreshold = endTime - (5 * 60 * 1000L)
             stats.any { it.lastTimeUsed > recentThreshold }
         } catch (e: Exception) {
             Log.e(TAG, "فشل قراءة UsageStats", e)
@@ -108,11 +94,7 @@ class SleepGuardianWorker(
         }
     }
 
-    /**
-     * إرسال تذكير النوم.
-     */
     private fun sendSleepReminder(context: Context, currentHour: Int) {
-        // تحقق من الصلاحية
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             val granted = ContextCompat.checkSelfPermission(
                 context, Manifest.permission.POST_NOTIFICATIONS
@@ -120,7 +102,6 @@ class SleepGuardianWorker(
             if (!granted) return
         }
 
-        // اختيار رسالة حسب الوقت
         val message = when (currentHour) {
             in 22..23 -> "🌙 أراك ما زلت مستيقظاً...\nغداً يوم حافل. هل نستعد للنوم؟"
             in 0..1 -> "🌙 Racha: الوقت متأخر...\nغداً ينتظرك، نم قليلاً 💙"
@@ -156,14 +137,10 @@ class SleepGuardianWorker(
             Log.e(TAG, "فشل إرسال الإشعار", e)
         }
 
-        // قراءة صوتية هادئة
         TextToSpeechHelper.initialize(context.applicationContext)
         TextToSpeechHelper.speak("أراك ما زلت مستيقظاً. غداً يوم حافل، نم مرتاحاً.")
     }
 
-    /**
-     * بداية اليوم (00:00).
-     */
     private fun getTodayStartMillis(): Long {
         val cal = Calendar.getInstance()
         cal.set(Calendar.HOUR_OF_DAY, 0)
