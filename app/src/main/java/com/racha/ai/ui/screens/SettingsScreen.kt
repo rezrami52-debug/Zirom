@@ -84,9 +84,12 @@ fun SettingsScreen(
     var faceEnabled by remember { mutableStateOf(faceRepo.isFaceAuthEnabled()) }
     var showDisableDialog by remember { mutableStateOf(false) }
 
-    // إعدادات الأمان
     var intruderEnabled by remember { mutableStateOf(appPrefs.isIntruderPhotoEnabled()) }
     var intruderThreshold by remember { mutableStateOf(appPrefs.getIntruderThreshold()) }
+
+    // SleepGuardian
+    var sleepGuardianEnabled by remember { mutableStateOf(appPrefs.isSleepGuardianEnabled()) }
+    var sleepStartHour by remember { mutableStateOf(appPrefs.getSleepGuardianStartHour()) }
 
     LaunchedEffect(state.saveMessage) {
         if (state.saveMessage != null) {
@@ -139,86 +142,71 @@ fun SettingsScreen(
                 modifier = Modifier
                     .fillMaxWidth()
                     .clickable { onOpenProfile() },
-                colors = CardDefaults.cardColors(
-                    containerColor = MaterialTheme.colorScheme.primaryContainer
-                )
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer)
             ) {
                 Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(16.dp),
+                    modifier = Modifier.fillMaxWidth().padding(16.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Icon(Icons.Filled.Person, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
-                    Spacer(modifier = Modifier.width(12.dp))
-                    Column(modifier = Modifier.weight(1f)) {
+                    Icon(Icons.Filled.Person, null, tint = MaterialTheme.colorScheme.primary)
+                    Spacer(Modifier.width(12.dp))
+                    Column(Modifier.weight(1f)) {
                         Text("ملفي الشخصي", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
                         Text("أخبر Racha عن نفسك", style = MaterialTheme.typography.bodySmall)
                     }
                 }
             }
 
-            Spacer(modifier = Modifier.height(12.dp))
+            Spacer(Modifier.height(12.dp))
 
-            // ===== الحماية بالبصمة =====
+            // ===== حماية Racha =====
             Card(
                 modifier = Modifier
                     .fillMaxWidth()
                     .clickable {
-                        if (faceEnabled) showDisableDialog = true
-                        else onOpenFaceEnrollment()
+                        if (faceEnabled) showDisableDialog = true else onOpenFaceEnrollment()
                     },
                 colors = CardDefaults.cardColors(
-                    containerColor = if (faceEnabled)
-                        MaterialTheme.colorScheme.primaryContainer
-                    else
-                        MaterialTheme.colorScheme.surfaceVariant
+                    containerColor = if (faceEnabled) MaterialTheme.colorScheme.primaryContainer
+                                     else MaterialTheme.colorScheme.surfaceVariant
                 )
             ) {
                 Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(16.dp),
+                    modifier = Modifier.fillMaxWidth().padding(16.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Icon(
-                        imageVector = if (faceEnabled) Icons.Filled.Lock else Icons.Filled.PhotoCamera,
-                        contentDescription = null,
-                        tint = MaterialTheme.colorScheme.primary
-                    )
-                    Spacer(modifier = Modifier.width(12.dp))
-                    Column(modifier = Modifier.weight(1f)) {
+                    Icon(if (faceEnabled) Icons.Filled.Lock else Icons.Filled.PhotoCamera, null, tint = MaterialTheme.colorScheme.primary)
+                    Spacer(Modifier.width(12.dp))
+                    Column(Modifier.weight(1f)) {
                         Text("حماية Racha", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
                         Text(
-                            text = if (faceEnabled) "✅ مفعّلة — اضغط للتعطيل" else "التقط صورة + سجّل بصمة",
+                            if (faceEnabled) "✅ مفعّلة — اضغط للتعطيل" else "التقط صورة + سجّل بصمة",
                             style = MaterialTheme.typography.bodySmall
                         )
                     }
                 }
             }
 
-            Spacer(modifier = Modifier.height(24.dp))
+            Spacer(Modifier.height(24.dp))
             HorizontalDivider()
-            Spacer(modifier = Modifier.height(24.dp))
+            Spacer(Modifier.height(24.dp))
 
             // ===== الأمان =====
             Text("الأمان", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-            Spacer(modifier = Modifier.height(12.dp))
+            Spacer(Modifier.height(12.dp))
 
-            // تبديل التقاط صورة المتسلل
+            // التقاط صورة المتسلل
             Card(
                 modifier = Modifier.fillMaxWidth(),
                 colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
             ) {
                 Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(16.dp),
+                    modifier = Modifier.fillMaxWidth().padding(16.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Icon(Icons.Filled.Security, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
-                    Spacer(modifier = Modifier.width(12.dp))
-                    Column(modifier = Modifier.weight(1f)) {
+                    Icon(Icons.Filled.Security, null, tint = MaterialTheme.colorScheme.primary)
+                    Spacer(Modifier.width(12.dp))
+                    Column(Modifier.weight(1f)) {
                         Text("التقاط صورة المتسلل", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
                         Text("صورة بعد عدد محاولات فاشلة", style = MaterialTheme.typography.bodySmall)
                     }
@@ -232,25 +220,16 @@ fun SettingsScreen(
                 }
             }
 
-            Spacer(modifier = Modifier.height(8.dp))
-
-            // عدد المحاولات
             if (intruderEnabled) {
+                Spacer(Modifier.height(8.dp))
                 Card(
                     modifier = Modifier.fillMaxWidth(),
                     colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
                 ) {
-                    Column(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(16.dp)
-                    ) {
+                    Column(Modifier.fillMaxWidth().padding(16.dp)) {
                         Text("عدد المحاولات قبل التصوير", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
-                        Spacer(modifier = Modifier.height(8.dp))
-
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
+                        Spacer(Modifier.height(8.dp))
+                        Row(verticalAlignment = Alignment.CenterVertically) {
                             Button(
                                 onClick = {
                                     if (intruderThreshold > 1) {
@@ -259,16 +238,10 @@ fun SettingsScreen(
                                     }
                                 },
                                 enabled = intruderThreshold > 1
-                            ) {
-                                Text("−")
-                            }
-                            Spacer(modifier = Modifier.width(16.dp))
-                            Text(
-                                text = "$intruderThreshold",
-                                style = MaterialTheme.typography.headlineSmall,
-                                fontWeight = FontWeight.Bold
-                            )
-                            Spacer(modifier = Modifier.width(16.dp))
+                            ) { Text("−") }
+                            Spacer(Modifier.width(16.dp))
+                            Text("$intruderThreshold", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
+                            Spacer(Modifier.width(16.dp))
                             Button(
                                 onClick = {
                                     if (intruderThreshold < 10) {
@@ -277,33 +250,98 @@ fun SettingsScreen(
                                     }
                                 },
                                 enabled = intruderThreshold < 10
-                            ) {
-                                Text("+")
-                            }
+                            ) { Text("+") }
                         }
                     }
                 }
             }
 
-            Spacer(modifier = Modifier.height(8.dp))
+            Spacer(Modifier.height(8.dp))
 
-            // زر سجل الأمان
             OutlinedButton(
                 onClick = onOpenSecurityLog,
                 modifier = Modifier.fillMaxWidth()
             ) {
-                Icon(Icons.Filled.Security, contentDescription = null)
-                Spacer(modifier = Modifier.width(8.dp))
+                Icon(Icons.Filled.Security, null)
+                Spacer(Modifier.width(8.dp))
                 Text("📋 عرض سجل المحاولات")
             }
 
-            Spacer(modifier = Modifier.height(24.dp))
+            Spacer(Modifier.height(24.dp))
             HorizontalDivider()
-            Spacer(modifier = Modifier.height(24.dp))
+            Spacer(Modifier.height(24.dp))
+
+            // ===== حارس النوم =====
+            Text("حارس النوم", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+            Spacer(Modifier.height(12.dp))
+
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(16.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text("🌙", style = MaterialTheme.typography.headlineSmall)
+                    Spacer(Modifier.width(12.dp))
+                    Column(Modifier.weight(1f)) {
+                        Text("تذكير لطيف بالنوم", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
+                        Text("إذا كنت مستيقظاً متأخراً", style = MaterialTheme.typography.bodySmall)
+                    }
+                    Switch(
+                        checked = sleepGuardianEnabled,
+                        onCheckedChange = {
+                            sleepGuardianEnabled = it
+                            appPrefs.setSleepGuardianEnabled(it)
+                        }
+                    )
+                }
+            }
+
+            if (sleepGuardianEnabled) {
+                Spacer(Modifier.height(8.dp))
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
+                ) {
+                    Column(Modifier.fillMaxWidth().padding(16.dp)) {
+                        Text("وقت البدء", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
+                        Spacer(Modifier.height(8.dp))
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Button(
+                                onClick = {
+                                    if (sleepStartHour > 20) {
+                                        sleepStartHour--
+                                        appPrefs.setSleepGuardianStartHour(sleepStartHour)
+                                    }
+                                },
+                                enabled = sleepStartHour > 20
+                            ) { Text("−") }
+                            Spacer(Modifier.width(16.dp))
+                            Text("$sleepStartHour:00", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
+                            Spacer(Modifier.width(16.dp))
+                            Button(
+                                onClick = {
+                                    if (sleepStartHour < 23) {
+                                        sleepStartHour++
+                                        appPrefs.setSleepGuardianStartHour(sleepStartHour)
+                                    }
+                                },
+                                enabled = sleepStartHour < 23
+                            ) { Text("+") }
+                        }
+                    }
+                }
+            }
+
+            Spacer(Modifier.height(24.dp))
+            HorizontalDivider()
+            Spacer(Modifier.height(24.dp))
 
             // ===== اللغة =====
             Text(stringResource(id = R.string.settings_language), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-            Spacer(modifier = Modifier.height(8.dp))
+            Spacer(Modifier.height(8.dp))
             Card(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -311,31 +349,21 @@ fun SettingsScreen(
                 colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
             ) {
                 Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(16.dp),
+                    modifier = Modifier.fillMaxWidth().padding(16.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Text(
-                        text = LocaleManager.getDisplayName(currentLanguage),
-                        style = MaterialTheme.typography.bodyLarge,
-                        modifier = Modifier.weight(1f)
-                    )
+                    Text(LocaleManager.getDisplayName(currentLanguage), style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
                     Text("تغيير", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.primary)
                 }
             }
 
-            Spacer(modifier = Modifier.height(24.dp))
+            Spacer(Modifier.height(24.dp))
             HorizontalDivider()
-            Spacer(modifier = Modifier.height(24.dp))
+            Spacer(Modifier.height(24.dp))
 
             // ===== مفتاح API =====
-            Text(
-                stringResource(id = R.string.settings_api_key_label),
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.Bold
-            )
-            Spacer(modifier = Modifier.height(8.dp))
+            Text(stringResource(id = R.string.settings_api_key_label), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+            Spacer(Modifier.height(8.dp))
             OutlinedTextField(
                 value = state.apiKey,
                 onValueChange = viewModel::onApiKeyChange,
@@ -344,37 +372,31 @@ fun SettingsScreen(
                 visualTransformation = PasswordVisualTransformation(),
                 singleLine = true
             )
-            Spacer(modifier = Modifier.height(8.dp))
-            Text(
-                stringResource(id = R.string.settings_api_key_hint),
-                style = MaterialTheme.typography.bodySmall
-            )
-            Spacer(modifier = Modifier.height(16.dp))
+            Spacer(Modifier.height(8.dp))
+            Text(stringResource(id = R.string.settings_api_key_hint), style = MaterialTheme.typography.bodySmall)
+            Spacer(Modifier.height(16.dp))
             Button(
                 onClick = viewModel::saveApiKey,
                 modifier = Modifier.fillMaxWidth(),
                 enabled = state.apiKey.isNotBlank()
-            ) {
-                Text(stringResource(id = R.string.save))
-            }
+            ) { Text(stringResource(id = R.string.save)) }
 
             state.saveMessage?.let { message ->
-                Spacer(modifier = Modifier.height(16.dp))
+                Spacer(Modifier.height(16.dp))
                 Text(
-                    text = message,
+                    message,
                     style = MaterialTheme.typography.bodyMedium,
-                    color = if (state.isSaved) MaterialTheme.colorScheme.primary
-                            else MaterialTheme.colorScheme.error
+                    color = if (state.isSaved) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error
                 )
             }
 
-            Spacer(modifier = Modifier.height(24.dp))
+            Spacer(Modifier.height(24.dp))
             HorizontalDivider()
-            Spacer(modifier = Modifier.height(24.dp))
+            Spacer(Modifier.height(24.dp))
 
             // ===== أدوات الاختبار =====
             Text("أدوات الاختبار", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-            Spacer(modifier = Modifier.height(12.dp))
+            Spacer(Modifier.height(12.dp))
 
             OutlinedButton(
                 onClick = {
@@ -382,54 +404,41 @@ fun SettingsScreen(
                     testMessage = "✅ تم إرسال إشعار اختبار مسبق"
                 },
                 modifier = Modifier.fillMaxWidth()
-            ) {
-                Text("🔔 اختبار: إشعار الصلاة المسبق")
-            }
-            Spacer(modifier = Modifier.height(8.dp))
+            ) { Text("🔔 اختبار: إشعار الصلاة المسبق") }
+            Spacer(Modifier.height(8.dp))
             OutlinedButton(
                 onClick = {
                     PrayerAlarmReceiver.triggerManually(context, "الفجر", isPreAlert = false)
                     testMessage = "✅ تم إرسال إشعار اختبار الأذان"
                 },
                 modifier = Modifier.fillMaxWidth()
-            ) {
-                Text("🕌 اختبار: إشعار وقت الأذان")
-            }
-            Spacer(modifier = Modifier.height(8.dp))
+            ) { Text("🕌 اختبار: إشعار وقت الأذان") }
+            Spacer(Modifier.height(8.dp))
             OutlinedButton(
                 onClick = {
-                    val item = RoutineItem(title = "اختبار", emoji = "⏰", hour = 0, minute = 0)
+                    val item = RoutineItem(title = "شرب الماء", emoji = "💧", hour = 0, minute = 0)
                     RoutineAlarmScheduler.triggerTest(context, item, isPreAlert = false)
                     testMessage = "✅ تم إرسال إشعار اختبار الروتين"
                 },
                 modifier = Modifier.fillMaxWidth()
-            ) {
-                Text("⏰ اختبار: إشعار روتين")
-            }
-            Spacer(modifier = Modifier.height(8.dp))
+            ) { Text("⏰ اختبار: إشعار روتين") }
+            Spacer(Modifier.height(8.dp))
             OutlinedButton(
                 onClick = {
                     scope.launch {
                         val ok = WeatherWorker.triggerManually(context)
-                        testMessage = if (ok) "✅ تم إرسال إشعار الطقس"
-                                     else "⚠️ فشل — تأكد من صلاحية الموقع"
+                        testMessage = if (ok) "✅ تم إرسال إشعار الطقس" else "⚠️ فشل — تأكد من صلاحية الموقع"
                     }
                 },
                 modifier = Modifier.fillMaxWidth()
-            ) {
-                Text("🌤️ اختبار: إشعار الطقس")
-            }
+            ) { Text("🌤️ اختبار: إشعار الطقس") }
 
             testMessage?.let { message ->
-                Spacer(modifier = Modifier.height(12.dp))
-                Text(
-                    text = message,
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.primary
-                )
+                Spacer(Modifier.height(12.dp))
+                Text(message, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.primary)
             }
 
-            Spacer(modifier = Modifier.height(32.dp))
+            Spacer(Modifier.height(32.dp))
         }
     }
 
@@ -440,21 +449,15 @@ fun SettingsScreen(
             title = { Text("تعطيل الحماية؟") },
             text = { Text("بعد التعطيل، لن يُطلب منك التحقق عند فتح Racha.") },
             confirmButton = {
-                TextButton(
-                    onClick = {
-                        faceRepo.deleteFaceImage()
-                        faceRepo.setFaceAuthEnabled(false)
-                        faceEnabled = false
-                        showDisableDialog = false
-                    }
-                ) {
-                    Text("تعطيل")
-                }
+                TextButton(onClick = {
+                    faceRepo.deleteFaceImage()
+                    faceRepo.setFaceAuthEnabled(false)
+                    faceEnabled = false
+                    showDisableDialog = false
+                }) { Text("تعطيل") }
             },
             dismissButton = {
-                TextButton(onClick = { showDisableDialog = false }) {
-                    Text("إلغاء")
-                }
+                TextButton(onClick = { showDisableDialog = false }) { Text("إلغاء") }
             }
         )
     }
@@ -477,8 +480,7 @@ fun SettingsScreen(
                                     appPrefs.setLanguage(code)
                                     currentLanguage = code
                                     showLanguageDialog = false
-                                    val intent = context.packageManager
-                                        .getLaunchIntentForPackage(context.packageName)
+                                    val intent = context.packageManager.getLaunchIntentForPackage(context.packageName)
                                     intent?.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP)
                                     context.startActivity(intent)
                                 }
@@ -487,7 +489,7 @@ fun SettingsScreen(
                         ) {
                             Text(name, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
                             if (code == currentLanguage) {
-                                Icon(Icons.Filled.Check, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+                                Icon(Icons.Filled.Check, null, tint = MaterialTheme.colorScheme.primary)
                             }
                         }
                     }

@@ -41,32 +41,45 @@ class AppPreferences(context: Context) {
     }
 
     // ===== الأمان — محاولات الفتح =====
-    /**
-     * عدد المحاولات الفاشلة قبل التقاط صورة.
-     * الافتراضي: 5
-     */
     fun getIntruderThreshold(): Int = prefs.getInt(KEY_INTRUDER_THRESHOLD, 5)
     fun setIntruderThreshold(value: Int) {
-        val clamped = value.coerceIn(1, 10)
-        prefs.edit().putInt(KEY_INTRUDER_THRESHOLD, clamped).apply()
+        prefs.edit().putInt(KEY_INTRUDER_THRESHOLD, value.coerceIn(1, 10)).apply()
     }
 
-    /**
-     * هل التقاط صورة المتسلل مفعّل؟
-     */
     fun isIntruderPhotoEnabled(): Boolean = prefs.getBoolean(KEY_INTRUDER_ENABLED, true)
     fun setIntruderPhotoEnabled(enabled: Boolean) {
         prefs.edit().putBoolean(KEY_INTRUDER_ENABLED, enabled).apply()
     }
 
-    /**
-     * كم يوماً تُحفظ الصور قبل الحذف التلقائي؟
-     * الافتراضي: 7
-     */
     fun getIntruderRetentionDays(): Int = prefs.getInt(KEY_INTRUDER_RETENTION_DAYS, 7)
     fun setIntruderRetentionDays(days: Int) {
-        val clamped = days.coerceIn(1, 30)
-        prefs.edit().putInt(KEY_INTRUDER_RETENTION_DAYS, clamped).apply()
+        prefs.edit().putInt(KEY_INTRUDER_RETENTION_DAYS, days.coerceIn(1, 30)).apply()
+    }
+
+    // ===== SleepGuardian =====
+    /**
+     * هل حارس النوم مفعّل؟
+     */
+    fun isSleepGuardianEnabled(): Boolean = prefs.getBoolean(KEY_SLEEP_GUARDIAN_ENABLED, true)
+    fun setSleepGuardianEnabled(enabled: Boolean) {
+        prefs.edit().putBoolean(KEY_SLEEP_GUARDIAN_ENABLED, enabled).apply()
+    }
+
+    /**
+     * ساعة بدء التذكير (بعد 22:00 افتراضياً).
+     */
+    fun getSleepGuardianStartHour(): Int = prefs.getInt(KEY_SLEEP_GUARDIAN_START_HOUR, 22)
+    fun setSleepGuardianStartHour(hour: Int) {
+        prefs.edit().putInt(KEY_SLEEP_GUARDIAN_START_HOUR, hour.coerceIn(20, 23)).apply()
+    }
+
+    /**
+     * هل أرسل إشعار أمس فقط؟
+     * (نستخدمه لمنع التكرار في نفس الليلة)
+     */
+    fun getLastSleepGuardianSentDate(): Long = prefs.getLong(KEY_SLEEP_GUARDIAN_LAST_SENT, 0L)
+    fun setLastSleepGuardianSentDate(date: Long) {
+        prefs.edit().putLong(KEY_SLEEP_GUARDIAN_LAST_SENT, date).apply()
     }
 
     companion object {
@@ -77,5 +90,8 @@ class AppPreferences(context: Context) {
         private const val KEY_INTRUDER_THRESHOLD = "intruder_threshold"
         private const val KEY_INTRUDER_ENABLED = "intruder_enabled"
         private const val KEY_INTRUDER_RETENTION_DAYS = "intruder_retention_days"
+        private const val KEY_SLEEP_GUARDIAN_ENABLED = "sleep_guardian_enabled"
+        private const val KEY_SLEEP_GUARDIAN_START_HOUR = "sleep_guardian_start_hour"
+        private const val KEY_SLEEP_GUARDIAN_LAST_SENT = "sleep_guardian_last_sent"
     }
 }

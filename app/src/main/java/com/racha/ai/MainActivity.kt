@@ -12,6 +12,7 @@ import androidx.lifecycle.lifecycleScope
 import com.racha.ai.core.locale.LocaleManager
 import com.racha.ai.core.preferences.AppPreferences
 import com.racha.ai.data.repository.RoutineRepository
+import com.racha.ai.services.sleep.SleepGuardianScheduler
 import com.racha.ai.services.tts.TextToSpeechHelper
 import com.racha.ai.services.weather.WeatherScheduler
 import com.racha.ai.ui.navigation.RachaApp
@@ -31,6 +32,7 @@ class MainActivity : AppCompatActivity() {
 
         TextToSpeechHelper.initialize(applicationContext)
         WeatherScheduler.schedule(applicationContext)
+        SleepGuardianScheduler.schedule(applicationContext)
 
         lifecycleScope.launch {
             RoutineRepository(applicationContext).initializeDefaultIfEmpty()
