@@ -22,18 +22,23 @@ class PrayerAlarmReceiver : BroadcastReceiver() {
         private const val NOTIFICATION_ID_BASE = 2000
 
         /**
-         * إرسال إشعار اختباري فوري.
+         * إرسال إشعار اختباري.
          */
         fun triggerManually(context: Context, prayerName: String, isPreAlert: Boolean) {
-            val (title, body) = if (isPreAlert) {
-                "🕌 اقتراب الأذان (اختبار)" to "باقي 15 دقيقة على صلاة $prayerName"
-            } else {
-                "🕌 حان وقت الأذان (اختبار)" to "حان الآن وقت صلاة $prayerName"
-            }
+            val prayerKey = PrayerMessagesProvider.getPrayerKey(prayerName)
+            val type = if (isPreAlert) "before" else "at_time"
 
-            sendNotification(context, title, body, prayerName.hashCode())
+            val content = PrayerMessagesProvider.getMessage(context, prayerKey, type)
+                ?: "حان وقت صلاة $prayerName"
+
+            val title = if (isPreAlert) "🕌 اقتراب الأذان — $prayerName"
+                        else "🕌 حان وقت صلاة $prayerName"
+
+            sendNotification(context, title, content, prayerName.hashCode())
+
+            // TTS — يقرأ النص
             TextToSpeechHelper.initialize(context.applicationContext)
-            TextToSpeechHelper.speak(body)
+            TextToSpeechHelper.speak("حان وقت صلاة $prayerName")
         }
 
         private fun sendNotification(context: Context, title: String, body: String, id: Int) {
@@ -54,7 +59,7 @@ class PrayerAlarmReceiver : BroadcastReceiver() {
                     "مواقيت الصلاة",
                     NotificationManager.IMPORTANCE_HIGH
                 ).apply {
-                    description = "إشعارات مواقيت الصلاة"
+                    description = "إشعارات مواقيت الصلاة بالآيات والأحاديث"
                 }
                 manager.createNotificationChannel(channel)
             }
@@ -62,9 +67,10 @@ class PrayerAlarmReceiver : BroadcastReceiver() {
             val notification = NotificationCompat.Builder(context, CHANNEL_ID)
                 .setSmallIcon(android.R.drawable.ic_lock_idle_alarm)
                 .setContentTitle(title)
-                .setContentText(body)
+                .setContentText(body.lines().firstOrNull() ?: body)
                 .setStyle(NotificationCompat.BigTextStyle().bigText(body))
                 .setPriority(NotificationCompat.PRIORITY_HIGH)
+                .setCategory(NotificationCompat.CATEGORY_REMINDER)
                 .setAutoCancel(true)
                 .build()
 
@@ -79,7 +85,30 @@ class PrayerAlarmReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
         val prayerName = intent.getStringExtra(PrayerAlarmScheduler.EXTRA_PRAYER_NAME) ?: return
         val isPreAlert = intent.getBooleanExtra(PrayerAlarmScheduler.EXTRA_IS_PRE_ALERT, false)
+
         Log.d(TAG, "استلم: $prayerName (pre=$isPreAlert)")
-        triggerManually(context, prayerName, isPreAlert)
+
+        val prayerKey = PrayerMessagesProvider.getPrayerKey(prayerName)
+        val type = if (isPreAlert) "before" else "at_time"
+
+        val content = PrayerMessagesProvider.getMessage(context, prayerKey, type)
+            ?: if (isPreAlert) "باقي 15 دقيقة على صلاة $prayerName"
+               else "حان الآن وقت صلاة $prayerName"
+
+        val title = if (isPreAlert)
+            "🕌 اقتراب الأذان — $prayerName"
+        else
+            "🕌 حان وقت صلاة $prayerName"
+
+        // 1. إشعار جميل
+        sendNotification(context, title, content, prayerName.hashCode())
+
+        // 2. TTS — يقرأ الجملة الأساسية
+        TextToSpeechHelper.initialize(context.applicationContext)
+        val speechText = if (isPreAlert)
+            "اقترب وقت صلاة $prayerName. توضّأ واستعد."
+        else
+            "حان الآن وقت صلاة $prayerName."
+        TextToSpeechHelper.speak(speechText)
     }
 }
