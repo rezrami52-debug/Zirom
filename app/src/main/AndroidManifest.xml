@@ -32,10 +32,13 @@
             </intent-filter>
         </activity>
 
-        <!-- ✅ نشاط التقاط الصور -->
+        <!-- ✅ إضافة launchMode + taskAffinity -->
         <activity
             android:name=".core.tools.PhotoCaptureActivity"
             android:exported="false"
+            android:launchMode="singleTop"
+            android:taskAffinity=""
+            android:excludeFromRecents="true"
             android:theme="@style/Theme.Racha" />
 
         <service

@@ -3,8 +3,9 @@ package com.racha.ai.ui.screens.chat
 import android.app.Application
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import com.racha.ai.core.agent.CommandResult
+import com.racha.ai.core.agent.LocalAgent
 import com.racha.ai.core.security.SecurePreferences
-import com.racha.ai.core.tools.ToolExecutor
 import com.racha.ai.data.api.GeminiService
 import com.racha.ai.data.local.ChatMessageEntity
 import com.racha.ai.data.repository.ChatMemoryRepository
@@ -23,7 +24,7 @@ data class ChatUiState(
     val hasApiKey: Boolean = true,
     val isLoadingHistory: Boolean = true,
     val hasProfile: Boolean = false,
-    val pendingSpecialTool: String? = null   // ✅ للأدوات التي تحتاج Intent
+    val pendingSpecialTool: String? = null
 )
 
 class ChatViewModel(application: Application) : AndroidViewModel(application) {
@@ -31,7 +32,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
     private val securePrefs = SecurePreferences(application)
     private val memory = ChatMemoryRepository(application)
     private val profileRepo = UserProfileRepository(application)
-    private val toolExecutor = ToolExecutor(application)
+    private val localAgent = LocalAgent(application)   // ✅ جديد
     private var geminiService: GeminiService? = null
 
     private val _uiState = MutableStateFlow(ChatUiState())
@@ -83,15 +84,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                     launch {
                         val welcomeText = "أهلاً بك! أنا Racha، رفيقك الشخصي. كيف حالك اليوم؟"
                         val welcome = Message(text = welcomeText, isFromUser = false)
-                        memory.saveMessage(
-                            ChatMessageEntity(
-                                id = welcome.id,
-                                text = welcome.text,
-                                isFromUser = false,
-                                isError = false,
-                                timestamp = welcome.timestamp
-                            )
-                        )
+                        saveMessageEntity(welcome)
                     }
                 } else {
                     _uiState.value = _uiState.value.copy(
@@ -111,100 +104,103 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         val text = _uiState.value.inputText.trim()
         if (text.isBlank() || _uiState.value.isSending) return
 
-        val service = geminiService
-        if (service == null) {
-            viewModelScope.launch {
-                saveMessageEntity(
-                    Message(text = "لم يتم إدخال مفتاح API بعد.", isFromUser = false, isError = true)
-                )
-            }
-            _uiState.value = _uiState.value.copy(inputText = "")
-            return
-        }
-
         viewModelScope.launch {
+            // 1. حفظ رسالة المستخدم
             val userMessage = Message(text = text, isFromUser = true)
             saveMessageEntity(userMessage)
             _uiState.value = _uiState.value.copy(inputText = "", isSending = true)
 
-            val recent = memory.getRecentForContext()
-            val history = recent.filter { it.id != userMessage.id }
-            val profileContext = profileRepo.getPromptContext()
+            // 2. ✅ جرّب LocalAgent أولاً
+            val localResult = localAgent.processCommand(text)
 
-            val result = service.sendMessageWithContext(history, text, profileContext)
-
-            result.fold(
-                onSuccess = { reply ->
-                    // كشف الأدوات
-                    if (toolExecutor.isToolCall(reply)) {
-                        if (toolExecutor.isSpecialTool(reply)) {
-                            // ✅ أداة خاصة — تحتاج Intent
-                            val toolName = toolExecutor.getToolName(reply)
-                            _uiState.value = _uiState.value.copy(
-                                isSending = false,
-                                pendingSpecialTool = toolName
-                            )
-                            // لا نحفظ رسالة، سنحفظ عند التنفيذ
-                        } else {
-                            // أداة عادية — تنفيذ فوري
-                            val toolResult = toolExecutor.execute(reply)
-                            saveMessageEntity(
-                                Message(
-                                    text = toolResult.message,
-                                    isFromUser = false,
-                                    isError = !toolResult.success
-                                )
-                            )
-                            _uiState.value = _uiState.value.copy(isSending = false)
-                        }
-                    } else {
-                        saveMessageEntity(Message(text = reply, isFromUser = false))
-                        _uiState.value = _uiState.value.copy(isSending = false)
-                    }
-                },
-                onFailure = { error ->
-                    val errorMessage = error.message ?: ""
-                    val userFriendly = when {
-                        errorMessage.contains("503") ||
-                        errorMessage.contains("UNAVAILABLE") -> "⚠️ Gemini مزدحم حالياً. حاول بعد قليل."
-                        errorMessage.contains("API key") ||
-                        errorMessage.contains("API_KEY") -> "⚠️ المفتاح غير صالح."
-                        errorMessage.contains("quota") -> "⚠️ استُهلكت الحصة اليومية."
-                        else -> "⚠️ خطأ: ${error.message ?: "غير معروف"}"
-                    }
-                    saveMessageEntity(Message(text = userFriendly, isFromUser = false, isError = true))
+            when (localResult) {
+                is CommandResult.Executed -> {
+                    saveMessageEntity(
+                        Message(text = localResult.message, isFromUser = false)
+                    )
                     _uiState.value = _uiState.value.copy(isSending = false)
+                    return@launch
                 }
-            )
+
+                is CommandResult.NeedsAction -> {
+                    _uiState.value = _uiState.value.copy(
+                        isSending = false,
+                        pendingSpecialTool = localResult.action
+                    )
+                    return@launch
+                }
+
+                is CommandResult.Failed -> {
+                    saveMessageEntity(
+                        Message(text = localResult.message, isFromUser = false, isError = true)
+                    )
+                    _uiState.value = _uiState.value.copy(isSending = false)
+                    return@launch
+                }
+
+                is CommandResult.NeedsLLM -> {
+                    // 3. أرسل لـ Gemini
+                    sendToGemini(text)
+                }
+            }
         }
     }
 
     /**
-     * يُستدعى بعد تنفيذ أداة خاصة (نجاح).
+     * إرسال لـ Gemini (المسار السحابي).
      */
+    private suspend fun sendToGemini(text: String) {
+        val service = geminiService
+        if (service == null) {
+            saveMessageEntity(
+                Message(text = "لم يتم إدخال مفتاح API بعد.", isFromUser = false, isError = true)
+            )
+            _uiState.value = _uiState.value.copy(isSending = false)
+            return
+        }
+
+        val recent = memory.getRecentForContext()
+        val history = recent.dropLast(1)  // بدون رسالة المستخدم الحالية
+        val profileContext = profileRepo.getPromptContext()
+
+        val result = service.sendMessageWithContext(history, text, profileContext)
+
+        result.fold(
+            onSuccess = { reply ->
+                saveMessageEntity(Message(text = reply, isFromUser = false))
+                _uiState.value = _uiState.value.copy(isSending = false)
+            },
+            onFailure = { error ->
+                val errorMessage = error.message ?: ""
+                val userFriendly = when {
+                    errorMessage.contains("503") ||
+                    errorMessage.contains("UNAVAILABLE") -> "⚠️ Gemini مزدحم حالياً. حاول بعد قليل."
+                    errorMessage.contains("API key") ||
+                    errorMessage.contains("API_KEY") -> "⚠️ المفتاح غير صالح."
+                    errorMessage.contains("quota") -> "⚠️ استُهلكت الحصة اليومية."
+                    else -> "⚠️ خطأ: ${error.message ?: "غير معروف"}"
+                }
+                saveMessageEntity(
+                    Message(text = userFriendly, isFromUser = false, isError = true)
+                )
+                _uiState.value = _uiState.value.copy(isSending = false)
+            }
+        )
+    }
+
     fun onSpecialToolCompleted(success: Boolean, message: String) {
         viewModelScope.launch {
             saveMessageEntity(
-                Message(
-                    text = message,
-                    isFromUser = false,
-                    isError = !success
-                )
+                Message(text = message, isFromUser = false, isError = !success)
             )
         }
         _uiState.value = _uiState.value.copy(pendingSpecialTool = null)
     }
 
-    /**
-     * يُستدعى عند إلغاء أداة خاصة.
-     */
     fun onSpecialToolCancelled() {
         viewModelScope.launch {
             saveMessageEntity(
-                Message(
-                    text = "❌ تم إلغاء العملية",
-                    isFromUser = false
-                )
+                Message(text = "❌ تم إلغاء العملية", isFromUser = false)
             )
         }
         _uiState.value = _uiState.value.copy(pendingSpecialTool = null)
