@@ -50,7 +50,6 @@ android {
         kotlinCompilerExtensionVersion = "1.5.11"
     }
 
-    // ✅ لا تضغط ملفات النموذج
     androidResources {
         noCompress += "task"
     }
@@ -99,6 +98,8 @@ dependencies {
     implementation("androidx.biometric:biometric:1.1.0")
     implementation("androidx.appcompat:appcompat:1.7.0")
 
-    // ✅ MediaPipe LLM (لـ Qwen)
     implementation("com.google.mediapipe:tasks-genai:0.10.24")
+
+    // ✅ jsoup — لاستخراج نص HTML
+    implementation("org.jsoup:jsoup:1.17.2")
 }
