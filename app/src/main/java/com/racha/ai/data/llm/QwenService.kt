@@ -13,7 +13,7 @@ class QwenService(private val context: Context) : LLMProvider {
     companion object {
         private const val TAG = "RachaQwen"
         private const val MODEL_FILENAME = "qwen2.5-1.5b-instruct.task"
-        private const val MODEL_PATH = "/storage/emulated/0/Racha/models/$MODEL_FILENAME"
+        private const val SOURCE_PATH = "/storage/emulated/0/Racha/models/$MODEL_FILENAME"
     }
 
     override val name: String = "Qwen (محلي)"
@@ -21,23 +21,65 @@ class QwenService(private val context: Context) : LLMProvider {
     private var llmInference: LlmInference? = null
     private var isInitialized = false
 
+    private fun getInternalModelPath(): String {
+        val dir = File(context.filesDir, "models")
+        if (!dir.exists()) dir.mkdirs()
+        return File(dir, MODEL_FILENAME).absolutePath
+    }
+
+    private suspend fun ensureModelInInternal(): Result<String> = withContext(Dispatchers.IO) {
+        try {
+            val internalPath = getInternalModelPath()
+            val internalFile = File(internalPath)
+
+            if (internalFile.exists() && internalFile.length() > 100_000_000) {
+                Log.d(TAG, "النموذج موجود في: $internalPath")
+                return@withContext Result.success(internalPath)
+            }
+
+            val sourceFile = File(SOURCE_PATH)
+            if (!sourceFile.exists()) {
+                return@withContext Result.failure(
+                    Exception("النموذج غير موجود في: $SOURCE_PATH")
+                )
+            }
+
+            Log.d(TAG, "نسخ النموذج (1.5 GB) من:")
+            Log.d(TAG, "  من: ${sourceFile.absolutePath}")
+            Log.d(TAG, "  إلى: $internalPath")
+
+            val startTime = System.currentTimeMillis()
+
+            sourceFile.inputStream().use { input ->
+                internalFile.outputStream().use { output ->
+                    input.copyTo(output, bufferSize = 1024 * 1024)
+                }
+            }
+
+            val elapsed = (System.currentTimeMillis() - startTime) / 1000.0
+            Log.d(TAG, "✅ تم النسخ في ${elapsed}ث")
+
+            Result.success(internalPath)
+        } catch (e: Exception) {
+            Log.e(TAG, "فشل نسخ النموذج", e)
+            Result.failure(e)
+        }
+    }
+
     suspend fun initialize(): Result<Unit> = withContext(Dispatchers.IO) {
         try {
             if (isInitialized) return@withContext Result.success(Unit)
 
-            val modelFile = File(MODEL_PATH)
-            if (!modelFile.exists()) {
-                return@withContext Result.failure(
-                    Exception("النموذج غير موجود في: $MODEL_PATH")
-                )
+            val pathResult = ensureModelInInternal()
+            val modelPath = pathResult.getOrElse {
+                return@withContext Result.failure(it)
             }
 
-            Log.d(TAG, "تحميل النموذج من: $MODEL_PATH")
+            Log.d(TAG, "تحميل النموذج من: $modelPath")
             val startTime = System.currentTimeMillis()
 
-            // ✅ أبسط إعدادات ممكنة
             val options = LlmInference.LlmInferenceOptions.builder()
-                .setModelPath(MODEL_PATH)
+                .setModelPath(modelPath)
                 .build()
 
             llmInference = LlmInference.createFromOptions(context, options)

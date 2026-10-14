@@ -17,8 +17,13 @@ class LocalAgent(private val context: Context) {
     fun processCommand(input: String): CommandResult {
         Log.d(TAG, "معالجة: '$input'")
 
-        // ===== الصوت =====
+        // ===== الطقس (يحتاج LLM) =====
+        // نضعها أولاً حتى لا يلتقطها "التاريخ"
+        if (IntentMatcher.containsAny(input, "طقس", "الطقس", "weather")) {
+            return CommandResult.NeedsLLM(input)
+        }
 
+        // ===== الصوت =====
         if (IntentMatcher.isNegation(input) &&
             IntentMatcher.containsAny(input, "صامت", "سكوت", "صمت", "silent")) {
             return executeSilent(false)
@@ -41,7 +46,6 @@ class LocalAgent(private val context: Context) {
         }
 
         // ===== الكاميرا =====
-
         if (IntentMatcher.containsAny(input, "كاميرا", "تصوير", "التقط", "صورة", "صور", "photo", "camera") &&
             !IntentMatcher.isQuestion(input)) {
             return CommandResult.NeedsAction(
@@ -50,26 +54,22 @@ class LocalAgent(private val context: Context) {
             )
         }
 
-        // ===== الوقت (سؤال) =====
-
+        // ===== الوقت =====
         if (IntentMatcher.containsAny(input, "وقت", "ساعه", "الساعه", "time")) {
             return getCurrentTime()
         }
 
-        // ===== التاريخ (سؤال) =====
-
-        if (IntentMatcher.containsAny(input, "تاريخ", "اليوم", "date")) {
+        // ===== التاريخ (مع استثناء الطقس) =====
+        if (IntentMatcher.containsAny(input, "تاريخ", "التاريخ", "date")) {
             return getCurrentDate()
         }
 
-        // ===== البطارية (سؤال) =====
-
+        // ===== البطارية =====
         if (IntentMatcher.containsAny(input, "بطاريه", "شحن", "battery")) {
             return getBatteryStatus()
         }
 
-        // ===== من أنت (سؤال شخصي - رد محلي) =====
-
+        // ===== من أنت =====
         if (IntentMatcher.containsAny(input, "من انت", "من انا", "ما انت")) {
             return CommandResult.Executed(
                 "أنا Racha، رفيقك الشخصي الذكي. أنا هنا لأساعدك في يومك. 💙"
@@ -77,15 +77,11 @@ class LocalAgent(private val context: Context) {
         }
 
         // ===== شكراً =====
-
         if (IntentMatcher.containsAny(input, "شكرا", "مشكور", "thanks")) {
-            return CommandResult.Executed(
-                "العفو! أنا هنا دائماً. 🌟"
-            )
+            return CommandResult.Executed("العفو! أنا هنا دائماً. 🌟")
         }
 
         // ===== تحية =====
-
         if (IntentMatcher.containsAny(input, "مرحبا", "السلام", "اهلا", "hi", "hello")) {
             val hour = Calendar.getInstance().get(Calendar.HOUR_OF_DAY)
             val greeting = when (hour) {
@@ -97,8 +93,6 @@ class LocalAgent(private val context: Context) {
             return CommandResult.Executed("$greeting كيف حالك اليوم؟")
         }
 
-        // ===== لم يُفهم → LLM =====
-
         return CommandResult.NeedsLLM(input)
     }
 
@@ -109,13 +103,11 @@ class LocalAgent(private val context: Context) {
                 AudioManager.RINGER_MODE_SILENT
             else
                 AudioManager.RINGER_MODE_NORMAL
-
             CommandResult.Executed(
-                message = if (silent) "✅ تم تفعيل الوضع الصامت"
-                          else "🔔 تم تفعيل الوضع العادي"
+                if (silent) "✅ تم تفعيل الوضع الصامت"
+                else "🔔 تم تفعيل الوضع العادي"
             )
         } catch (e: Exception) {
-            Log.e(TAG, "فشل الصوت", e)
             CommandResult.Failed("⚠️ فشل: ${e.message}")
         }
     }
@@ -147,14 +139,12 @@ class LocalAgent(private val context: Context) {
             val minute = cal.get(Calendar.MINUTE)
             val h = hour.toString().padStart(2, '0')
             val m = minute.toString().padStart(2, '0')
-
             val greeting = when (hour) {
                 in 5..11 -> "صباح الخير"
                 in 12..16 -> "نهارك سعيد"
                 in 17..20 -> "مساء الخير"
                 else -> "طابت ليلتك"
             }
-
             CommandResult.Executed("🕐 $greeting. الساعة الآن $h:$m")
         } catch (e: Exception) {
             CommandResult.Failed("⚠️ فشل: ${e.message}")
@@ -175,16 +165,13 @@ class LocalAgent(private val context: Context) {
         return try {
             val bm = context.getSystemService(Context.BATTERY_SERVICE) as android.os.BatteryManager
             val level = bm.getIntProperty(android.os.BatteryManager.BATTERY_PROPERTY_CAPACITY)
-
             val emoji = if (level >= 50) "🔋" else "🪫"
-
             val message = when {
                 level >= 80 -> "$emoji البطارية ممتلئة تقريباً ($level%)"
                 level >= 50 -> "$emoji البطارية جيدة ($level%)"
                 level >= 20 -> "$emoji البطارية متوسطة ($level%)"
                 else -> "$emoji البطارية منخفضة ($level%) — اشحن قريباً"
             }
-
             CommandResult.Executed(message)
         } catch (e: Exception) {
             CommandResult.Failed("⚠️ فشل: ${e.message}")
