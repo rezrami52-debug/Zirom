@@ -8,7 +8,6 @@ import com.racha.ai.core.agent.LocalAgent
 import com.racha.ai.core.preferences.AppPreferences
 import com.racha.ai.core.security.SecurePreferences
 import com.racha.ai.data.api.GeminiService
-import com.racha.ai.data.llm.LLMProvider
 import com.racha.ai.data.llm.QwenService
 import com.racha.ai.data.local.ChatMessageEntity
 import com.racha.ai.data.repository.ChatMemoryRepository
@@ -66,7 +65,8 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
             _uiState.value = _uiState.value.copy(hasApiKey = true)
         }
 
-        qwenService = QwenService(application)
+        // ✅ استخدام getApplication() بدل application
+        qwenService = QwenService(getApplication())
         _uiState.value = _uiState.value.copy(
             activeLLM = appPrefs.getLLMProvider()
         )
@@ -127,7 +127,6 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
             saveMessageEntity(userMessage)
             _uiState.value = _uiState.value.copy(inputText = "", isSending = true)
 
-            // 1. LocalAgent أولاً (فوري)
             val localResult = localAgent.processCommand(text)
 
             when (localResult) {
@@ -135,23 +134,19 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                     saveMessageEntity(Message(text = localResult.message, isFromUser = false))
                     _uiState.value = _uiState.value.copy(isSending = false)
                 }
-
                 is CommandResult.NeedsAction -> {
                     _uiState.value = _uiState.value.copy(
                         isSending = false,
                         pendingSpecialTool = localResult.action
                     )
                 }
-
                 is CommandResult.Failed -> {
                     saveMessageEntity(
                         Message(text = localResult.message, isFromUser = false, isError = true)
                     )
                     _uiState.value = _uiState.value.copy(isSending = false)
                 }
-
                 is CommandResult.NeedsLLM -> {
-                    // 2. اختر LLM المناسب
                     val provider = _uiState.value.activeLLM
                     if (provider == "qwen") {
                         sendToQwen(text)
@@ -212,7 +207,6 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
             return
         }
 
-        // إظهار "جاري التحميل" أول مرة
         if (!service.isReady()) {
             _uiState.value = _uiState.value.copy(qwenLoading = true)
         }
