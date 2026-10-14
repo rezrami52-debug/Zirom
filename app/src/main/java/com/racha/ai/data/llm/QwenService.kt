@@ -14,8 +14,6 @@ class QwenService(private val context: Context) : LLMProvider {
         private const val TAG = "RachaQwen"
         private const val MODEL_FILENAME = "qwen2.5-1.5b-instruct.task"
         private const val MODEL_PATH = "/storage/emulated/0/Racha/models/$MODEL_FILENAME"
-        private const val MAX_TOKENS = 512
-        private const val TEMPERATURE = 0.7f
     }
 
     override val name: String = "Qwen (محلي)"
@@ -37,11 +35,9 @@ class QwenService(private val context: Context) : LLMProvider {
             Log.d(TAG, "تحميل النموذج من: $MODEL_PATH")
             val startTime = System.currentTimeMillis()
 
-            // ✅ بدون setTopK
+            // ✅ أبسط إعدادات ممكنة
             val options = LlmInference.LlmInferenceOptions.builder()
                 .setModelPath(MODEL_PATH)
-                .setMaxTokens(MAX_TOKENS)
-                .setTemperature(TEMPERATURE)
                 .build()
 
             llmInference = LlmInference.createFromOptions(context, options)
