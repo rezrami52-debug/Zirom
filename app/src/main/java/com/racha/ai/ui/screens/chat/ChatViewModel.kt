@@ -13,6 +13,7 @@ import com.racha.ai.data.llm.QwenService
 import com.racha.ai.data.local.ChatMessageEntity
 import com.racha.ai.data.repository.ChatMemoryRepository
 import com.racha.ai.data.repository.UserProfileRepository
+import com.racha.ai.data.search.KnowledgeAugmenter
 import com.racha.ai.domain.model.Message
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -31,7 +32,8 @@ data class ChatUiState(
     val activeLLM: String = "gemini",
     val qwenLoading: Boolean = false,
     val qwenModelReady: Boolean = false,
-    val qwenCopying: Boolean = false
+    val qwenCopying: Boolean = false,
+    val isSearching: Boolean = false
 )
 
 class ChatViewModel(application: Application) : AndroidViewModel(application) {
@@ -44,6 +46,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
 
     private var geminiService: GeminiService? = null
     private var qwenService: QwenService? = null
+    private var augmenter: KnowledgeAugmenter? = null
 
     private val _uiState = MutableStateFlow(ChatUiState())
     val uiState: StateFlow<ChatUiState> = _uiState.asStateFlow()
@@ -69,6 +72,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         }
 
         qwenService = QwenService(getApplication())
+        augmenter = KnowledgeAugmenter(getApplication(), qwenService!!)
 
         _uiState.value = _uiState.value.copy(
             activeLLM = appPrefs.getLLMProvider(),
@@ -122,20 +126,15 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         _uiState.value = _uiState.value.copy(activeLLM = provider)
     }
 
-    /**
-     * نسخ نموذج Qwen من URI مختار (SAF).
-     */
     fun copyQwenModel(uri: Uri) {
         viewModelScope.launch {
             _uiState.value = _uiState.value.copy(qwenCopying = true)
-
             val result = qwenService?.copyModelFromUri(uri)
-
             result?.fold(
                 onSuccess = {
                     saveMessageEntity(
                         Message(
-                            text = "✅ تم نسخ نموذج Qwen بنجاح.\nيمكنك الآن استخدام Qwen محلياً (بدون internet).",
+                            text = "✅ تم نسخ نموذج Qwen بنجاح.",
                             isFromUser = false
                         )
                     )
@@ -167,6 +166,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
             saveMessageEntity(userMessage)
             _uiState.value = _uiState.value.copy(inputText = "", isSending = true)
 
+            // 1. LocalAgent أولاً
             val localResult = localAgent.processCommand(text)
 
             when (localResult) {
@@ -188,8 +188,9 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                 }
                 is CommandResult.NeedsLLM -> {
                     val provider = _uiState.value.activeLLM
-                    if (provider == "qwen") {
-                        sendToQwen(text)
+                    if (provider == "qwen" && augmenter != null) {
+                        // ✅ Qwen + Knowledge Augmenter
+                        sendWithAugmenter(text)
                     } else {
                         sendToGemini(text)
                     }
@@ -198,12 +199,65 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    /**
+     * Qwen + Knowledge Augmenter.
+     */
+    private suspend fun sendWithAugmenter(text: String) {
+        val aug = augmenter ?: run {
+            sendToGemini(text)
+            return
+        }
+
+        // إذا النموذج غير موجود
+        if (qwenService?.isModelPresent() != true) {
+            saveMessageEntity(
+                Message(
+                    text = "⚠️ نموذج Qwen غير موجود.\n\nاضغط على '📁 اختر ملف النموذج' في الأعلى.",
+                    isFromUser = false,
+                    isError = true
+                )
+            )
+            _uiState.value = _uiState.value.copy(isSending = false)
+            return
+        }
+
+        if (qwenService?.isReady() != true) {
+            _uiState.value = _uiState.value.copy(qwenLoading = true)
+        }
+
+        val recent = memory.getRecentForContext()
+        val history = recent.dropLast(1)
+        val profileContext = profileRepo.getPromptContext()
+
+        // إعلام: جاري البحث إذا احتاج
+        val result = aug.smartAnswer(text, profileContext, history)
+
+        // إذا جاء من الويب، أظهر إشعار "بحث"
+        if (result.source == "web") {
+            _uiState.value = _uiState.value.copy(isSearching = true)
+        }
+
+        saveMessageEntity(
+            Message(
+                text = result.answer,
+                isFromUser = false,
+                isError = false
+            )
+        )
+
+        _uiState.value = _uiState.value.copy(
+            isSending = false,
+            qwenLoading = false,
+            isSearching = false
+        )
+    }
+
     private suspend fun sendToGemini(text: String) {
         val service = geminiService
         if (service == null) {
             saveMessageEntity(
                 Message(
-                    text = "⚠️ مفتاح Gemini غير موجود. أضفه من الإعدادات.",
+                    text = "⚠️ مفتاح Gemini غير موجود.",
                     isFromUser = false,
                     isError = true
                 )
@@ -227,64 +281,15 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                 val errorMessage = error.message ?: ""
                 val userFriendly = when {
                     errorMessage.contains("503") ||
-                    errorMessage.contains("UNAVAILABLE") -> "⚠️ Gemini مزدحم حالياً. حاول بعد قليل."
-                    errorMessage.contains("API key") ||
-                    errorMessage.contains("API_KEY") -> "⚠️ المفتاح غير صالح."
-                    errorMessage.contains("quota") -> "⚠️ استُهلكت الحصة اليومية."
+                    errorMessage.contains("UNAVAILABLE") -> "⚠️ Gemini مزدحم حالياً."
+                    errorMessage.contains("API key") -> "⚠️ المفتاح غير صالح."
+                    errorMessage.contains("quota") -> "⚠️ استُهلكت الحصة."
                     else -> "⚠️ خطأ: ${error.message ?: "غير معروف"}"
                 }
                 saveMessageEntity(
                     Message(text = userFriendly, isFromUser = false, isError = true)
                 )
                 _uiState.value = _uiState.value.copy(isSending = false)
-            }
-        )
-    }
-
-    private suspend fun sendToQwen(text: String) {
-        val service = qwenService
-        if (service == null) {
-            saveMessageEntity(
-                Message(text = "⚠️ Qwen غير متاح.", isFromUser = false, isError = true)
-            )
-            _uiState.value = _uiState.value.copy(isSending = false)
-            return
-        }
-
-        // إذا النموذج غير موجود
-        if (!service.isModelPresent()) {
-            saveMessageEntity(
-                Message(
-                    text = "⚠️ نموذج Qwen غير موجود.\n\nاضغط على '📁 اختر ملف النموذج' في الأعلى.",
-                    isFromUser = false,
-                    isError = true
-                )
-            )
-            _uiState.value = _uiState.value.copy(isSending = false)
-            return
-        }
-
-        if (!service.isReady()) {
-            _uiState.value = _uiState.value.copy(qwenLoading = true)
-        }
-
-        val recent = memory.getRecentForContext()
-        val history = recent.dropLast(1)
-        val profileContext = profileRepo.getPromptContext()
-
-        val result = service.sendMessageWithContext(history, text, profileContext)
-
-        result.fold(
-            onSuccess = { reply ->
-                saveMessageEntity(Message(text = reply, isFromUser = false))
-                _uiState.value = _uiState.value.copy(isSending = false, qwenLoading = false)
-            },
-            onFailure = { error ->
-                val errorMessage = error.message ?: "خطأ غير معروف"
-                saveMessageEntity(
-                    Message(text = "⚠️ Qwen: $errorMessage", isFromUser = false, isError = true)
-                )
-                _uiState.value = _uiState.value.copy(isSending = false, qwenLoading = false)
             }
         )
     }

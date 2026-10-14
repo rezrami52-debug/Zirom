@@ -21,9 +21,6 @@ class QwenService(private val context: Context) : LLMProvider {
     private var llmInference: LlmInference? = null
     private var isInitialized = false
 
-    /**
-     * مسار النموذج الداخلي (لا يحتاج صلاحيات).
-     */
     fun getInternalModelPath(): String {
         val dir = File(context.filesDir, "models")
         if (!dir.exists()) dir.mkdirs()
@@ -36,21 +33,14 @@ class QwenService(private val context: Context) : LLMProvider {
         return File(dir, MODEL_FILENAME)
     }
 
-    /**
-     * هل النموذج موجود في التخزين الداخلي؟
-     */
     fun isModelPresent(): Boolean {
         val f = getInternalModelFile()
         return f.exists() && f.length() > 100_000_000
     }
 
-    /**
-     * نسخ النموذج من URI (المختار عبر SAF).
-     */
     suspend fun copyModelFromUri(uri: Uri): Result<Unit> = withContext(Dispatchers.IO) {
         try {
             Log.d(TAG, "بدء النسخ من: $uri")
-
             val destFile = getInternalModelFile()
             val startTime = System.currentTimeMillis()
 
@@ -64,7 +54,6 @@ class QwenService(private val context: Context) : LLMProvider {
             val sizeMB = destFile.length() / (1024 * 1024)
             Log.d(TAG, "✅ تم النسخ في ${elapsed}ث — الحجم: ${sizeMB}MB")
 
-            // إعادة تعيين الحالة (نموذج جديد)
             llmInference?.close()
             llmInference = null
             isInitialized = false
@@ -139,6 +128,9 @@ class QwenService(private val context: Context) : LLMProvider {
         }
     }
 
+    /**
+     * Prompt قوي للعربي + منع الصيني + ردود قصيرة.
+     */
     private fun buildPrompt(
         history: List<ChatMessageEntity>,
         userMessage: String,
@@ -146,10 +138,18 @@ class QwenService(private val context: Context) : LLMProvider {
     ): String {
         val sb = StringBuilder()
 
+        // System prompt قوي جداً
         sb.append("<|im_start|>system\n")
-        sb.append("أنت Racha، رفيق شخصي ذكي ودافئ. ")
-        sb.append("تتحدث العربية الفصحى المبسطة. ")
-        sb.append("ردودك قصيرة ومفيدة ودافئة.\n")
+        sb.append("أنت Racha، رفيق شخصي ذكي.\n")
+        sb.append("\n")
+        sb.append("قواعد صارمة:\n")
+        sb.append("1. اجب بالعربية الفصحى المبسطة فقط.\n")
+        sb.append("2. لا تستخدم الصينية أو الإنجليزية إطلاقاً.\n")
+        sb.append("3. الردود قصيرة: 2-3 أسطر كحد أقصى.\n")
+        sb.append("4. إن لم تعرف الإجابة، قل بالضبط: \"لا أعلم\".\n")
+        sb.append("5. كن دافئاً وودّياً.\n")
+        sb.append("6. لا تستخدم رموز تعبيرية (emoji) في الإجابات التقنية.\n")
+
         if (userProfileContext.isNotBlank()) {
             sb.append("\n[معلومات عن صاحبك]\n")
             sb.append(userProfileContext)
@@ -157,7 +157,8 @@ class QwenService(private val context: Context) : LLMProvider {
         }
         sb.append("<|im_end|>\n")
 
-        for (msg in history.takeLast(6)) {
+        // آخر 4 رسائل فقط (لتسريع Qwen)
+        for (msg in history.takeLast(4)) {
             val role = if (msg.isFromUser) "user" else "assistant"
             sb.append("<|im_start|>$role\n")
             sb.append(msg.text)
