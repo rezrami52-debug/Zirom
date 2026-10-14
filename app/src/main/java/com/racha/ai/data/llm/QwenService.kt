@@ -3,15 +3,11 @@ package com.racha.ai.data.llm
 import android.content.Context
 import android.util.Log
 import com.google.mediapipe.tasks.genai.llminference.LlmInference
-import com.google.mediapipe.tasks.genai.llminference.LlmInferenceSession
 import com.racha.ai.data.local.ChatMessageEntity
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.File
 
-/**
- * Qwen محلي عبر MediaPipe.
- */
 class QwenService(private val context: Context) : LLMProvider {
 
     companion object {
@@ -20,7 +16,6 @@ class QwenService(private val context: Context) : LLMProvider {
         private const val MODEL_PATH = "/storage/emulated/0/Racha/models/$MODEL_FILENAME"
         private const val MAX_TOKENS = 512
         private const val TEMPERATURE = 0.7f
-        private const val TOP_K = 40
     }
 
     override val name: String = "Qwen (محلي)"
@@ -28,9 +23,6 @@ class QwenService(private val context: Context) : LLMProvider {
     private var llmInference: LlmInference? = null
     private var isInitialized = false
 
-    /**
-     * تهيئة النموذج (تستغرق وقتاً).
-     */
     suspend fun initialize(): Result<Unit> = withContext(Dispatchers.IO) {
         try {
             if (isInitialized) return@withContext Result.success(Unit)
@@ -45,10 +37,10 @@ class QwenService(private val context: Context) : LLMProvider {
             Log.d(TAG, "تحميل النموذج من: $MODEL_PATH")
             val startTime = System.currentTimeMillis()
 
+            // ✅ بدون setTopK
             val options = LlmInference.LlmInferenceOptions.builder()
                 .setModelPath(MODEL_PATH)
                 .setMaxTokens(MAX_TOKENS)
-                .setTopK(TOP_K)
                 .setTemperature(TEMPERATURE)
                 .build()
 
@@ -83,7 +75,6 @@ class QwenService(private val context: Context) : LLMProvider {
             val inference = llmInference
                 ?: return@withContext Result.failure(Exception("النموذج غير جاهز"))
 
-            // بناء الـ prompt الكامل
             val fullPrompt = buildPrompt(history, userMessage, userProfileContext)
 
             Log.d(TAG, "بدء التوليد (${fullPrompt.length} حرف)...")
@@ -101,10 +92,6 @@ class QwenService(private val context: Context) : LLMProvider {
         }
     }
 
-    /**
-     * بناء prompt من السياق.
-     * Qwen يستخدم ChatML format.
-     */
     private fun buildPrompt(
         history: List<ChatMessageEntity>,
         userMessage: String,
@@ -112,7 +99,6 @@ class QwenService(private val context: Context) : LLMProvider {
     ): String {
         val sb = StringBuilder()
 
-        // System prompt
         sb.append("<|im_start|>system\n")
         sb.append("أنت Racha، رفيق شخصي ذكي ودافئ. ")
         sb.append("تتحدث العربية الفصحى المبسطة. ")
@@ -124,7 +110,6 @@ class QwenService(private val context: Context) : LLMProvider {
         }
         sb.append("<|im_end|>\n")
 
-        // History (آخر 6 رسائل فقط - Qwen 1.5B محدود)
         val recentHistory = history.takeLast(6)
         for (msg in recentHistory) {
             val role = if (msg.isFromUser) "user" else "assistant"
@@ -133,12 +118,10 @@ class QwenService(private val context: Context) : LLMProvider {
             sb.append("<|im_end|>\n")
         }
 
-        // Current message
         sb.append("<|im_start|>user\n")
         sb.append(userMessage)
         sb.append("<|im_end|>\n")
 
-        // Assistant prefix
         sb.append("<|im_start|>assistant\n")
 
         return sb.toString()
