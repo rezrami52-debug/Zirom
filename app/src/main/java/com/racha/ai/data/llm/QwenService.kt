@@ -1,6 +1,7 @@
 package com.racha.ai.data.llm
 
 import android.content.Context
+import android.net.Uri
 import android.util.Log
 import com.google.mediapipe.tasks.genai.llminference.LlmInference
 import com.racha.ai.data.local.ChatMessageEntity
@@ -13,7 +14,6 @@ class QwenService(private val context: Context) : LLMProvider {
     companion object {
         private const val TAG = "RachaQwen"
         private const val MODEL_FILENAME = "qwen2.5-1.5b-instruct.task"
-        private const val SOURCE_PATH = "/storage/emulated/0/Racha/models/$MODEL_FILENAME"
     }
 
     override val name: String = "Qwen (محلي)"
@@ -21,47 +21,57 @@ class QwenService(private val context: Context) : LLMProvider {
     private var llmInference: LlmInference? = null
     private var isInitialized = false
 
-    private fun getInternalModelPath(): String {
+    /**
+     * مسار النموذج الداخلي (لا يحتاج صلاحيات).
+     */
+    fun getInternalModelPath(): String {
         val dir = File(context.filesDir, "models")
         if (!dir.exists()) dir.mkdirs()
         return File(dir, MODEL_FILENAME).absolutePath
     }
 
-    private suspend fun ensureModelInInternal(): Result<String> = withContext(Dispatchers.IO) {
+    fun getInternalModelFile(): File {
+        val dir = File(context.filesDir, "models")
+        if (!dir.exists()) dir.mkdirs()
+        return File(dir, MODEL_FILENAME)
+    }
+
+    /**
+     * هل النموذج موجود في التخزين الداخلي؟
+     */
+    fun isModelPresent(): Boolean {
+        val f = getInternalModelFile()
+        return f.exists() && f.length() > 100_000_000
+    }
+
+    /**
+     * نسخ النموذج من URI (المختار عبر SAF).
+     */
+    suspend fun copyModelFromUri(uri: Uri): Result<Unit> = withContext(Dispatchers.IO) {
         try {
-            val internalPath = getInternalModelPath()
-            val internalFile = File(internalPath)
+            Log.d(TAG, "بدء النسخ من: $uri")
 
-            if (internalFile.exists() && internalFile.length() > 100_000_000) {
-                Log.d(TAG, "النموذج موجود في: $internalPath")
-                return@withContext Result.success(internalPath)
-            }
-
-            val sourceFile = File(SOURCE_PATH)
-            if (!sourceFile.exists()) {
-                return@withContext Result.failure(
-                    Exception("النموذج غير موجود في: $SOURCE_PATH")
-                )
-            }
-
-            Log.d(TAG, "نسخ النموذج (1.5 GB) من:")
-            Log.d(TAG, "  من: ${sourceFile.absolutePath}")
-            Log.d(TAG, "  إلى: $internalPath")
-
+            val destFile = getInternalModelFile()
             val startTime = System.currentTimeMillis()
 
-            sourceFile.inputStream().use { input ->
-                internalFile.outputStream().use { output ->
+            context.contentResolver.openInputStream(uri)?.use { input ->
+                destFile.outputStream().use { output ->
                     input.copyTo(output, bufferSize = 1024 * 1024)
                 }
-            }
+            } ?: return@withContext Result.failure(Exception("فشل فتح الملف المصدر"))
 
             val elapsed = (System.currentTimeMillis() - startTime) / 1000.0
-            Log.d(TAG, "✅ تم النسخ في ${elapsed}ث")
+            val sizeMB = destFile.length() / (1024 * 1024)
+            Log.d(TAG, "✅ تم النسخ في ${elapsed}ث — الحجم: ${sizeMB}MB")
 
-            Result.success(internalPath)
+            // إعادة تعيين الحالة (نموذج جديد)
+            llmInference?.close()
+            llmInference = null
+            isInitialized = false
+
+            Result.success(Unit)
         } catch (e: Exception) {
-            Log.e(TAG, "فشل نسخ النموذج", e)
+            Log.e(TAG, "فشل النسخ", e)
             Result.failure(e)
         }
     }
@@ -70,16 +80,18 @@ class QwenService(private val context: Context) : LLMProvider {
         try {
             if (isInitialized) return@withContext Result.success(Unit)
 
-            val pathResult = ensureModelInInternal()
-            val modelPath = pathResult.getOrElse {
-                return@withContext Result.failure(it)
+            val modelFile = getInternalModelFile()
+            if (!modelFile.exists() || modelFile.length() < 100_000_000) {
+                return@withContext Result.failure(
+                    Exception("النموذج غير موجود. اختر الملف من الإعدادات.")
+                )
             }
 
-            Log.d(TAG, "تحميل النموذج من: $modelPath")
+            Log.d(TAG, "تحميل النموذج من: ${modelFile.absolutePath}")
             val startTime = System.currentTimeMillis()
 
             val options = LlmInference.LlmInferenceOptions.builder()
-                .setModelPath(modelPath)
+                .setModelPath(modelFile.absolutePath)
                 .build()
 
             llmInference = LlmInference.createFromOptions(context, options)
@@ -90,7 +102,7 @@ class QwenService(private val context: Context) : LLMProvider {
 
             Result.success(Unit)
         } catch (e: Exception) {
-            Log.e(TAG, "فشل تحميل النموذج", e)
+            Log.e(TAG, "فشل التحميل", e)
             Result.failure(e)
         }
     }
@@ -115,11 +127,8 @@ class QwenService(private val context: Context) : LLMProvider {
 
             val fullPrompt = buildPrompt(history, userMessage, userProfileContext)
 
-            Log.d(TAG, "بدء التوليد (${fullPrompt.length} حرف)...")
             val startTime = System.currentTimeMillis()
-
             val response = inference.generateResponse(fullPrompt)
-
             val elapsed = (System.currentTimeMillis() - startTime) / 1000.0
             Log.d(TAG, "✅ توليد في ${elapsed}ث")
 
@@ -148,8 +157,7 @@ class QwenService(private val context: Context) : LLMProvider {
         }
         sb.append("<|im_end|>\n")
 
-        val recentHistory = history.takeLast(6)
-        for (msg in recentHistory) {
+        for (msg in history.takeLast(6)) {
             val role = if (msg.isFromUser) "user" else "assistant"
             sb.append("<|im_start|>$role\n")
             sb.append(msg.text)
@@ -159,7 +167,6 @@ class QwenService(private val context: Context) : LLMProvider {
         sb.append("<|im_start|>user\n")
         sb.append(userMessage)
         sb.append("<|im_end|>\n")
-
         sb.append("<|im_start|>assistant\n")
 
         return sb.toString()
@@ -170,7 +177,6 @@ class QwenService(private val context: Context) : LLMProvider {
             llmInference?.close()
             llmInference = null
             isInitialized = false
-            Log.d(TAG, "تم إغلاق Qwen")
         } catch (e: Exception) {
             Log.e(TAG, "فشل الإغلاق", e)
         }

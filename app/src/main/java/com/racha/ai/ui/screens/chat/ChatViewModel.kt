@@ -1,6 +1,7 @@
 package com.racha.ai.ui.screens.chat
 
 import android.app.Application
+import android.net.Uri
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.racha.ai.core.agent.CommandResult
@@ -28,7 +29,9 @@ data class ChatUiState(
     val hasProfile: Boolean = false,
     val pendingSpecialTool: String? = null,
     val activeLLM: String = "gemini",
-    val qwenLoading: Boolean = false
+    val qwenLoading: Boolean = false,
+    val qwenModelReady: Boolean = false,
+    val qwenCopying: Boolean = false
 )
 
 class ChatViewModel(application: Application) : AndroidViewModel(application) {
@@ -65,10 +68,11 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
             _uiState.value = _uiState.value.copy(hasApiKey = true)
         }
 
-        // ✅ استخدام getApplication() بدل application
         qwenService = QwenService(getApplication())
+
         _uiState.value = _uiState.value.copy(
-            activeLLM = appPrefs.getLLMProvider()
+            activeLLM = appPrefs.getLLMProvider(),
+            qwenModelReady = qwenService?.isModelPresent() ?: false
         )
     }
 
@@ -118,6 +122,42 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         _uiState.value = _uiState.value.copy(activeLLM = provider)
     }
 
+    /**
+     * نسخ نموذج Qwen من URI مختار (SAF).
+     */
+    fun copyQwenModel(uri: Uri) {
+        viewModelScope.launch {
+            _uiState.value = _uiState.value.copy(qwenCopying = true)
+
+            val result = qwenService?.copyModelFromUri(uri)
+
+            result?.fold(
+                onSuccess = {
+                    saveMessageEntity(
+                        Message(
+                            text = "✅ تم نسخ نموذج Qwen بنجاح.\nيمكنك الآن استخدام Qwen محلياً (بدون internet).",
+                            isFromUser = false
+                        )
+                    )
+                    _uiState.value = _uiState.value.copy(
+                        qwenCopying = false,
+                        qwenModelReady = true
+                    )
+                },
+                onFailure = { error ->
+                    saveMessageEntity(
+                        Message(
+                            text = "⚠️ فشل نسخ النموذج: ${error.message ?: "غير معروف"}",
+                            isFromUser = false,
+                            isError = true
+                        )
+                    )
+                    _uiState.value = _uiState.value.copy(qwenCopying = false)
+                }
+            )
+        }
+    }
+
     fun sendMessage() {
         val text = _uiState.value.inputText.trim()
         if (text.isBlank() || _uiState.value.isSending) return
@@ -162,7 +202,11 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         val service = geminiService
         if (service == null) {
             saveMessageEntity(
-                Message(text = "⚠️ مفتاح Gemini غير موجود. أضفه من الإعدادات.", isFromUser = false, isError = true)
+                Message(
+                    text = "⚠️ مفتاح Gemini غير موجود. أضفه من الإعدادات.",
+                    isFromUser = false,
+                    isError = true
+                )
             )
             _uiState.value = _uiState.value.copy(isSending = false)
             return
@@ -207,6 +251,19 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
             return
         }
 
+        // إذا النموذج غير موجود
+        if (!service.isModelPresent()) {
+            saveMessageEntity(
+                Message(
+                    text = "⚠️ نموذج Qwen غير موجود.\n\nاضغط على '📁 اختر ملف النموذج' في الأعلى.",
+                    isFromUser = false,
+                    isError = true
+                )
+            )
+            _uiState.value = _uiState.value.copy(isSending = false)
+            return
+        }
+
         if (!service.isReady()) {
             _uiState.value = _uiState.value.copy(qwenLoading = true)
         }
@@ -224,13 +281,8 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
             },
             onFailure = { error ->
                 val errorMessage = error.message ?: "خطأ غير معروف"
-                val userFriendly = if (errorMessage.contains("غير موجود")) {
-                    "⚠️ نموذج Qwen غير موجود.\n\nتأكد من نسخ النموذج إلى:\n/storage/emulated/0/Racha/models/"
-                } else {
-                    "⚠️ Qwen: $errorMessage"
-                }
                 saveMessageEntity(
-                    Message(text = userFriendly, isFromUser = false, isError = true)
+                    Message(text = "⚠️ Qwen: $errorMessage", isFromUser = false, isError = true)
                 )
                 _uiState.value = _uiState.value.copy(isSending = false, qwenLoading = false)
             }

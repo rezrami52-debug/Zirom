@@ -2,6 +2,7 @@ package com.racha.ai.ui.screens.chat
 
 import android.Manifest
 import android.content.Intent
+import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
@@ -31,6 +32,7 @@ import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material.icons.filled.Send
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
@@ -102,6 +104,15 @@ fun ChatScreen(
         }
     }
 
+    // ✅ SAF Picker للنموذج
+    val modelPickerLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.OpenDocument()
+    ) { uri: Uri? ->
+        if (uri != null) {
+            viewModel.copyQwenModel(uri)
+        }
+    }
+
     LaunchedEffect(state.pendingSpecialTool) {
         when (state.pendingSpecialTool) {
             "open_camera" -> {
@@ -132,7 +143,6 @@ fun ChatScreen(
         topBar = {
             TopAppBar(
                 title = {
-                    // ✅ العنوان قابل للضغط — للتبديل السريع
                     Column(
                         modifier = Modifier.clickable {
                             val newLLM = if (state.activeLLM == "qwen") "gemini" else "qwen"
@@ -196,7 +206,43 @@ fun ChatScreen(
         ) {
             WeatherBanner(weather = weatherState.weather)
 
-            // مؤشر Qwen يحمّل
+            // ✅ بطاقة "اختر نموذج Qwen" عند الحاجة
+            if (state.activeLLM == "qwen" && !state.qwenModelReady) {
+                Card(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 12.dp, vertical = 6.dp),
+                    colors = CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.tertiaryContainer
+                    )
+                ) {
+                    Column(
+                        modifier = Modifier.fillMaxWidth().padding(12.dp)
+                    ) {
+                        Text(
+                            text = "📦 نموذج Qwen غير موجود",
+                            style = MaterialTheme.typography.titleSmall,
+                            fontWeight = FontWeight.Bold
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = "اختر ملف qwen2.5-1.5b-instruct.task (1.5 GB) من الملفات",
+                            style = MaterialTheme.typography.bodySmall
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Button(
+                            onClick = {
+                                // فتح SAF Picker لاختيار ملف task
+                                modelPickerLauncher.launch(arrayOf("*/*"))
+                            },
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Text("📁 اختر ملف النموذج")
+                        }
+                    }
+                }
+            }
+
             if (state.qwenLoading) {
                 Card(
                     modifier = Modifier
