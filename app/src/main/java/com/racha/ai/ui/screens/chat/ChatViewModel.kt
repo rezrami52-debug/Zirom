@@ -5,8 +5,11 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.racha.ai.core.agent.CommandResult
 import com.racha.ai.core.agent.LocalAgent
+import com.racha.ai.core.preferences.AppPreferences
 import com.racha.ai.core.security.SecurePreferences
 import com.racha.ai.data.api.GeminiService
+import com.racha.ai.data.llm.LLMProvider
+import com.racha.ai.data.llm.QwenService
 import com.racha.ai.data.local.ChatMessageEntity
 import com.racha.ai.data.repository.ChatMemoryRepository
 import com.racha.ai.data.repository.UserProfileRepository
@@ -24,16 +27,21 @@ data class ChatUiState(
     val hasApiKey: Boolean = true,
     val isLoadingHistory: Boolean = true,
     val hasProfile: Boolean = false,
-    val pendingSpecialTool: String? = null
+    val pendingSpecialTool: String? = null,
+    val activeLLM: String = "gemini",
+    val qwenLoading: Boolean = false
 )
 
 class ChatViewModel(application: Application) : AndroidViewModel(application) {
 
     private val securePrefs = SecurePreferences(application)
+    private val appPrefs = AppPreferences(application)
     private val memory = ChatMemoryRepository(application)
     private val profileRepo = UserProfileRepository(application)
-    private val localAgent = LocalAgent(application)   // ✅ جديد
+    private val localAgent = LocalAgent(application)
+
     private var geminiService: GeminiService? = null
+    private var qwenService: QwenService? = null
 
     private val _uiState = MutableStateFlow(ChatUiState())
     val uiState: StateFlow<ChatUiState> = _uiState.asStateFlow()
@@ -41,12 +49,12 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
     private var welcomeInitialized = false
 
     init {
-        initializeGemini()
+        initializeServices()
         observeHistory()
         checkProfile()
     }
 
-    private fun initializeGemini() {
+    private fun initializeServices() {
         val apiKey = securePrefs.getApiKey()
         if (apiKey.isNullOrBlank()) {
             _uiState.value = _uiState.value.copy(
@@ -57,6 +65,11 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
             geminiService = GeminiService(apiKey)
             _uiState.value = _uiState.value.copy(hasApiKey = true)
         }
+
+        qwenService = QwenService(application)
+        _uiState.value = _uiState.value.copy(
+            activeLLM = appPrefs.getLLMProvider()
+        )
     }
 
     private fun checkProfile() {
@@ -100,26 +113,27 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         _uiState.value = _uiState.value.copy(inputText = newText)
     }
 
+    fun switchLLM(provider: String) {
+        appPrefs.setLLMProvider(provider)
+        _uiState.value = _uiState.value.copy(activeLLM = provider)
+    }
+
     fun sendMessage() {
         val text = _uiState.value.inputText.trim()
         if (text.isBlank() || _uiState.value.isSending) return
 
         viewModelScope.launch {
-            // 1. حفظ رسالة المستخدم
             val userMessage = Message(text = text, isFromUser = true)
             saveMessageEntity(userMessage)
             _uiState.value = _uiState.value.copy(inputText = "", isSending = true)
 
-            // 2. ✅ جرّب LocalAgent أولاً
+            // 1. LocalAgent أولاً (فوري)
             val localResult = localAgent.processCommand(text)
 
             when (localResult) {
                 is CommandResult.Executed -> {
-                    saveMessageEntity(
-                        Message(text = localResult.message, isFromUser = false)
-                    )
+                    saveMessageEntity(Message(text = localResult.message, isFromUser = false))
                     _uiState.value = _uiState.value.copy(isSending = false)
-                    return@launch
                 }
 
                 is CommandResult.NeedsAction -> {
@@ -127,7 +141,6 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                         isSending = false,
                         pendingSpecialTool = localResult.action
                     )
-                    return@launch
                 }
 
                 is CommandResult.Failed -> {
@@ -135,32 +148,33 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                         Message(text = localResult.message, isFromUser = false, isError = true)
                     )
                     _uiState.value = _uiState.value.copy(isSending = false)
-                    return@launch
                 }
 
                 is CommandResult.NeedsLLM -> {
-                    // 3. أرسل لـ Gemini
-                    sendToGemini(text)
+                    // 2. اختر LLM المناسب
+                    val provider = _uiState.value.activeLLM
+                    if (provider == "qwen") {
+                        sendToQwen(text)
+                    } else {
+                        sendToGemini(text)
+                    }
                 }
             }
         }
     }
 
-    /**
-     * إرسال لـ Gemini (المسار السحابي).
-     */
     private suspend fun sendToGemini(text: String) {
         val service = geminiService
         if (service == null) {
             saveMessageEntity(
-                Message(text = "لم يتم إدخال مفتاح API بعد.", isFromUser = false, isError = true)
+                Message(text = "⚠️ مفتاح Gemini غير موجود. أضفه من الإعدادات.", isFromUser = false, isError = true)
             )
             _uiState.value = _uiState.value.copy(isSending = false)
             return
         }
 
         val recent = memory.getRecentForContext()
-        val history = recent.dropLast(1)  // بدون رسالة المستخدم الحالية
+        val history = recent.dropLast(1)
         val profileContext = profileRepo.getPromptContext()
 
         val result = service.sendMessageWithContext(history, text, profileContext)
@@ -184,6 +198,47 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                     Message(text = userFriendly, isFromUser = false, isError = true)
                 )
                 _uiState.value = _uiState.value.copy(isSending = false)
+            }
+        )
+    }
+
+    private suspend fun sendToQwen(text: String) {
+        val service = qwenService
+        if (service == null) {
+            saveMessageEntity(
+                Message(text = "⚠️ Qwen غير متاح.", isFromUser = false, isError = true)
+            )
+            _uiState.value = _uiState.value.copy(isSending = false)
+            return
+        }
+
+        // إظهار "جاري التحميل" أول مرة
+        if (!service.isReady()) {
+            _uiState.value = _uiState.value.copy(qwenLoading = true)
+        }
+
+        val recent = memory.getRecentForContext()
+        val history = recent.dropLast(1)
+        val profileContext = profileRepo.getPromptContext()
+
+        val result = service.sendMessageWithContext(history, text, profileContext)
+
+        result.fold(
+            onSuccess = { reply ->
+                saveMessageEntity(Message(text = reply, isFromUser = false))
+                _uiState.value = _uiState.value.copy(isSending = false, qwenLoading = false)
+            },
+            onFailure = { error ->
+                val errorMessage = error.message ?: "خطأ غير معروف"
+                val userFriendly = if (errorMessage.contains("غير موجود")) {
+                    "⚠️ نموذج Qwen غير موجود.\n\nتأكد من نسخ النموذج إلى:\n/storage/emulated/0/Racha/models/"
+                } else {
+                    "⚠️ Qwen: $errorMessage"
+                }
+                saveMessageEntity(
+                    Message(text = userFriendly, isFromUser = false, isError = true)
+                )
+                _uiState.value = _uiState.value.copy(isSending = false, qwenLoading = false)
             }
         )
     }
@@ -226,5 +281,10 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
 
     fun refreshProfileStatus() {
         checkProfile()
+    }
+
+    override fun onCleared() {
+        super.onCleared()
+        qwenService?.close()
     }
 }

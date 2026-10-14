@@ -5,6 +5,7 @@ import android.content.Intent
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -91,22 +92,16 @@ fun ChatScreen(
 
     val voiceHelper = remember { VoiceInputHelper(context) }
 
-    // ✅ Launcher للكاميرا
     val cameraLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.StartActivityForResult()
     ) { result ->
-        // عند العودة من PhotoCaptureActivity
         if (result.resultCode == android.app.Activity.RESULT_OK) {
-            viewModel.onSpecialToolCompleted(
-                success = true,
-                message = "📸 تم حفظ الصورة في مجلد Racha"
-            )
+            viewModel.onSpecialToolCompleted(true, "📸 تم حفظ الصورة في مجلد Racha")
         } else {
             viewModel.onSpecialToolCancelled()
         }
     }
 
-    // ✅ مراقبة الأدوات الخاصة
     LaunchedEffect(state.pendingSpecialTool) {
         when (state.pendingSpecialTool) {
             "open_camera" -> {
@@ -117,9 +112,7 @@ fun ChatScreen(
     }
 
     DisposableEffect(Unit) {
-        onDispose {
-            voiceHelper.destroy()
-        }
+        onDispose { voiceHelper.destroy() }
     }
 
     LaunchedEffect(state.messages.size) {
@@ -139,46 +132,53 @@ fun ChatScreen(
         topBar = {
             TopAppBar(
                 title = {
-                    Text(
-                        stringResource(id = R.string.app_name),
-                        fontWeight = FontWeight.Bold
-                    )
+                    // ✅ العنوان قابل للضغط — للتبديل السريع
+                    Column(
+                        modifier = Modifier.clickable {
+                            val newLLM = if (state.activeLLM == "qwen") "gemini" else "qwen"
+                            viewModel.switchLLM(newLLM)
+                        }
+                    ) {
+                        Text(
+                            stringResource(id = R.string.app_name),
+                            fontWeight = FontWeight.Bold
+                        )
+                        Text(
+                            text = if (state.activeLLM == "qwen")
+                                "🟢 Qwen محلي — اضغط للتبديل"
+                            else
+                                "🔵 Gemini سحابي — اضغط للتبديل",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.75f)
+                        )
+                    }
                 },
                 actions = {
                     IconButton(onClick = onOpenRoutine) {
-                        Icon(imageVector = Icons.Filled.Checklist, contentDescription = "روتيني")
+                        Icon(Icons.Filled.Checklist, "روتيني")
                     }
                     IconButton(onClick = onOpenPrayer) {
-                        Icon(
-                            imageVector = Icons.Filled.Schedule,
-                            contentDescription = stringResource(id = R.string.prayer_title)
-                        )
+                        Icon(Icons.Filled.Schedule, stringResource(id = R.string.prayer_title))
                     }
                     IconButton(onClick = onOpenNotifications) {
                         Box {
-                            Icon(
-                                imageVector = Icons.Filled.Notifications,
-                                contentDescription = stringResource(id = R.string.notifications_title)
-                            )
+                            Icon(Icons.Filled.Notifications, stringResource(id = R.string.notifications_title))
                             if (unreadCount > 0) {
                                 Box(
                                     modifier = Modifier
                                         .align(Alignment.TopEnd)
                                         .offset(x = 4.dp, y = (-4).dp)
                                         .size(10.dp)
-                                        .background(color = Color(0xFF4CAF50), shape = CircleShape)
+                                        .background(Color(0xFF4CAF50), CircleShape)
                                 )
                             }
                         }
                     }
                     IconButton(onClick = viewModel::clearHistory) {
-                        Icon(imageVector = Icons.Filled.Delete, contentDescription = "مسح")
+                        Icon(Icons.Filled.Delete, "مسح")
                     }
                     IconButton(onClick = onOpenSettings) {
-                        Icon(
-                            imageVector = Icons.Filled.Settings,
-                            contentDescription = stringResource(id = R.string.open_settings)
-                        )
+                        Icon(Icons.Filled.Settings, stringResource(id = R.string.open_settings))
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
@@ -196,6 +196,34 @@ fun ChatScreen(
         ) {
             WeatherBanner(weather = weatherState.weather)
 
+            // مؤشر Qwen يحمّل
+            if (state.qwenLoading) {
+                Card(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 12.dp, vertical = 6.dp),
+                    colors = CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.tertiaryContainer
+                    )
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth().padding(12.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(20.dp),
+                            strokeWidth = 2.dp
+                        )
+                        Spacer(modifier = Modifier.width(12.dp))
+                        Text(
+                            text = "⏳ Qwen يحمّل النموذج... (30-60 ثانية أول مرة)",
+                            style = MaterialTheme.typography.bodySmall,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                }
+            }
+
             if (isListening) {
                 Card(
                     modifier = Modifier
@@ -206,9 +234,7 @@ fun ChatScreen(
                     )
                 ) {
                     Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(12.dp),
+                        modifier = Modifier.fillMaxWidth().padding(12.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         CircularProgressIndicator(
@@ -265,9 +291,7 @@ fun ChatScreen(
                 tonalElevation = 3.dp
             ) {
                 Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(8.dp),
+                    modifier = Modifier.fillMaxWidth().padding(8.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     OutlinedTextField(
@@ -312,10 +336,8 @@ fun ChatScreen(
                         Icon(
                             imageVector = Icons.Filled.Mic,
                             contentDescription = "صوت",
-                            tint = if (isListening)
-                                MaterialTheme.colorScheme.error
-                            else
-                                MaterialTheme.colorScheme.primary
+                            tint = if (isListening) MaterialTheme.colorScheme.error
+                                   else MaterialTheme.colorScheme.primary
                         )
                     }
 
@@ -350,9 +372,7 @@ fun MessageBubble(message: Message) {
     val alignment = if (message.isFromUser) Alignment.CenterEnd else Alignment.CenterStart
 
     Box(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 4.dp),
+        modifier = Modifier.fillMaxWidth().padding(horizontal = 4.dp),
         contentAlignment = alignment
     ) {
         Surface(
@@ -373,9 +393,7 @@ fun MessageBubble(message: Message) {
 @Composable
 fun TypingIndicator() {
     Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 4.dp),
+        modifier = Modifier.fillMaxWidth().padding(horizontal = 4.dp),
         horizontalArrangement = Arrangement.Start
     ) {
         Surface(
