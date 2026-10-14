@@ -10,9 +10,10 @@ import androidx.room.RoomDatabase
         RoutineItem::class,
         ChatMessageEntity::class,
         UserProfile::class,
-        LockAttemptEntity::class
+        LockAttemptEntity::class,
+        KnowledgeEntity::class
     ],
-    version = 4,
+    version = 5,
     exportSchema = false
 )
 abstract class RachaDatabase : RoomDatabase() {
@@ -21,6 +22,7 @@ abstract class RachaDatabase : RoomDatabase() {
     abstract fun chatMessageDao(): ChatMessageDao
     abstract fun userProfileDao(): UserProfileDao
     abstract fun lockAttemptDao(): LockAttemptDao
+    abstract fun knowledgeDao(): KnowledgeDao
 
     companion object {
         @Volatile
