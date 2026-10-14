@@ -34,13 +34,11 @@ class AppPreferences(context: Context) {
         prefs.edit().putBoolean(KEY_LOCATION_ENABLED, enabled).apply()
     }
 
-    // ===== اللغة =====
     fun getLanguage(): String = prefs.getString(KEY_LANGUAGE, "ar") ?: "ar"
     fun setLanguage(lang: String) {
         prefs.edit().putString(KEY_LANGUAGE, lang).apply()
     }
 
-    // ===== الأمان — محاولات الفتح =====
     fun getIntruderThreshold(): Int = prefs.getInt(KEY_INTRUDER_THRESHOLD, 5)
     fun setIntruderThreshold(value: Int) {
         prefs.edit().putInt(KEY_INTRUDER_THRESHOLD, value.coerceIn(1, 10)).apply()
@@ -56,30 +54,30 @@ class AppPreferences(context: Context) {
         prefs.edit().putInt(KEY_INTRUDER_RETENTION_DAYS, days.coerceIn(1, 30)).apply()
     }
 
-    // ===== SleepGuardian =====
-    /**
-     * هل حارس النوم مفعّل؟
-     */
     fun isSleepGuardianEnabled(): Boolean = prefs.getBoolean(KEY_SLEEP_GUARDIAN_ENABLED, true)
     fun setSleepGuardianEnabled(enabled: Boolean) {
         prefs.edit().putBoolean(KEY_SLEEP_GUARDIAN_ENABLED, enabled).apply()
     }
 
-    /**
-     * ساعة بدء التذكير (بعد 22:00 افتراضياً).
-     */
     fun getSleepGuardianStartHour(): Int = prefs.getInt(KEY_SLEEP_GUARDIAN_START_HOUR, 22)
     fun setSleepGuardianStartHour(hour: Int) {
         prefs.edit().putInt(KEY_SLEEP_GUARDIAN_START_HOUR, hour.coerceIn(20, 23)).apply()
     }
 
-    /**
-     * هل أرسل إشعار أمس فقط؟
-     * (نستخدمه لمنع التكرار في نفس الليلة)
-     */
     fun getLastSleepGuardianSentDate(): Long = prefs.getLong(KEY_SLEEP_GUARDIAN_LAST_SENT, 0L)
     fun setLastSleepGuardianSentDate(date: Long) {
         prefs.edit().putLong(KEY_SLEEP_GUARDIAN_LAST_SENT, date).apply()
+    }
+
+    // ===== LLM Provider =====
+    /**
+     * مزوّد LLM المختار:
+     * - "gemini": Gemini (سحابي)
+     * - "qwen": Qwen (محلي)
+     */
+    fun getLLMProvider(): String = prefs.getString(KEY_LLM_PROVIDER, "gemini") ?: "gemini"
+    fun setLLMProvider(provider: String) {
+        prefs.edit().putString(KEY_LLM_PROVIDER, provider).apply()
     }
 
     companion object {
@@ -93,5 +91,6 @@ class AppPreferences(context: Context) {
         private const val KEY_SLEEP_GUARDIAN_ENABLED = "sleep_guardian_enabled"
         private const val KEY_SLEEP_GUARDIAN_START_HOUR = "sleep_guardian_start_hour"
         private const val KEY_SLEEP_GUARDIAN_LAST_SENT = "sleep_guardian_last_sent"
+        private const val KEY_LLM_PROVIDER = "llm_provider"
     }
 }

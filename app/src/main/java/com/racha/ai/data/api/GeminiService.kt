@@ -5,12 +5,13 @@ import com.google.ai.client.generativeai.GenerativeModel
 import com.google.ai.client.generativeai.type.Content
 import com.google.ai.client.generativeai.type.TextPart
 import com.racha.ai.core.tools.ToolRegistry
+import com.racha.ai.data.llm.LLMProvider
 import com.racha.ai.data.local.ChatMessageEntity
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
 
-class GeminiService(private val apiKey: String) {
+class GeminiService(private val apiKey: String) : LLMProvider {
 
     companion object {
         private const val TAG = "RachaGemini"
@@ -33,10 +34,14 @@ class GeminiService(private val apiKey: String) {
         """.trimIndent()
     }
 
-    suspend fun sendMessageWithContext(
+    override val name: String = "Gemini"
+
+    override fun isReady(): Boolean = apiKey.isNotBlank()
+
+    override suspend fun sendMessageWithContext(
         history: List<ChatMessageEntity>,
         userMessage: String,
-        userProfileContext: String = ""
+        userProfileContext: String
     ): Result<String> = withContext(Dispatchers.IO) {
         var lastException: Exception? = null
         var delayMs = INITIAL_DELAY_MS
@@ -56,19 +61,9 @@ class GeminiService(private val apiKey: String) {
                 val contents = mutableListOf<Content>()
                 for (msg in history) {
                     val role = if (msg.isFromUser) "user" else "model"
-                    contents.add(
-                        Content(
-                            role = role,
-                            parts = listOf(TextPart(msg.text))
-                        )
-                    )
+                    contents.add(Content(role = role, parts = listOf(TextPart(msg.text))))
                 }
-                contents.add(
-                    Content(
-                        role = "user",
-                        parts = listOf(TextPart(userMessage))
-                    )
-                )
+                contents.add(Content(role = "user", parts = listOf(TextPart(userMessage))))
 
                 val response = model.generateContent(*contents.toTypedArray())
                 val text = response.text ?: "لم أتمكن من توليد رد."
@@ -96,9 +91,6 @@ class GeminiService(private val apiKey: String) {
         )
     }
 
-    /**
-     * بناء System Prompt كامل.
-     */
     private fun buildSystemPrompt(userProfileContext: String): String {
         val sb = StringBuilder()
         sb.append(BASE_PERSONALITY)
@@ -110,17 +102,11 @@ class GeminiService(private val apiKey: String) {
             sb.append("- استخدم هذه المعلومات لصياغة ردود دافئة وسياقية.\n")
             sb.append("- مثال: إن كانت الساعة 8 صباحاً، ذكّره بالفطور.\n")
             sb.append("- مثال: إن كانت الساعة 17:00، ذكّره بانتهاء العمل.\n")
-            sb.append("- لا تكرر السؤال كل مرة، لكن أظهر أنك تعرفه.\n")
         }
 
-        // ✅ إضافة الأدوات
         sb.append("\n\n")
         sb.append(ToolRegistry.getToolsPrompt())
 
         return sb.toString()
-    }
-
-    fun clearHistory() {
-        // الذاكرة في DB
     }
 }
