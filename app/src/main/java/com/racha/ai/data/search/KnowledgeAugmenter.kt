@@ -4,12 +4,8 @@ import android.content.Context
 import android.util.Log
 import com.racha.ai.core.agent.IntentMatcher
 import com.racha.ai.data.llm.QwenService
-import com.racha.ai.data.local.KnowledgeEntity
 import com.racha.ai.data.repository.KnowledgeRepository
 
-/**
- * يُنسّق: DB → Qwen → Web Search → Qwen → حفظ.
- */
 class KnowledgeAugmenter(
     context: Context,
     private val qwenService: QwenService
@@ -18,28 +14,36 @@ class KnowledgeAugmenter(
     companion object {
         private const val TAG = "RachaAugmenter"
 
-        // كلمات تدل على أن السؤال يحتاج بحثاً
         private val SEARCH_TRIGGERS = listOf(
-            "كيف", "طريقة", "خطوات",
-            "كود", "برمجة", "دالة", "مكتبة",
-            "أحدث", "جديد", "2024", "2025", "2026",
-            "ما هو", "ما هي", "ماذا",
-            "أخبار", "حدث", "اليوم"
+            // طلبات
+            "كيف", "طريقة", "خطوات", "أريد", "اريد", "أحتاج", "احتاج",
+            "أبحث", "ابحث", "أعلمني", "علمني", "اشرح", "وضح",
+            // تقنية
+            "كود", "برمجة", "دالة", "مكتبة", "تطبيق", "بناء", "إنشاء", "انشاء",
+            "تثبيت", "تحميل", "install", "setup", "build", "termux", "ترميكس",
+            "android", "أندرويد", "kotlin", "python", "java", "gradle",
+            // حديث
+            "أحدث", "احدث", "جديد", "2024", "2025", "2026",
+            "أخبار", "اخبار", "اليوم",
+            // تعريفات
+            "ما هو", "ما هي", "ماذا", "من هو", "من هي",
+            // حالات
+            "لماذا", "متى", "أين", "اين"
         )
 
-        // كلمات تدل على أن Qwen لا يعرف
         private val DONT_KNOW = listOf(
             "لا أعلم", "لا أعرف", "لست متأكد",
             "لا يمكنني", "لا استطيع", "لا أستطيع",
-            "I don't know", "I cannot"
+            "لا أملك معلومات",
+            "I don't know", "I cannot", "I'm not sure"
         )
+
+        // الحد الأدنى لطول السؤال للبحث الإجباري
+        private const val MIN_LENGTH_FOR_FORCED_SEARCH = 25
     }
 
     private val knowledgeRepo = KnowledgeRepository(context)
 
-    /**
-     * إجابة ذكية: DB → Qwen → Web → حفظ.
-     */
     suspend fun smartAnswer(
         question: String,
         userProfileContext: String = "",
@@ -51,7 +55,7 @@ class KnowledgeAugmenter(
         // ===== 1. ابحث في قاعدة المعرفة =====
         val cached = knowledgeRepo.findBestMatch(question)
         if (cached != null) {
-            Log.d(TAG, "✅ وُجد في DB: ${cached.question}")
+            Log.d(TAG, "✅ وُجد في DB")
             knowledgeRepo.markUsed(cached.id)
             return AugmentResult(
                 answer = cached.answer,
@@ -60,8 +64,21 @@ class KnowledgeAugmenter(
             )
         }
 
-        // ===== 2. اسأل Qwen =====
-        Log.d(TAG, "لا يوجد في DB — اسأل Qwen")
+        // ===== 2. تحديد: هل يجب البحث؟ =====
+        val shouldSearch = shouldSearchFirst(question)
+
+        // ===== 3. إذا البحث مطلوب أولاً =====
+        if (shouldSearch) {
+            Log.d(TAG, "🔍 السؤال يستدعي البحث (trigger)")
+            val webResult = tryWebSearch(question, userProfileContext)
+            if (webResult != null) {
+                return webResult
+            }
+            Log.w(TAG, "فشل البحث، نعود لـ Qwen")
+        }
+
+        // ===== 4. اسأل Qwen =====
+        Log.d(TAG, "اسأل Qwen")
         val qwenResult = qwenService.sendMessageWithContext(
             history = history,
             userMessage = question,
@@ -73,56 +90,102 @@ class KnowledgeAugmenter(
         // هل Qwen يعرف؟
         val qwenKnows = qwenAnswer != null && !isDontKnow(qwenAnswer)
 
-        if (qwenKnows && !needsSearch(question)) {
+        if (qwenKnows && qwenAnswer!!.length > 10) {
             Log.d(TAG, "✅ Qwen أجاب")
             return AugmentResult(
-                answer = qwenAnswer!!,
+                answer = qwenAnswer,
                 source = "qwen",
                 fromCache = false
             )
         }
 
-        // ===== 3. ابحث على الويب =====
-        Log.d(TAG, "⚠️ Qwen لا يعرف أو السؤال يحتاج بحث — نبحث")
-        val searchResults = WebSearchService.search(question, maxResults = 5)
-
-        if (searchResults.isEmpty()) {
-            Log.w(TAG, "لا نتائج بحث — نعيد Qwen")
-            return AugmentResult(
-                answer = qwenAnswer ?: "⚠️ لم أتمكن من الإجابة.",
-                source = "qwen_fallback",
-                fromCache = false
-            )
+        // ===== 5. إذا لم يكن البحث قد تم، ابحث =====
+        if (!shouldSearch) {
+            Log.d(TAG, "⚠️ Qwen لا يعرف — نبحث")
+            val webResult = tryWebSearch(question, userProfileContext)
+            if (webResult != null) {
+                return webResult
+            }
         }
 
-        // ===== 4. اجلب نص أول صفحتين =====
-        val enrichedResults = searchResults.take(3).map { result ->
-            val fullText = WebSearchService.fetchPageText(result.url, maxChars = 2000)
-            result.copy(fullText = fullText)
-        }
-
-        // ===== 5. اطلب من Qwen أن يلخّص =====
-        Log.d(TAG, "اطلب من Qwen تلخيص ${enrichedResults.size} نتائج")
-        val summary = summarizeWithQwen(question, enrichedResults, userProfileContext)
-
-        // ===== 6. احفظ في DB =====
-        val finalAnswer = summary ?: buildFallbackAnswer(enrichedResults)
-
-        knowledgeRepo.quickSave(
-            question = question,
-            answer = finalAnswer,
-            topic = extractTopic(question),
-            keywords = extractKeywords(question),
-            source = "web"
-        )
-
-        Log.d(TAG, "✅ تم الحفظ في DB")
-
+        // ===== 6. فشل كل شيء =====
         return AugmentResult(
-            answer = finalAnswer,
-            source = "web",
+            answer = qwenAnswer ?: "⚠️ لم أتمكن من الإجابة.",
+            source = "qwen_fallback",
             fromCache = false
         )
+    }
+
+    /**
+     * هل السؤال يستدعي البحث أولاً؟
+     */
+    private fun shouldSearchFirst(question: String): Boolean {
+        // 1. طول السؤال
+        if (question.length >= MIN_LENGTH_FOR_FORCED_SEARCH) {
+            // سؤال طويل → بحث (لأن Qwen 1.5B ضعيف)
+            val normalized = IntentMatcher.normalize(question)
+            // إذا كان فيه كلمة trigger → بحث
+            if (SEARCH_TRIGGERS.any { trigger ->
+                normalized.contains(IntentMatcher.normalize(trigger))
+            }) {
+                return true
+            }
+        }
+
+        // 2. إذا كان فيه trigger مباشر
+        val normalized = IntentMatcher.normalize(question)
+        return SEARCH_TRIGGERS.any { trigger ->
+            normalized.contains(IntentMatcher.normalize(trigger))
+        }
+    }
+
+    /**
+     * محاولة البحث على الويب.
+     */
+    private suspend fun tryWebSearch(
+        question: String,
+        userProfileContext: String
+    ): AugmentResult? {
+        return try {
+            val searchResults = WebSearchService.search(question, maxResults = 5)
+            if (searchResults.isEmpty()) {
+                Log.w(TAG, "لا نتائج")
+                return null
+            }
+
+            Log.d(TAG, "✅ ${searchResults.size} نتيجة بحث")
+
+            // اجلب أول صفحتين
+            val enriched = searchResults.take(3).map { r ->
+                val full = WebSearchService.fetchPageText(r.url, maxChars = 1500)
+                r.copy(fullText = full)
+            }
+
+            // لخّص بـ Qwen
+            val summary = summarizeWithQwen(question, enriched)
+
+            val finalAnswer = summary ?: buildFallbackAnswer(enriched)
+
+            // احفظ
+            knowledgeRepo.quickSave(
+                question = question,
+                answer = finalAnswer,
+                topic = question.take(30),
+                keywords = extractKeywords(question),
+                source = "web"
+            )
+
+            Log.d(TAG, "✅ تم الحفظ في DB")
+
+            AugmentResult(
+                answer = finalAnswer,
+                source = "web",
+                fromCache = false
+            )
+        } catch (e: Exception) {
+            Log.e(TAG, "فشل البحث", e)
+            null
+        }
     }
 
     /**
@@ -130,15 +193,10 @@ class KnowledgeAugmenter(
      */
     private suspend fun summarizeWithQwen(
         question: String,
-        results: List<SearchResult>,
-        userProfileContext: String
+        results: List<SearchResult>
     ): String? {
-        val sourcesText = results.mapIndexed { index, r ->
-            """
-            [المصدر ${index + 1}: ${r.title}]
-            ${r.snippet}
-            ${r.fullText?.take(800) ?: ""}
-            """.trimIndent()
+        val sourcesText = results.mapIndexed { i, r ->
+            "[المصدر ${i + 1}: ${r.title}]\n${r.snippet}\n${r.fullText?.take(800) ?: ""}"
         }.joinToString("\n\n")
 
         val prompt = """
@@ -149,7 +207,7 @@ class KnowledgeAugmenter(
             
             المطلوب:
             - لخّص الإجابة بالعربية الفصحى.
-            - 2-3 أسطر فقط.
+            - 3-5 أسطر فقط.
             - لا تستخدم الصينية أو الإنجليزية.
             - إذا كانت النتائج غير واضحة، قل "لم أجد إجابة واضحة".
         """.trimIndent()
@@ -160,57 +218,32 @@ class KnowledgeAugmenter(
             userProfileContext = ""
         )
 
-        return result.getOrNull()
+        val answer = result.getOrNull()
+        return if (answer != null && answer.length > 20 && !answer.contains("لا أعلم")) {
+            answer
+        } else null
     }
 
-    /**
-     * إجابة بديلة من النتائج المختصرة (إن فشل Qwen).
-     */
     private fun buildFallbackAnswer(results: List<SearchResult>): String {
         val sb = StringBuilder()
         sb.append("وجدت المعلومات التالية:\n\n")
         results.take(2).forEach { r ->
             sb.append("• ${r.snippet.take(200)}\n")
-            sb.append("  المصدر: ${r.url}\n\n")
+            sb.append("  ${r.url}\n\n")
         }
         return sb.toString().trim()
     }
 
-    /**
-     * هل السؤال يحتاج بحث؟
-     */
-    private fun needsSearch(question: String): Boolean {
-        val normalized = IntentMatcher.normalize(question)
-        return SEARCH_TRIGGERS.any { trigger ->
-            normalized.contains(IntentMatcher.normalize(trigger))
-        }
-    }
-
-    /**
-     * هل Qwen قال "لا أعلم"؟
-     */
     private fun isDontKnow(answer: String): Boolean {
         return DONT_KNOW.any { answer.contains(it, ignoreCase = true) }
     }
 
-    /**
-     * استخراج موضوع من السؤال.
-     */
-    private fun extractTopic(question: String): String {
-        // بسيط جداً — يمكن تحسينه لاحقاً
-        return question.take(30)
-    }
-
-    /**
-     * استخراج كلمات مفتاحية.
-     */
     private fun extractKeywords(question: String): String {
         val stopWords = setOf(
             "ما", "هو", "هي", "من", "في", "على", "إلى", "عن",
             "كيف", "متى", "أين", "لماذا", "هل", "الذي", "التي",
-            "the", "a", "an", "is", "are", "was", "were", "what", "how"
+            "the", "a", "an", "is", "are"
         )
-
         return question
             .split(Regex("\\s+"))
             .filter { it.length > 2 && it.lowercase() !in stopWords }
@@ -218,11 +251,8 @@ class KnowledgeAugmenter(
     }
 }
 
-/**
- * نتيجة الإجابة.
- */
 data class AugmentResult(
     val answer: String,
-    val source: String,        // "knowledge", "qwen", "web", "qwen_fallback"
+    val source: String,
     val fromCache: Boolean
 )
