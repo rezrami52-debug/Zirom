@@ -9,6 +9,7 @@ import com.racha.ai.core.agent.LocalAgent
 import com.racha.ai.core.apps.AppChooserState
 import com.racha.ai.core.apps.AppResolver
 import com.racha.ai.core.apps.IntentHandler
+import com.racha.ai.core.contacts.ContactResolver
 import com.racha.ai.core.context.ContextBuilder
 import com.racha.ai.core.context.SmartReplies
 import com.racha.ai.core.preferences.AppPreferences
@@ -52,7 +53,8 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
     private val contextBuilder = ContextBuilder(application)
 
     private val appResolver = AppResolver(application)
-    private val intentHandler = IntentHandler(application, appResolver)
+    private val contactResolver = ContactResolver(application)
+    private val intentHandler = IntentHandler(application, appResolver, contactResolver)
 
     private var geminiService: GeminiService? = null
     private var qwenService: QwenService? = null
@@ -161,14 +163,10 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    /**
-     * عند اختيار تطبيق من الحوار.
-     */
     fun onAppSelected(app: AppResolver.InstalledApp) {
         val chooser = _uiState.value.appChooser
         val action = chooser.pendingAction
 
-        // أخفِ الحوار
         _uiState.value = _uiState.value.copy(appChooser = AppChooserState())
 
         if (action == null) return
@@ -179,9 +177,6 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    /**
-     * إلغاء الحوار.
-     */
     fun onAppChooserDismiss() {
         _uiState.value = _uiState.value.copy(appChooser = AppChooserState())
     }
@@ -195,7 +190,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
             saveMessageEntity(userMessage)
             _uiState.value = _uiState.value.copy(inputText = "", isSending = true)
 
-            // ===== 1. LocalAgent (أوامر محلية) =====
+            // ===== 1. LocalAgent =====
             val localResult = localAgent.processCommand(text)
             when (localResult) {
                 is CommandResult.Executed -> {
@@ -220,7 +215,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                 is CommandResult.NeedsLLM -> { /* نكمل */ }
             }
 
-            // ===== 2. IntentHandler (تطبيقات، خرائط، رسائل) =====
+            // ===== 2. IntentHandler =====
             val intentResult = intentHandler.handle(text)
             when (intentResult) {
                 is IntentHandler.HandlerResult.DirectReply -> {

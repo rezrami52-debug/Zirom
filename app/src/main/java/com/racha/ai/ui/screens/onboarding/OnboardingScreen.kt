@@ -14,8 +14,8 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Notifications
+import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Place
-import androidx.compose.material.icons.filled.RadioButtonUnchecked
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -50,12 +50,10 @@ fun OnboardingScreen(
     val context = LocalContext.current
     val appPrefs = remember { AppPreferences(context) }
 
-    // حالة صلاحية الإشعارات
     var hasNotificationPermission by remember {
         mutableStateOf(PermissionHelper.isNotificationListenerEnabled(context))
     }
 
-    // حالة صلاحية الموقع
     val locationPermissions = rememberMultiplePermissionsState(
         permissions = listOf(
             Manifest.permission.ACCESS_FINE_LOCATION,
@@ -63,7 +61,12 @@ fun OnboardingScreen(
         )
     )
 
-    // تحديث الحالة كل ثانيتين (لأن المستخدم قد يعود)
+    val contactPermissions = rememberMultiplePermissionsState(
+        permissions = listOf(
+            Manifest.permission.READ_CONTACTS
+        )
+    )
+
     LaunchedEffect(Unit) {
         while (true) {
             kotlinx.coroutines.delay(2000)
@@ -72,8 +75,9 @@ fun OnboardingScreen(
         }
     }
 
-    // هل كل الإعدادات مكتملة؟
-    val allDone = hasNotificationPermission && locationPermissions.allPermissionsGranted
+    val allDone = hasNotificationPermission &&
+                  locationPermissions.allPermissionsGranted &&
+                  contactPermissions.allPermissionsGranted
 
     Scaffold(
         topBar = {
@@ -102,7 +106,7 @@ fun OnboardingScreen(
 
             Spacer(modifier = Modifier.height(8.dp))
 
-            // بطاقة 1: الإشعارات
+            // 1. الإشعارات
             PermissionCard(
                 title = "الوصول للإشعارات",
                 description = "لقراءة إشعارات التطبيقات وإخبارك بها صوتياً",
@@ -110,48 +114,39 @@ fun OnboardingScreen(
                 onRequest = {
                     PermissionHelper.openNotificationListenerSettings(context)
                 },
-                icon = {
-                    Icon(
-                        imageVector = Icons.Filled.Notifications,
-                        contentDescription = null
-                    )
-                }
+                icon = { Icon(Icons.Filled.Notifications, null) }
             )
 
-            // بطاقة 2: الموقع
+            // 2. الموقع
             PermissionCard(
                 title = "صلاحية الموقع",
-                description = "لحساب مواقيت الصلاة وإرسال حالة الطقس",
+                description = "لمواقيت الصلاة وحالة الطقس والخرائط",
                 isGranted = locationPermissions.allPermissionsGranted,
-                onRequest = {
-                    locationPermissions.launchMultiplePermissionRequest()
-                },
-                icon = {
-                    Icon(
-                        imageVector = Icons.Filled.Place,
-                        contentDescription = null
-                    )
-                }
+                onRequest = { locationPermissions.launchMultiplePermissionRequest() },
+                icon = { Icon(Icons.Filled.Place, null) }
             )
 
-            // بطاقة 3: مفتاح API (اختياري)
+            // 3. جهات الاتصال (جديد)
+            PermissionCard(
+                title = "جهات الاتصال",
+                description = "للبحث عن الأسماء والاتصال بهم عبر Racha",
+                isGranted = contactPermissions.allPermissionsGranted,
+                onRequest = { contactPermissions.launchMultiplePermissionRequest() },
+                icon = { Icon(Icons.Filled.Person, null) }
+            )
+
+            // 4. مفتاح API
             PermissionCard(
                 title = "مفتاح Gemini API",
-                description = "لتفعيل المحادثة الذكية (يمكن تأجيله)",
-                isGranted = false,
+                description = "لتفعيل المحادثة الذكية (اختياري — يمكن إضافته لاحقاً)",
+                isGranted = appPrefs.isOnboardingComplete() && !appPrefs.getLLMProvider().isNullOrBlank(),
                 onRequest = onOpenApiKeySettings,
-                icon = {
-                    Icon(
-                        imageVector = Icons.Filled.CheckCircle,
-                        contentDescription = null
-                    )
-                },
+                icon = { Icon(Icons.Filled.CheckCircle, null) },
                 isOptional = true
             )
 
             Spacer(modifier = Modifier.height(16.dp))
 
-            // زر المتابعة
             Button(
                 onClick = {
                     appPrefs.setOnboardingComplete(true)
@@ -220,7 +215,7 @@ fun PermissionCard(
                 )
             } else {
                 Button(onClick = onRequest) {
-                    Text("تفعيل")
+                    Text(if (isOptional) "لاحقاً" else "تفعيل")
                 }
             }
         }
