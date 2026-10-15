@@ -4,9 +4,6 @@ import android.content.Context
 import android.util.Log
 import com.racha.ai.services.location.LocationHelper
 
-/**
- * معالج النوايا — يربط IntentClassifier + AppResolver.
- */
 class IntentHandler(
     private val context: Context,
     private val appResolver: AppResolver
@@ -16,31 +13,32 @@ class IntentHandler(
         private const val TAG = "RachaIntentHandler"
     }
 
-    /**
-     * نتيجة معالجة النية.
-     */
-    sealed class HandlerResult {
-        /** رد فوري (بدون حوار). */
-        data class DirectReply(val message: String) : HandlerResult()
+    private val prayerHandler = PrayerIntentHandler(context)
+    private val appListHandler = AppListHandler(appResolver)
 
-        /** حوار مطلوب (لاختيار تطبيق). */
+    sealed class HandlerResult {
+        data class DirectReply(val message: String) : HandlerResult()
         data class ShowChooser(
             val title: String,
             val apps: List<AppResolver.InstalledApp>,
             val pendingAction: PendingAction
         ) : HandlerResult()
-
-        /** خطأ. */
         data class Error(val message: String) : HandlerResult()
-
-        /** لم تُفهم النية — اذهب لـ LLM. */
         object Unknown : HandlerResult()
     }
 
-    /**
-     * معالجة النص.
-     */
     suspend fun handle(text: String): HandlerResult {
+        // 1. Prayer
+        if (prayerHandler.isPrayerQuestion(text)) {
+            return HandlerResult.DirectReply(prayerHandler.handle(text))
+        }
+
+        // 2. App list
+        if (appListHandler.isAppListQuestion(text)) {
+            return HandlerResult.DirectReply(appListHandler.listCategories())
+        }
+
+        // 3. General intent
         val intentType = IntentClassifier.classify(text)
         Log.d(TAG, "نية: $intentType")
 
@@ -58,9 +56,6 @@ class IntentHandler(
         }
     }
 
-    /**
-     * "اين انا" — إجابة نصية.
-     */
     private suspend fun handleShowLocation(): HandlerResult {
         val location = LocationHelper.getCurrentLocation(context)
             ?: return HandlerResult.Error("⚠️ لا أستطيع الوصول لموقعك.")
@@ -71,9 +66,6 @@ class IntentHandler(
         return HandlerResult.DirectReply("📍 أنت في: $city\n($lat, $lon)")
     }
 
-    /**
-     * "اعرض موقعي على الخريطة" — يعرض التطبيقات.
-     */
     private suspend fun handleOpenMap(): HandlerResult {
         val location = LocationHelper.getCurrentLocation(context)
             ?: return HandlerResult.Error("⚠️ لا أستطيع الوصول لموقعك.")
@@ -86,11 +78,9 @@ class IntentHandler(
         }
 
         if (mapApps.size == 1) {
-            // تطبيق واحد — نفتح مباشرة
             return directOpenMap(mapApps[0], location)
         }
 
-        // عدة تطبيقات — نعرض الحوار
         return HandlerResult.ShowChooser(
             title = "🗺️ اختر تطبيق الخرائط",
             apps = mapApps,
@@ -102,9 +92,6 @@ class IntentHandler(
         )
     }
 
-    /**
-     * فتح الخريطة مباشرة.
-     */
     private fun directOpenMap(
         app: AppResolver.InstalledApp,
         location: LocationHelper.LocationData
@@ -121,9 +108,6 @@ class IntentHandler(
         }
     }
 
-    /**
-     * "أرسل رسالة لـ أحمد".
-     */
     private suspend fun handleSendMessage(text: String): HandlerResult {
         val messagingApps = appResolver.getMessagingApps()
 
@@ -131,7 +115,6 @@ class IntentHandler(
             return HandlerResult.Error("⚠️ لا يوجد تطبيق مراسلة مثبت.")
         }
 
-        // استخراج اسم الشخص (بسيط)
         val contactName = extractName(text)
 
         if (messagingApps.size == 1) {
@@ -148,9 +131,6 @@ class IntentHandler(
         )
     }
 
-    /**
-     * فتح تطبيق مراسلة.
-     */
     private fun openMessagingApp(
         app: AppResolver.InstalledApp,
         contactName: String?
@@ -164,9 +144,6 @@ class IntentHandler(
         }
     }
 
-    /**
-     * "اتصل بأحمد".
-     */
     private suspend fun handleMakeCall(text: String): HandlerResult {
         val contactName = extractName(text)
         return HandlerResult.DirectReply(
@@ -175,9 +152,6 @@ class IntentHandler(
         )
     }
 
-    /**
-     * "أرسل إيميل".
-     */
     private suspend fun handleSendEmail(text: String): HandlerResult {
         val emailApps = appResolver.getEmailApps()
 
@@ -197,9 +171,6 @@ class IntentHandler(
         )
     }
 
-    /**
-     * "افتح المتصفح".
-     */
     private suspend fun handleOpenBrowser(): HandlerResult {
         val browserApps = appResolver.getBrowserApps()
 
@@ -219,30 +190,18 @@ class IntentHandler(
         )
     }
 
-    /**
-     * "افتح الكاميرا".
-     */
     private suspend fun handleOpenCamera(): HandlerResult {
         return HandlerResult.Error("⚠️ لفتح الكاميرا، استخدم الأمر الصريح.")
     }
 
-    /**
-     * "شغل موسيقى".
-     */
     private suspend fun handlePlayMusic(): HandlerResult {
         return HandlerResult.Error("⚠️ هذه الميزة قيد التطوير.")
     }
 
-    /**
-     * "افتح تطبيق X".
-     */
     private suspend fun handleOpenApp(text: String): HandlerResult {
         return HandlerResult.Error("⚠️ أخبرني باسم التطبيق بدقة.")
     }
 
-    /**
-     * تنفيذ الإجراء المعلّق بعد اختيار المستخدم.
-     */
     fun executeChoice(
         app: AppResolver.InstalledApp,
         action: PendingAction
@@ -272,11 +231,7 @@ class IntentHandler(
         }
     }
 
-    /**
-     * استخراج اسم من النص.
-     */
     private fun extractName(text: String): String? {
-        // بسيط: نأخذ آخر كلمة بعد "لـ" أو "بـ"
         val patterns = listOf("لـ", "ل ", "بـ", "ب ")
         for (pattern in patterns) {
             val idx = text.indexOf(pattern)
