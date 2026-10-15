@@ -22,7 +22,6 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collectLatest
-import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 
 data class ChatUiState(
@@ -165,7 +164,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
             saveMessageEntity(userMessage)
             _uiState.value = _uiState.value.copy(inputText = "", isSending = true)
 
-            // ===== 1. LocalAgent (أوامر) =====
+            // ===== 1. LocalAgent (أوامر محلية) =====
             val localResult = localAgent.processCommand(text)
             when (localResult) {
                 is CommandResult.Executed -> {
@@ -190,10 +189,18 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                 is CommandResult.NeedsLLM -> { /* نكمل */ }
             }
 
-            // ===== 2. Location Intent =====
+            // ===== 2. Location Question ("اين انا") =====
             if (LocationIntentHandler.isLocationQuestion(text)) {
                 val locationAnswer = LocationIntentHandler.answer(getApplication())
                 saveMessageEntity(Message(text = locationAnswer, isFromUser = false))
+                _uiState.value = _uiState.value.copy(isSending = false)
+                return@launch
+            }
+
+            // ===== 2.b. Map Request ("اعرض على الخريطة") =====
+            if (LocationIntentHandler.isMapRequest(text)) {
+                val mapResult = LocationIntentHandler.openInMaps(getApplication())
+                saveMessageEntity(Message(text = mapResult, isFromUser = false))
                 _uiState.value = _uiState.value.copy(isSending = false)
                 return@launch
             }
@@ -203,7 +210,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
             val history = recent.dropLast(1)
             val context = contextBuilder.build(history, text)
 
-            // ===== 4. SmartReplies (ردود ذكية بدون LLM) =====
+            // ===== 4. SmartReplies (ردود ذكية مبرمجة) =====
             val smartReply = SmartReplies.tryReply(text, context)
             if (smartReply != null) {
                 saveMessageEntity(Message(text = smartReply, isFromUser = false))
@@ -251,9 +258,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
             _uiState.value = _uiState.value.copy(qwenLoading = true)
         }
 
-        // ✅ ندمج السياق مع الملف الشخصي
         val fullContext = "$profileContext\n\n$contextPrompt"
-
         val result = aug.smartAnswer(text, fullContext, history)
 
         saveMessageEntity(
