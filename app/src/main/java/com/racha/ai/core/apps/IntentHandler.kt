@@ -7,20 +7,14 @@ import android.util.Log
 import com.racha.ai.core.contacts.ContactResolver
 import com.racha.ai.services.location.LocationHelper
 
-data class PendingAction(
-    val type: String,
-    val lat: Double? = null,
-    val lon: Double? = null,
-    val contactName: String? = null,
-    val contactDetails: String? = null
-)
-
 class IntentHandler(
     private val context: Context,
     private val appResolver: AppResolver,
     private val contactResolver: ContactResolver
 ) {
-    companion object { private const val TAG = "RachaIntentHandler" }
+    companion object {
+        private const val TAG = "RachaIntentHandler"
+    }
 
     sealed class HandlerResult {
         data class DirectReply(val message: String) : HandlerResult()
@@ -53,7 +47,7 @@ class IntentHandler(
 
     private suspend fun handleShowLocation(): HandlerResult {
         val location = LocationHelper.getCurrentLocation(context)
-            ?: return HandlerResult.Error("⚠️ لا أستطيع الوصول لموقعك. تأكد من تفعيل GPS.")
+            ?: return HandlerResult.Error("⚠️ لا أستطيع الوصول لموقعك.")
 
         val city = location.cityName ?: "منطقتك"
         val lat = String.format("%.4f", location.latitude)
@@ -92,7 +86,6 @@ class IntentHandler(
     private suspend fun handleSendMessage(text: String): HandlerResult {
         val contactName = extractName(text) ?: "محدد"
 
-        // 1. ابحث في جهات الاتصال
         if (!contactResolver.hasPermission()) {
             return HandlerResult.Error(
                 "⚠️ لا أستطيع قراءة جهات الاتصال.\n\n" +
@@ -113,7 +106,6 @@ class IntentHandler(
             "👤 ${it.name}\n📞 ${it.phoneNumber}"
         }
 
-        // 2. تطبيقات المراسلة
         val messagingApps = appResolver.getMessagingApps()
         if (messagingApps.isEmpty()) {
             return HandlerResult.Error(
@@ -141,7 +133,8 @@ class IntentHandler(
     }
 
     private suspend fun handleMakeCall(text: String): HandlerResult {
-        val contactName = extractName(text) ?: return HandlerResult.Error("⚠️ حدد من تريد الاتصال به.")
+        val contactName = extractName(text)
+            ?: return HandlerResult.Error("⚠️ حدد من تريد الاتصال به.")
 
         if (!contactResolver.hasPermission()) {
             return HandlerResult.Error("⚠️ صلاحية جهات الاتصال مطلوبة.")
@@ -154,7 +147,6 @@ class IntentHandler(
 
         val contact = contacts.first()
 
-        // فتح تطبيق الهاتف مع الرقم
         return try {
             val intent = Intent(Intent.ACTION_DIAL).apply {
                 data = Uri.parse("tel:${contact.phoneNumber}")

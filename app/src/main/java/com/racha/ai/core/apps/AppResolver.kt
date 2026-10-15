@@ -26,6 +26,8 @@ class AppResolver(private val context: Context) {
         MUSIC("الموسيقى"),
         VIDEO("الفيديو"),
         BROWSER("المتصفح"),
+        NOTES("الملاحظات"),
+        CALENDAR("التقويم"),
         UNKNOWN("أخرى")
     }
 
@@ -44,7 +46,8 @@ class AppResolver(private val context: Context) {
             "com.facebook.orca",
             "com.google.android.apps.messaging",
             "com.android.mms",
-            "com.viber.voip"
+            "com.viber.voip",
+            "com.instagram.android"
         ),
         AppCategory.EMAIL to listOf(
             "com.google.android.gm",
@@ -77,6 +80,15 @@ class AppResolver(private val context: Context) {
             "com.android.dialer",
             "com.google.android.dialer",
             "com.android.contacts"
+        ),
+        AppCategory.NOTES to listOf(
+            "com.google.android.keep",
+            "notion.id",
+            "com.samsung.android.app.notes"
+        ),
+        AppCategory.CALENDAR to listOf(
+            "com.google.android.calendar",
+            "com.samsung.android.calendar"
         )
     )
 
@@ -101,9 +113,6 @@ class AppResolver(private val context: Context) {
         return result
     }
 
-    /**
-     * جلب كل التطبيقات المثبتة (مع QUERY_ALL_PACKAGES).
-     */
     fun getAllInstalledApps(): List<InstalledApp> {
         val pm = context.packageManager
         val intent = Intent(Intent.ACTION_MAIN, null).apply {
