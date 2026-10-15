@@ -1,37 +1,38 @@
 package com.racha.ai.core.context
 
-/**
- * لقطة سياقية للحظة معينة.
- * تُبنى قبل كل رد، وتُرسل لـ Qwen.
- */
 data class ContextSnapshot(
-    val currentTime: String,           // "15:51"
-    val currentDate: String,           // "الأربعاء، 15 أكتوبر 2026"
-    val dayPart: DayPart,              // صباح/ظهر/مساء/ليل
-    val greeting: String,              // "مساء الخير" حسب الوقت
-    val timeSinceLastChat: String,     // "منذ 18 ساعة" أو "الآن"
-    val lastTopic: String,             // "إصلاح البحث"
-    val lastUserMessage: String,       // آخر رسالة من المستخدم
-    val userMood: UserMood,            // عادي/متحمس/متعب/...
-    val dayOfWeek: String              // "الأربعاء"
+    val currentTime: String,
+    val currentDate: String,
+    val dayPart: DayPart,
+    val greeting: String,
+    val timeSinceLastChat: String,
+    val lastTopic: String,
+    val lastUserMessage: String,
+    val lastRachaReply: String = "",
+    val userMood: UserMood,
+    val dayOfWeek: String,
+    val locationContext: String = ""
 ) {
-    /**
-     * بناء Prompt نصي للحقن في System Prompt.
-     */
     fun toPrompt(): String {
         val sb = StringBuilder()
         sb.append("[السياق الحالي]\n")
         sb.append("- الوقت: $currentTime ($dayOfWeek)\n")
-        sb.append("- التاريخ: $currentDate\n")
-        sb.append("- الجزء: ${dayPart.arabic}\n")
         sb.append("- ${greeting}\n")
 
-        if (timeSinceLastChat != "الآن") {
+        if (timeSinceLastChat != "الآن" && timeSinceLastChat != "أول محادثة") {
             sb.append("- آخر محادثة: $timeSinceLastChat\n")
         }
 
-        if (lastTopic.isNotBlank() && lastTopic != lastUserMessage) {
+        if (lastTopic.isNotBlank()) {
             sb.append("- آخر موضوع: $lastTopic\n")
+        }
+
+        if (lastRachaReply.isNotBlank()) {
+            sb.append("- ردّي السابق: $lastRachaReply\n")
+        }
+
+        if (locationContext.isNotBlank()) {
+            sb.append("- الموقع: $locationContext\n")
         }
 
         if (userMood != UserMood.NEUTRAL) {
@@ -42,9 +43,6 @@ data class ContextSnapshot(
     }
 }
 
-/**
- * جزء اليوم.
- */
 enum class DayPart(val arabic: String) {
     MORNING("صباح"),
     NOON("ظهر"),
@@ -53,9 +51,6 @@ enum class DayPart(val arabic: String) {
     NIGHT("ليل")
 }
 
-/**
- * مزاج المستخدم.
- */
 enum class UserMood(val arabic: String) {
     NEUTRAL("عادي"),
     HAPPY("سعيد"),

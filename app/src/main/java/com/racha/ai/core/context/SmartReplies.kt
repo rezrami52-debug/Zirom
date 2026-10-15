@@ -1,46 +1,49 @@
 package com.racha.ai.core.context
 
-import android.util.Log
-
-/**
- * ردود ذكية مبرمجة لأوامر شائعة.
- * تعمل بدون LLM — فورية.
- */
 object SmartReplies {
 
-    private const val TAG = "RachaSmartReplies"
-
-    /**
-     * محاولة إيجاد رد ذكي.
-     * @return الرد إذا وُجد، أو null (يذهب لـ LLM).
-     */
     fun tryReply(
         input: String,
         context: ContextSnapshot
     ): String? {
         val normalized = normalize(input)
 
-        // ===== "اذا" و "ماذا الآن" =====
+        // ===== "اذا" / "ماذا الان" =====
         if (matches(normalized, "اذا", "واذا", "ماذا الان", "ماذا بعد", "ثم ماذا")) {
             return handleIfThen(context)
         }
 
-        // ===== "حسنا" / "تمام" / "طيب" =====
+        // ===== "حسنا" / "تمام" =====
         if (matches(normalized, "حسنا", "حسن", "تمام", "طيب", "اوكي", "ماشي")) {
-            return handleAcknowledgment(context)
+            return handleAcknowledgment()
         }
 
-        // ===== "لا" / "لا شكرا" =====
+        // ===== "لماذا" (بحاجة للسياق) =====
+        if (normalized == "لماذا" || normalized == "لماذا؟" || matches(normalized, "لماذا هذا")) {
+            return handleWhy(context)
+        }
+
+        // ===== "كيف" (بحاجة للسياق) =====
+        if (normalized == "كيف" || normalized == "كيف؟") {
+            return handleHow(context)
+        }
+
+        // ===== "ماذا" (بحاجة للسياق) =====
+        if (normalized == "ماذا" || normalized == "ماذا؟") {
+            return handleWhat(context)
+        }
+
+        // ===== "لا" =====
         if (normalized == "لا" || matches(normalized, "لا شكرا", "ليس الان", "لا اريد")) {
-            return handleRefusal()
+            return "حسناً، لا مشكلة. أخبرني متى تحتاجني. 💙"
         }
 
-        // ===== "نعم" / "اجل" =====
+        // ===== "نعم" =====
         if (normalized == "نعم" || matches(normalized, "اجل", "بلا شك", "طبعا")) {
-            return "ممتاز! أخبرني ماذا تريد."
+            return "ممتاز! أخبرني ماذا تريد. 🌟"
         }
 
-        // ===== "كيف حالك" / "اخبارك" =====
+        // ===== "كيف حالك" =====
         if (matches(normalized, "كيف حالك", "اخبارك", "كيفك", "شلونك")) {
             return "أنا بخير، شكراً! ${context.greeting} كيف حالك أنت؟"
         }
@@ -50,47 +53,43 @@ object SmartReplies {
             return "العفو! 🌟 أنا هنا دائماً."
         }
 
-        // ===== "صباح الخير" / "مساء الخير" =====
+        // ===== تحيات =====
         if (matches(normalized, "صباح الخير")) {
-            return "صباح النور! ☀️ ${getMorningSuggestion(context)}"
+            return "صباح النور! ☀️ هل تناولت فطورك؟"
         }
 
         if (matches(normalized, "مساء الخير", "مساء النور")) {
             return "مساء النور! 🌆 كيف كان يومك؟"
         }
 
-        // ===== "تصبح على خير" / "نام" =====
-        if (matches(normalized, "تصبح على خير", "سنام", "اريد النوم")) {
+        if (matches(normalized, "تصبح على خير", "سنام", "اريد النوم", "طابت ليلتك")) {
             return "طابت ليلتك 🌙 نم جيداً، أراك غداً."
         }
 
-        // ===== لا يوجد رد ذكي =====
         return null
     }
 
     /**
-     * معالجة "اذا" / "ماذا الآن".
+     * معالجة "اذا".
      */
     private fun handleIfThen(context: ContextSnapshot): String {
         val sb = StringBuilder()
 
-        // إذا عاد بعد فجوة
         if (context.timeSinceLastChat != "الآن" && context.timeSinceLastChat != "أول محادثة") {
-            sb.append("أهلاً بعودتك! ")
+            sb.append("أهلاً بعودتك! 👋\n\n")
 
             if (context.lastTopic.isNotBlank()) {
-                sb.append("كنّا نتحدث عن: \"${context.lastTopic}\". ")
-                sb.append("نُكمل؟")
+                sb.append("كنّا نتحدث عن: \"${context.lastTopic.take(50)}\"\n\n")
+                sb.append("نُكمل؟ أم لديك شيء آخر؟")
             } else {
                 sb.append("كيف يمكنني مساعدتك الآن؟")
             }
         } else {
-            // نفس الجلسة
             if (context.lastTopic.isNotBlank()) {
-                sb.append("نحن في موضوع: \"${context.lastTopic}\". ")
-                sb.append("ماذا تريد أن نفعل الآن؟")
+                sb.append("نحن في موضوع: \"${context.lastTopic.take(50)}\"\n\n")
+                sb.append("ماذا تريد أن نفعل؟")
             } else {
-                sb.append("ماذا تريد أن نفعل الآن؟")
+                sb.append("ماذا تريد أن نفعل الآن؟ 🌟")
             }
         }
 
@@ -98,35 +97,54 @@ object SmartReplies {
     }
 
     /**
-     * معالجة "حسنا" / "تمام".
+     * معالجة "لماذا" — بحاجة للسياق.
      */
-    private fun handleAcknowledgment(context: ContextSnapshot): String {
+    private fun handleWhy(context: ContextSnapshot): String {
+        return if (context.lastRachaReply.isNotBlank()) {
+            "بخصوص ردّي السابق: \"${context.lastRachaReply.take(60)}...\"\n\n" +
+            "هل تريد توضيحاً أكثر؟ 🤔"
+        } else {
+            "لماذا ماذا؟ 🤔\nأخبرني ما الذي تريد فهمه."
+        }
+    }
+
+    /**
+     * معالجة "كيف".
+     */
+    private fun handleHow(context: ContextSnapshot): String {
+        return if (context.lastRachaReply.isNotBlank()) {
+            "بخصوص: \"${context.lastRachaReply.take(60)}...\"\n\n" +
+            "هل تريد شرحاً أكثر؟ 📖"
+        } else {
+            "كيف ماذا؟ 🤔\nأخبرني ما الذي تحتاج مساعدة فيه."
+        }
+    }
+
+    /**
+     * معالجة "ماذا".
+     */
+    private fun handleWhat(context: ContextSnapshot): String {
+        return if (context.lastRachaReply.isNotBlank()) {
+            "بخصوص: \"${context.lastRachaReply.take(60)}...\"\n\n" +
+            "هل تريد توضيحاً؟ 🤔"
+        } else {
+            "ماذا تريد أن تعرف؟ 🌟"
+        }
+    }
+
+    /**
+     * معالجة "حسنا".
+     */
+    private fun handleAcknowledgment(): String {
         val options = listOf(
-            "ممتاز! ماذا بعد؟",
+            "ممتاز! ماذا بعد؟ 🌟",
             "جيد! أخبرني المزيد.",
-            "تمام. ماذا تريد الآن؟",
-            "حسناً. أنا جاهز."
+            "تمام. أنا جاهز. 💙",
+            "حسناً. ماذا تريد الآن؟"
         )
         return options.random()
     }
 
-    /**
-     * معالجة الرفض.
-     */
-    private fun handleRefusal(): String {
-        return "حسناً، لا مشكلة. أخبرني متى تحتاجني."
-    }
-
-    /**
-     * اقتراح صباحي.
-     */
-    private fun getMorningSuggestion(context: ContextSnapshot): String {
-        return "هل تناولت فطورك؟"
-    }
-
-    /**
-     * تطبيع النص العربي.
-     */
     private fun normalize(input: String): String {
         return input
             .lowercase()
@@ -136,14 +154,12 @@ object SmartReplies {
             .replace("آ", "ا")
             .replace("ة", "ه")
             .replace("ى", "ي")
-            .replace(Regex("[\\u064B-\\u065F\\u0670]"), "") // إزالة التشكيل
+            .replace(Regex("[\\u064B-\\u065F\\u0670]"), "")
+            .replace(Regex("[؟?!.,،]"), "")
             .replace(Regex("\\s+"), " ")
             .trim()
     }
 
-    /**
-     * مطابقة كلمة أو عبارة.
-     */
     private fun matches(text: String, vararg keywords: String): Boolean {
         val normalizedText = normalize(text)
         return keywords.any { keyword ->

@@ -6,6 +6,9 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.racha.ai.core.agent.CommandResult
 import com.racha.ai.core.agent.LocalAgent
+import com.racha.ai.core.context.ContextBuilder
+import com.racha.ai.core.context.LocationIntentHandler
+import com.racha.ai.core.context.SmartReplies
 import com.racha.ai.core.preferences.AppPreferences
 import com.racha.ai.core.security.SecurePreferences
 import com.racha.ai.data.api.GeminiService
@@ -19,6 +22,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 
 data class ChatUiState(
@@ -43,6 +47,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
     private val memory = ChatMemoryRepository(application)
     private val profileRepo = UserProfileRepository(application)
     private val localAgent = LocalAgent(application)
+    private val contextBuilder = ContextBuilder(application)
 
     private var geminiService: GeminiService? = null
     private var qwenService: QwenService? = null
@@ -133,15 +138,9 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
             result?.fold(
                 onSuccess = {
                     saveMessageEntity(
-                        Message(
-                            text = "✅ تم نسخ نموذج Qwen بنجاح.",
-                            isFromUser = false
-                        )
+                        Message(text = "✅ تم نسخ نموذج Qwen بنجاح.", isFromUser = false)
                     )
-                    _uiState.value = _uiState.value.copy(
-                        qwenCopying = false,
-                        qwenModelReady = true
-                    )
+                    _uiState.value = _uiState.value.copy(qwenCopying = false, qwenModelReady = true)
                 },
                 onFailure = { error ->
                     saveMessageEntity(
@@ -166,53 +165,80 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
             saveMessageEntity(userMessage)
             _uiState.value = _uiState.value.copy(inputText = "", isSending = true)
 
-            // 1. LocalAgent أولاً
+            // ===== 1. LocalAgent (أوامر) =====
             val localResult = localAgent.processCommand(text)
-
             when (localResult) {
                 is CommandResult.Executed -> {
                     saveMessageEntity(Message(text = localResult.message, isFromUser = false))
                     _uiState.value = _uiState.value.copy(isSending = false)
+                    return@launch
                 }
                 is CommandResult.NeedsAction -> {
                     _uiState.value = _uiState.value.copy(
                         isSending = false,
                         pendingSpecialTool = localResult.action
                     )
+                    return@launch
                 }
                 is CommandResult.Failed -> {
                     saveMessageEntity(
                         Message(text = localResult.message, isFromUser = false, isError = true)
                     )
                     _uiState.value = _uiState.value.copy(isSending = false)
+                    return@launch
                 }
-                is CommandResult.NeedsLLM -> {
-                    val provider = _uiState.value.activeLLM
-                    if (provider == "qwen" && augmenter != null) {
-                        // ✅ Qwen + Knowledge Augmenter
-                        sendWithAugmenter(text)
-                    } else {
-                        sendToGemini(text)
-                    }
-                }
+                is CommandResult.NeedsLLM -> { /* نكمل */ }
+            }
+
+            // ===== 2. Location Intent =====
+            if (LocationIntentHandler.isLocationQuestion(text)) {
+                val locationAnswer = LocationIntentHandler.answer(getApplication())
+                saveMessageEntity(Message(text = locationAnswer, isFromUser = false))
+                _uiState.value = _uiState.value.copy(isSending = false)
+                return@launch
+            }
+
+            // ===== 3. بناء السياق =====
+            val recent = memory.getRecentForContext()
+            val history = recent.dropLast(1)
+            val context = contextBuilder.build(history, text)
+
+            // ===== 4. SmartReplies (ردود ذكية بدون LLM) =====
+            val smartReply = SmartReplies.tryReply(text, context)
+            if (smartReply != null) {
+                saveMessageEntity(Message(text = smartReply, isFromUser = false))
+                _uiState.value = _uiState.value.copy(isSending = false)
+                return@launch
+            }
+
+            // ===== 5. LLM (مع السياق) =====
+            val profileContext = profileRepo.getPromptContext()
+            val contextPrompt = context.toPrompt()
+
+            val provider = _uiState.value.activeLLM
+            if (provider == "qwen" && augmenter != null) {
+                sendWithAugmenter(text, history, contextPrompt, profileContext)
+            } else {
+                sendToGemini(text, history, contextPrompt, profileContext)
             }
         }
     }
 
-    /**
-     * Qwen + Knowledge Augmenter.
-     */
-    private suspend fun sendWithAugmenter(text: String) {
+    private suspend fun sendWithAugmenter(
+        text: String,
+        history: List<ChatMessageEntity>,
+        contextPrompt: String,
+        profileContext: String
+    ) {
         val aug = augmenter ?: run {
-            sendToGemini(text)
+            sendToGemini(text, history, contextPrompt, profileContext)
             return
         }
 
-        // إذا النموذج غير موجود
         if (qwenService?.isModelPresent() != true) {
             saveMessageEntity(
                 Message(
-                    text = "⚠️ نموذج Qwen غير موجود.\n\nاضغط على '📁 اختر ملف النموذج' في الأعلى.",
+                    text = "⚠️ نموذج Qwen غير موجود.",
                     isFromUser = false,
                     isError = true
                 )
@@ -225,34 +251,27 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
             _uiState.value = _uiState.value.copy(qwenLoading = true)
         }
 
-        val recent = memory.getRecentForContext()
-        val history = recent.dropLast(1)
-        val profileContext = profileRepo.getPromptContext()
+        // ✅ ندمج السياق مع الملف الشخصي
+        val fullContext = "$profileContext\n\n$contextPrompt"
 
-        // إعلام: جاري البحث إذا احتاج
-        val result = aug.smartAnswer(text, profileContext, history)
-
-        // إذا جاء من الويب، أظهر إشعار "بحث"
-        if (result.source == "web") {
-            _uiState.value = _uiState.value.copy(isSearching = true)
-        }
+        val result = aug.smartAnswer(text, fullContext, history)
 
         saveMessageEntity(
-            Message(
-                text = result.answer,
-                isFromUser = false,
-                isError = false
-            )
+            Message(text = result.answer, isFromUser = false, isError = false)
         )
 
         _uiState.value = _uiState.value.copy(
             isSending = false,
-            qwenLoading = false,
-            isSearching = false
+            qwenLoading = false
         )
     }
 
-    private suspend fun sendToGemini(text: String) {
+    private suspend fun sendToGemini(
+        text: String,
+        history: List<ChatMessageEntity>,
+        contextPrompt: String,
+        profileContext: String
+    ) {
         val service = geminiService
         if (service == null) {
             saveMessageEntity(
@@ -266,11 +285,8 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
             return
         }
 
-        val recent = memory.getRecentForContext()
-        val history = recent.dropLast(1)
-        val profileContext = profileRepo.getPromptContext()
-
-        val result = service.sendMessageWithContext(history, text, profileContext)
+        val fullContext = "$profileContext\n\n$contextPrompt"
+        val result = service.sendMessageWithContext(history, text, fullContext)
 
         result.fold(
             onSuccess = { reply ->
