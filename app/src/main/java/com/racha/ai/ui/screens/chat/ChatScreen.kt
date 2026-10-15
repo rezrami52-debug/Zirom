@@ -66,6 +66,7 @@ import com.google.accompanist.permissions.ExperimentalPermissionsApi
 import com.google.accompanist.permissions.isGranted
 import com.google.accompanist.permissions.rememberPermissionState
 import com.racha.ai.R
+import com.racha.ai.core.apps.AppChooserDialog
 import com.racha.ai.core.tools.PhotoCaptureActivity
 import com.racha.ai.core.voice.VoiceInputHelper
 import com.racha.ai.data.repository.NotificationRepository
@@ -206,7 +207,7 @@ fun ChatScreen(
         ) {
             WeatherBanner(weather = weatherState.weather)
 
-            // ✅ بطاقة "اختر نموذج Qwen" عند الحاجة
+            // ✅ بطاقة "اختر نموذج Qwen"
             if (state.activeLLM == "qwen" && !state.qwenModelReady) {
                 Card(
                     modifier = Modifier
@@ -231,10 +232,7 @@ fun ChatScreen(
                         )
                         Spacer(modifier = Modifier.width(8.dp))
                         Button(
-                            onClick = {
-                                // فتح SAF Picker لاختيار ملف task
-                                modelPickerLauncher.launch(arrayOf("*/*"))
-                            },
+                            onClick = { modelPickerLauncher.launch(arrayOf("*/*")) },
                             modifier = Modifier.fillMaxWidth()
                         ) {
                             Text("📁 اختر ملف النموذج")
@@ -262,7 +260,7 @@ fun ChatScreen(
                         )
                         Spacer(modifier = Modifier.width(12.dp))
                         Text(
-                            text = "⏳ Qwen يحمّل النموذج... (30-60 ثانية أول مرة)",
+                            text = "⏳ Qwen يحمّل النموذج...",
                             style = MaterialTheme.typography.bodySmall,
                             fontWeight = FontWeight.Bold
                         )
@@ -401,6 +399,13 @@ fun ChatScreen(
             }
         }
     }
+
+    // ✅ حوار اختيار التطبيق
+    AppChooserDialog(
+        state = state.appChooser,
+        onAppSelected = { app -> viewModel.onAppSelected(app) },
+        onDismiss = { viewModel.onAppChooserDismiss() }
+    )
 }
 
 @Composable

@@ -6,8 +6,10 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.racha.ai.core.agent.CommandResult
 import com.racha.ai.core.agent.LocalAgent
+import com.racha.ai.core.apps.AppChooserState
+import com.racha.ai.core.apps.AppResolver
+import com.racha.ai.core.apps.IntentHandler
 import com.racha.ai.core.context.ContextBuilder
-import com.racha.ai.core.context.LocationIntentHandler
 import com.racha.ai.core.context.SmartReplies
 import com.racha.ai.core.preferences.AppPreferences
 import com.racha.ai.core.security.SecurePreferences
@@ -36,7 +38,8 @@ data class ChatUiState(
     val qwenLoading: Boolean = false,
     val qwenModelReady: Boolean = false,
     val qwenCopying: Boolean = false,
-    val isSearching: Boolean = false
+    val isSearching: Boolean = false,
+    val appChooser: AppChooserState = AppChooserState()
 )
 
 class ChatViewModel(application: Application) : AndroidViewModel(application) {
@@ -47,6 +50,9 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
     private val profileRepo = UserProfileRepository(application)
     private val localAgent = LocalAgent(application)
     private val contextBuilder = ContextBuilder(application)
+
+    private val appResolver = AppResolver(application)
+    private val intentHandler = IntentHandler(application, appResolver)
 
     private var geminiService: GeminiService? = null
     private var qwenService: QwenService? = null
@@ -155,6 +161,31 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    /**
+     * عند اختيار تطبيق من الحوار.
+     */
+    fun onAppSelected(app: AppResolver.InstalledApp) {
+        val chooser = _uiState.value.appChooser
+        val action = chooser.pendingAction
+
+        // أخفِ الحوار
+        _uiState.value = _uiState.value.copy(appChooser = AppChooserState())
+
+        if (action == null) return
+
+        viewModelScope.launch {
+            val result = intentHandler.executeChoice(app, action)
+            saveMessageEntity(Message(text = result, isFromUser = false))
+        }
+    }
+
+    /**
+     * إلغاء الحوار.
+     */
+    fun onAppChooserDismiss() {
+        _uiState.value = _uiState.value.copy(appChooser = AppChooserState())
+    }
+
     fun sendMessage() {
         val text = _uiState.value.inputText.trim()
         if (text.isBlank() || _uiState.value.isSending) return
@@ -189,20 +220,34 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                 is CommandResult.NeedsLLM -> { /* نكمل */ }
             }
 
-            // ===== 2. Location Question ("اين انا") =====
-            if (LocationIntentHandler.isLocationQuestion(text)) {
-                val locationAnswer = LocationIntentHandler.answer(getApplication())
-                saveMessageEntity(Message(text = locationAnswer, isFromUser = false))
-                _uiState.value = _uiState.value.copy(isSending = false)
-                return@launch
-            }
-
-            // ===== 2.b. Map Request ("اعرض على الخريطة") =====
-            if (LocationIntentHandler.isMapRequest(text)) {
-                val mapResult = LocationIntentHandler.openInMaps(getApplication())
-                saveMessageEntity(Message(text = mapResult, isFromUser = false))
-                _uiState.value = _uiState.value.copy(isSending = false)
-                return@launch
+            // ===== 2. IntentHandler (تطبيقات، خرائط، رسائل) =====
+            val intentResult = intentHandler.handle(text)
+            when (intentResult) {
+                is IntentHandler.HandlerResult.DirectReply -> {
+                    saveMessageEntity(Message(text = intentResult.message, isFromUser = false))
+                    _uiState.value = _uiState.value.copy(isSending = false)
+                    return@launch
+                }
+                is IntentHandler.HandlerResult.ShowChooser -> {
+                    _uiState.value = _uiState.value.copy(
+                        isSending = false,
+                        appChooser = AppChooserState(
+                            isVisible = true,
+                            title = intentResult.title,
+                            apps = intentResult.apps,
+                            pendingAction = intentResult.pendingAction
+                        )
+                    )
+                    return@launch
+                }
+                is IntentHandler.HandlerResult.Error -> {
+                    saveMessageEntity(
+                        Message(text = intentResult.message, isFromUser = false, isError = true)
+                    )
+                    _uiState.value = _uiState.value.copy(isSending = false)
+                    return@launch
+                }
+                is IntentHandler.HandlerResult.Unknown -> { /* نكمل */ }
             }
 
             // ===== 3. بناء السياق =====
@@ -210,7 +255,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
             val history = recent.dropLast(1)
             val context = contextBuilder.build(history, text)
 
-            // ===== 4. SmartReplies (ردود ذكية مبرمجة) =====
+            // ===== 4. SmartReplies =====
             val smartReply = SmartReplies.tryReply(text, context)
             if (smartReply != null) {
                 saveMessageEntity(Message(text = smartReply, isFromUser = false))
@@ -218,7 +263,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                 return@launch
             }
 
-            // ===== 5. LLM (مع السياق) =====
+            // ===== 5. LLM =====
             val profileContext = profileRepo.getPromptContext()
             val contextPrompt = context.toPrompt()
 
