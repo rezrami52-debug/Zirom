@@ -16,7 +16,7 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         
-        // 🌙 التحقق من الوقت وتطبيق الوضع الليلي تلقائياً
+        // 🌙 الوضع الليلي التلقائي
         if (TimeHelper.isNightTime()) {
             AppCompatDelegate.setDefaultNightMode(AppCompatDelegate.MODE_NIGHT_YES)
         } else {
@@ -24,14 +24,13 @@ class MainActivity : ComponentActivity() {
         }
 
         setContent {
-            // ملاحظة: تأكد من أن RachaTheme يستخدم isSystemInDarkTheme() 
-            // أو يمرر قيمة darkTheme = TimeHelper.isNightTime()
             RachaTheme {
                 Surface(
                     modifier = Modifier.fillMaxSize(),
                     color = MaterialTheme.colorScheme.background
                 ) {
-                    RachaApp()
+                    // ✅ تمرير enableBiometricLock = true (يمكن تغييره لـ false لتعطيل القفل)
+                    RachaApp(enableBiometricLock = true)
                 }
             }
         }

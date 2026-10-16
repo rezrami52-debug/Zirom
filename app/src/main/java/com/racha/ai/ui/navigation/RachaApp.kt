@@ -37,13 +37,15 @@ sealed class Screen {
 }
 
 @Composable
-fun RachaApp() {
+fun RachaApp(
+    enableBiometricLock: Boolean = true // ✅ معامل جديد للتحكم في القفل
+) {
     val context = LocalContext.current
     val appPrefs = remember { AppPreferences(context) }
     val faceRepo = remember { FaceAuthRepository(context) }
 
     val startScreen: Screen = when {
-        faceRepo.isFaceAuthEnabled() -> Screen.BiometricLock
+        enableBiometricLock && faceRepo.isFaceAuthEnabled() -> Screen.BiometricLock
         appPrefs.isOnboardingComplete() -> Screen.Chat
         else -> Screen.Onboarding
     }
@@ -60,10 +62,9 @@ fun RachaApp() {
 
     when (currentScreen) {
         is Screen.BiometricLock -> BiometricLockScreen(
-            onSuccess = { currentScreen = Screen.Chat },
-            onCancel = {
-                android.os.Process.killProcess(android.os.Process.myPid())
-            }
+            onAuthSuccess = { currentScreen = Screen.Chat },
+            onAuthFailed = { /* يمكن للمستخدم المحاولة مرة أخرى */ },
+            onBypass = { currentScreen = Screen.Chat } // ✅ زر الطوارئ للدخول بدون تحقق
         )
 
         is Screen.Onboarding -> OnboardingScreen(
@@ -105,12 +106,15 @@ fun RachaApp() {
         is Screen.Notifications -> NotificationsScreen(
             onBack = { currentScreen = Screen.Chat }
         )
+
         is Screen.Prayer -> PrayerScreen(
             onBack = { currentScreen = Screen.Chat }
         )
+
         is Screen.Routine -> RoutineScreen(
             onBack = { currentScreen = Screen.Chat }
         )
+
         is Screen.Welcome -> WelcomeScreen(
             onOpenSettings = { currentScreen = Screen.Settings },
             onOpenChat = { currentScreen = Screen.Chat },
