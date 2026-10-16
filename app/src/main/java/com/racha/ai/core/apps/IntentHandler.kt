@@ -3,6 +3,7 @@ package com.racha.ai.core.apps
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
+import android.provider.MediaStore
 import android.util.Log
 import com.racha.ai.core.contacts.ContactResolver
 import com.racha.ai.services.location.LocationHelper
@@ -29,30 +30,26 @@ class IntentHandler(
 
     suspend fun handle(text: String): HandlerResult {
         val intentType = IntentClassifier.classify(text)
-        Log.d(TAG, "نية: $intentType")
+        Log.d(TAG, "نية: $intentType من نص: $text")
 
         return when (intentType) {
             IntentClassifier.IntentType.SHOW_LOCATION -> handleShowLocation()
             IntentClassifier.IntentType.OPEN_MAP -> handleOpenMap()
             IntentClassifier.IntentType.SEND_MESSAGE -> handleSendMessage(text)
             IntentClassifier.IntentType.MAKE_CALL -> handleMakeCall(text)
-            IntentClassifier.IntentType.SEND_EMAIL -> handleSendEmail()
             IntentClassifier.IntentType.OPEN_BROWSER -> handleOpenBrowser()
-            IntentClassifier.IntentType.OPEN_CAMERA -> HandlerResult.Error("⚠️ استخدم الأمر الصريح للكاميرا.")
-            IntentClassifier.IntentType.PLAY_MUSIC -> HandlerResult.Error("⚠️ قيد التطوير.")
-            IntentClassifier.IntentType.OPEN_APP -> HandlerResult.Error("⚠️ أخبرني باسم التطبيق.")
-            IntentClassifier.IntentType.UNKNOWN -> HandlerResult.Unknown
+            IntentClassifier.IntentType.OPEN_CAMERA -> handleOpenCamera()
+            IntentClassifier.IntentType.LIST_APPS -> handleListApps()
+            else -> HandlerResult.Unknown
         }
     }
 
     private suspend fun handleShowLocation(): HandlerResult {
         val location = LocationHelper.getCurrentLocation(context)
-            ?: return HandlerResult.Error("⚠️ لا أستطيع الوصول لموقعك.")
+            ?: return HandlerResult.Error("⚠️ لا أستطيع الوصول لموقعك. تأكد من تفعيل GPS.")
 
         val city = location.cityName ?: "منطقتك"
-        val lat = String.format("%.4f", location.latitude)
-        val lon = String.format("%.4f", location.longitude)
-        return HandlerResult.DirectReply("📍 أنت في: $city\n($lat, $lon)")
+        return HandlerResult.DirectReply("📍 أنت في: $city\nالإحداثيات: (${location.latitude}, ${location.longitude})")
     }
 
     private suspend fun handleOpenMap(): HandlerResult {
@@ -64,61 +61,56 @@ class IntentHandler(
             return HandlerResult.Error("⚠️ لا يوجد تطبيق خرائط مثبت.")
         }
 
-        if (mapApps.size == 1) {
-            val ok = appResolver.openMapsWithCoords(
-                mapApps[0].packageName, location.latitude, location.longitude
-            )
-            return if (ok) HandlerResult.DirectReply("🗺️ تم فتح ${mapApps[0].appName}")
-                   else HandlerResult.Error("⚠️ فشل الفتح.")
-        }
+        val preferredApp = mapApps.find {
+            it.packageName == "com.google.android.apps.maps" ||
+            it.packageName == "com.google.earth"
+        } ?: mapApps.first()
 
-        return HandlerResult.ShowChooser(
-            title = "🗺️ اختر تطبيق الخرائط",
-            apps = mapApps,
-            pendingAction = PendingAction(
-                type = "MAP",
-                lat = location.latitude,
-                lon = location.longitude
-            )
+        val success = appResolver.openMapsWithCoords(
+            preferredApp.packageName,
+            location.latitude,
+            location.longitude
         )
+
+        return if (success) {
+            HandlerResult.DirectReply("🗺️ تم فتح ${preferredApp.appName}")
+        } else {
+            try {
+                val uri = Uri.parse("geo:${location.latitude},${location.longitude}?q=${location.latitude},${location.longitude}")
+                val intent = Intent(Intent.ACTION_VIEW, uri).apply {
+                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                }
+                context.startActivity(intent)
+                HandlerResult.DirectReply("🗺️ تم فتح الخريطة")
+            } catch (e: Exception) {
+                HandlerResult.Error("⚠️ فشل فتح الخريطة")
+            }
+        }
     }
 
     private suspend fun handleSendMessage(text: String): HandlerResult {
         val contactName = extractName(text) ?: "محدد"
 
-        if (!contactResolver.hasPermission()) {
-            return HandlerResult.Error(
-                "⚠️ لا أستطيع قراءة جهات الاتصال.\n\n" +
-                "اذهب إلى:\nالإعدادات → التطبيقات → Racha → الصلاحيات\n" +
-                "وفعّل 'جهات الاتصال'."
-            )
-        }
-
         val contacts = contactResolver.searchContact(contactName)
         if (contacts.isEmpty()) {
             return HandlerResult.Error(
-                "⚠️ لم أجد جهة اتصال باسم '$contactName'.\n\n" +
-                "تأكد من الاسم."
+                "⚠️ لم أجد جهة اتصال باسم '$contactName'.\n" +
+                "تأكد من:\n" +
+                "1. وجود الاسم في جهات الاتصال\n" +
+                "2. منح التطبيق صلاحية قراءة جهات الاتصال"
             )
         }
 
-        val contactsInfo = contacts.joinToString("\n") {
-            "👤 ${it.name}\n📞 ${it.phoneNumber}"
-        }
+        val contactsInfo = contacts.joinToString("\n") { "👤 ${it.name}\n📞 ${it.phoneNumber}" }
 
         val messagingApps = appResolver.getMessagingApps()
         if (messagingApps.isEmpty()) {
-            return HandlerResult.Error(
-                "⚠️ لا يوجد تطبيق مراسلة مثبت.\n\n$contactsInfo"
-            )
+            return HandlerResult.Error("⚠️ لا يوجد تطبيق مراسلة مثبت.\n\n$contactsInfo")
         }
 
         if (messagingApps.size == 1) {
             appResolver.openApp(messagingApps[0].packageName)
-            return HandlerResult.DirectReply(
-                "✅ وجدت:\n$contactsInfo\n\n" +
-                "تم فتح ${messagingApps[0].appName}"
-            )
+            return HandlerResult.DirectReply("✅ وجدت:\n$contactsInfo\n\nتم فتح ${messagingApps[0].appName}")
         }
 
         return HandlerResult.ShowChooser(
@@ -134,89 +126,124 @@ class IntentHandler(
 
     private suspend fun handleMakeCall(text: String): HandlerResult {
         val contactName = extractName(text)
-            ?: return HandlerResult.Error("⚠️ حدد من تريد الاتصال به.")
 
-        if (!contactResolver.hasPermission()) {
-            return HandlerResult.Error("⚠️ صلاحية جهات الاتصال مطلوبة.")
+        val phoneRegex = Regex("\\d{8,}")
+        val phoneNumber = phoneRegex.find(text)?.value
+
+        if (phoneNumber != null) {
+            return makePhoneCall(phoneNumber)
         }
 
-        val contacts = contactResolver.searchContact(contactName)
-        if (contacts.isEmpty()) {
-            return HandlerResult.Error("⚠️ لم أجد '$contactName'.")
-        }
-
-        val contact = contacts.first()
-
-        return try {
-            val intent = Intent(Intent.ACTION_DIAL).apply {
-                data = Uri.parse("tel:${contact.phoneNumber}")
-                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        if (contactName != null) {
+            val contacts = contactResolver.searchContact(contactName)
+            if (contacts.isEmpty()) {
+                return HandlerResult.Error(
+                    "⚠️ لم أجد جهة اتصال باسم '$contactName'.\n" +
+                    "يمكنك:\n" +
+                    "1. إدخال الرقم مباشرة\n" +
+                    "2. التأكد من وجود الاسم في جهات الاتصال"
+                )
             }
-            context.startActivity(intent)
-            HandlerResult.DirectReply("📞 تم فتح الاتصال بـ ${contact.name}\n(${contact.phoneNumber})")
-        } catch (e: Exception) {
-            HandlerResult.Error("⚠️ فشل الاتصال: ${e.message}")
+
+            if (contacts.size == 1) {
+                return makePhoneCall(contacts[0].phoneNumber)
+            }
+
+            val contactsInfo = contacts.joinToString("\n") { "👤 ${it.name} - 📞 ${it.phoneNumber}" }
+            return HandlerResult.DirectReply("وجدت عدة جهات اتصال:\n$contactsInfo\n\nمن تريد الاتصال به؟")
         }
+
+        return HandlerResult.Error("⚠️ أدخل اسم جهة الاتصال أو الرقم مباشرة")
     }
 
-    private suspend fun handleSendEmail(): HandlerResult {
-        val emailApps = appResolver.getEmailApps()
-        if (emailApps.isEmpty()) return HandlerResult.Error("⚠️ لا يوجد تطبيق بريد.")
-
-        if (emailApps.size == 1) {
-            appResolver.openApp(emailApps[0].packageName)
-            return HandlerResult.DirectReply("📧 تم فتح ${emailApps[0].appName}")
+    private fun makePhoneCall(phoneNumber: String): HandlerResult {
+        return HandlerResult.DirectReply("📞 جاري الاتصال بـ $phoneNumber...").also {
+            try {
+                val intent = Intent(Intent.ACTION_DIAL).apply {
+                    data = Uri.parse("tel:$phoneNumber")
+                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                }
+                context.startActivity(intent)
+            } catch (e: Exception) {
+                Log.e(TAG, "فشل الاتصال", e)
+            }
         }
-
-        return HandlerResult.ShowChooser(
-            title = "📧 اختر تطبيق البريد",
-            apps = emailApps,
-            pendingAction = PendingAction(type = "EMAIL")
-        )
     }
 
     private suspend fun handleOpenBrowser(): HandlerResult {
         val browserApps = appResolver.getBrowserApps()
-        if (browserApps.isEmpty()) return HandlerResult.Error("⚠️ لا يوجد متصفح.")
-
-        if (browserApps.size == 1) {
-            appResolver.openApp(browserApps[0].packageName)
-            return HandlerResult.DirectReply("🌐 تم فتح ${browserApps[0].appName}")
+        if (browserApps.isEmpty()) {
+            return HandlerResult.Error("⚠️ لا يوجد متصفح مثبت.")
         }
 
-        return HandlerResult.ShowChooser(
-            title = "🌐 اختر المتصفح",
-            apps = browserApps,
-            pendingAction = PendingAction(type = "BROWSER")
+        appResolver.openApp(browserApps.first().packageName)
+        return HandlerResult.DirectReply("🌐 تم فتح ${browserApps.first().appName}")
+    }
+
+    private suspend fun handleOpenCamera(): HandlerResult {
+        return HandlerResult.DirectReply("📷 جاري فتح الكاميرا...").also {
+            try {
+                val intent = Intent(MediaStore.INTENT_ACTION_STILL_IMAGE_CAMERA).apply {
+                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                }
+                context.startActivity(intent)
+            } catch (e: Exception) {
+                Log.e(TAG, "فشل فتح الكاميرا", e)
+            }
+        }
+    }
+
+    private suspend fun handleListApps(): HandlerResult {
+        val allApps = appResolver.getAllInstalledApps()
+
+        if (allApps.isEmpty()) {
+            return HandlerResult.Error("⚠️ لم أتمكن من جلب قائمة التطبيقات.")
+        }
+
+        val totalCount = allApps.size
+        val previewApps = allApps.take(30)
+
+        val appsList = previewApps.joinToString("\n") { app ->
+            "• ${app.appName}"
+        }
+
+        val moreText = if (totalCount > 30) {
+            "\n\n... و ${totalCount - 30} تطبيق آخر"
+        } else {
+            ""
+        }
+
+        return HandlerResult.DirectReply(
+            "📱 لديك $totalCount تطبيق مثبت:\n\n" +
+            appsList +
+            moreText
         )
     }
 
     fun executeChoice(app: AppResolver.InstalledApp, action: PendingAction): String {
         return when (action.type) {
-            "MAP" -> {
-                if (action.lat != null && action.lon != null) {
-                    val ok = appResolver.openMapsWithCoords(
-                        app.packageName, action.lat, action.lon
-                    )
-                    if (ok) "🗺️ تم فتح ${app.appName}"
-                    else "⚠️ فشل فتح ${app.appName}"
-                } else "⚠️ لا إحداثيات"
-            }
             "MESSAGE" -> {
                 val details = action.contactDetails ?: ""
                 appResolver.openApp(app.packageName)
-                "✅ تم فتح ${app.appName}\n\nجهة الاتصال:\n$details"
+                "✅ جاري فتح ${app.appName} لمراسلة:\n$details"
+            }
+            "MAP" -> {
+                if (action.lat != null && action.lon != null) {
+                    val ok = appResolver.openMapsWithCoords(app.packageName, action.lat, action.lon)
+                    if (ok) "🗺️ تم فتح ${app.appName}" else "⚠️ فشل فتح ${app.appName}"
+                } else "⚠️ لا توجد إحداثيات"
             }
             else -> {
                 if (appResolver.openApp(app.packageName))
                     "✅ تم فتح ${app.appName}"
-                else "⚠️ فشل فتح ${app.appName}"
+                else
+                    "⚠️ فشل فتح ${app.appName}"
             }
         }
     }
 
     private fun extractName(text: String): String? {
-        val patterns = listOf("لـ", "ل ", "بـ", "ب ", "الى ", "إلى ")
+        val patterns = listOf("لـ", "ل ", "بـ", "ب ", "الى ", "إلى ", "مع ")
         for (pattern in patterns) {
             val idx = text.indexOf(pattern)
             if (idx >= 0) {
