@@ -29,8 +29,8 @@ class MainActivity : ComponentActivity() {
                     modifier = Modifier.fillMaxSize(),
                     color = MaterialTheme.colorScheme.background
                 ) {
-                    // ✅ تمرير enableBiometricLock = true (يمكن تغييره لـ false لتعطيل القفل)
-                    RachaApp(enableBiometricLock = true)
+                    // ✅ تمرير enableBiometricLock = false (يمكن تغييره لـ false لتعطيل القفل)
+                    RachaApp(enableBiometricLock = false)
                 }
             }
         }
