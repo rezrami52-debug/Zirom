@@ -13,11 +13,9 @@ class IntentHandler(
     private val context: Context,
     private val appResolver: AppResolver,
     private val contactResolver: ContactResolver,
-    private val systemController: SystemController // إضافة جديدة
+    private val systemController: SystemController
 ) {
-    companion object {
-        private const val TAG = "RachaIntentHandler"
-    }
+    companion object { private const val TAG = "RachaIntentHandler" }
 
     private val setAlarmHandler = SetAlarmHandler(context)
 
@@ -43,15 +41,13 @@ class IntentHandler(
             IntentClassifier.IntentType.LIST_APPS -> handleListApps()
             IntentClassifier.IntentType.SET_ALARM -> handleSetAlarm(text)
             IntentClassifier.IntentType.CORRECTION -> HandlerResult.NeedsCorrection(text)
-            
-            // ===== معالجة الأوامر الجديدة =====
             IntentClassifier.IntentType.TOGGLE_INTERNET -> HandlerResult.DirectReply(systemController.toggleInternet())
             IntentClassifier.IntentType.LOCK_SCREEN -> HandlerResult.DirectReply(systemController.lockScreen())
             IntentClassifier.IntentType.CLOSE_APP -> {
                 val appName = extractName(text) ?: "محدد"
                 HandlerResult.DirectReply(systemController.closeApp(appName))
             }
-            
+            IntentClassifier.IntentType.OPEN_APP -> handleOpenApp(text)
             else -> HandlerResult.Unknown
         }
     }
@@ -147,16 +143,68 @@ class IntentHandler(
         }
     }
 
+    /**
+     * رد ذكي للتعامل مع العدد الكبير من التطبيقات (257 تطبيقاً)
+     */
     private suspend fun handleListApps(): HandlerResult {
         val allApps = appResolver.getAllInstalledApps()
         if (allApps.isEmpty()) return HandlerResult.Error("⚠️ لم أتمكن من جلب قائمة التطبيقات.")
 
         val totalCount = allApps.size
-        val previewApps = allApps.take(30)
-        val appsList = previewApps.joinToString("\n") { "• ${it.appName}" }
-        val moreText = if (totalCount > 30) "\n\n... و ${totalCount - 30} تطبيق آخر" else ""
+        
+        // عرض عينة صغيرة مع توجيه المستخدم للاستخدام الأمثل
+        val sampleApps = allApps.take(15).joinToString(" • ") { it.appName }
+        
+        return HandlerResult.DirectReply(
+            "📱 لديك **$totalCount** تطبيقاً مثبتاً على هاتفك.\n\n" +
+            "بسبب العدد الكبير، لا يمكنني سرد الكل دفعة واحدة لتجنب تعليق الشاشة.\n\n" +
+            "💡 **كيف يمكنني مساعدتك؟**\n" +
+            "1. قل: \"افتح تطبيق [الاسم]\" (مثال: افتح تطبيق Instagram)\n" +
+            "2. اسأل: \"هل لدي تطبيق [الاسم]؟\"\n\n" +
+            "👀 *عينة من تطبيقاتك:* $sampleApps ..."
+        )
+    }
 
-        return HandlerResult.DirectReply("📱 لديك $totalCount تطبيق مثبت:\n\n$appsList$moreText")
+    /**
+     * فتح تطبيق محدد بالاسم (مطور للبحث في 257 تطبيقاً)
+     */
+    private suspend fun handleOpenApp(text: String): HandlerResult {
+        val appName = extractAppName(text)
+        
+        if (appName.isNullOrBlank()) {
+            return HandlerResult.Error("⚠️ لم أستطع تحديد اسم التطبيق. قل مثلاً: 'افتح تطبيق Instagram'")
+        }
+
+        val allApps = appResolver.getAllInstalledApps()
+        
+        // بحث ذكي: يتطابق مع اسم التطبيق أو اسم الحزمة (Package Name)
+        val targetApp = allApps.find { app ->
+            app.appName.contains(appName, ignoreCase = true) ||
+            app.packageName.contains(appName, ignoreCase = true)
+        }
+
+        if (targetApp == null) {
+            // محاولة البحث عن تطبيقات تحتوي على جزء من الاسم
+            val similarApps = allApps.filter { 
+                it.appName.contains(appName, ignoreCase = true) || 
+                it.packageName.contains(appName, ignoreCase = true)
+            }
+            
+            return if (similarApps.isNotEmpty()) {
+                HandlerResult.Error("⚠️ لم أجد تطبيقاً باسم '$appName' بالضبط.\nهل تقصد أحد هذه التطبيقات:\n" + 
+                    similarApps.take(5).joinToString("\n") { "• ${it.appName}" })
+            } else {
+                HandlerResult.Error("⚠️ لم أجد أي تطبيق على هاتفك يحتوي على الاسم '$appName'.")
+            }
+        }
+
+        return try {
+            appResolver.openApp(targetApp.packageName)
+            HandlerResult.DirectReply("✅ جاري فتح تطبيق **${targetApp.appName}**...")
+        } catch (e: Exception) {
+            Log.e(TAG, "فشل فتح التطبيق", e)
+            HandlerResult.Error("⚠️ فشل فتح تطبيق ${targetApp.appName}")
+        }
     }
 
     private suspend fun handleSetAlarm(text: String): HandlerResult {
@@ -183,8 +231,24 @@ class IntentHandler(
         }
     }
 
+    private fun extractAppName(text: String): String? {
+        val patterns = listOf("تطبيق ", "تطبيق", "افتح ", "افتح", "افتحي ", "افتحي", "شغل ", "شغل", "هل لدي تطبيق ", "هل يوجد تطبيق ")
+        for (pattern in patterns) {
+            val idx = text.indexOf(pattern, ignoreCase = true)
+            if (idx >= 0) {
+                val rest = text.substring(idx + pattern.length).trim()
+                val words = rest.split(" ")
+                if (words.isNotEmpty()) {
+                    val name = words.firstOrNull { it.isNotBlank() }
+                    if (name != null && name.isNotBlank()) return name
+                }
+            }
+        }
+        return null
+    }
+
     private fun extractName(text: String): String? {
-        val patterns = listOf("لـ", "ل ", "بـ", "ب ", "الى ", "إلى ", "مع ", "إغلاق تطبيق ", "اغلاق تطبيق ", "افتح تطبيق ")
+        val patterns = listOf("لـ", "ل ", "بـ", "ب ", "الى ", "إلى ", "مع ", "إرسال رسالة إلى ", "ارسل رسالة لـ ")
         for (pattern in patterns) {
             val idx = text.indexOf(pattern, ignoreCase = true)
             if (idx >= 0) {

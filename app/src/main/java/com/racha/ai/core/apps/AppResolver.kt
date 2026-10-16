@@ -18,78 +18,16 @@ class AppResolver(private val context: Context) {
     )
 
     enum class AppCategory(val arabic: String) {
-        MAPS("الخرائط"),
-        MESSAGING("المراسلة"),
-        EMAIL("البريد"),
-        PHONE("الاتصال"),
-        CAMERA("الكاميرا"),
-        MUSIC("الموسيقى"),
-        VIDEO("الفيديو"),
-        BROWSER("المتصفح"),
-        NOTES("الملاحظات"),
-        CALENDAR("التقويم"),
-        UNKNOWN("أخرى")
+        MAPS("الخرائط"), MESSAGING("المراسلة"), EMAIL("البريد"),
+        PHONE("الاتصال"), CAMERA("الكاميرا"), MUSIC("الموسيقى"),
+        VIDEO("الفيديو"), BROWSER("المتصفح"), UNKNOWN("أخرى")
     }
 
     private val knownApps = mapOf(
-        AppCategory.MAPS to listOf(
-            "com.google.earth",
-            "com.google.android.apps.maps",
-            "net.osmand",
-            "net.osmand.plus",
-            "com.waze"
-        ),
-        AppCategory.MESSAGING to listOf(
-            "com.whatsapp",
-            "com.whatsapp.w4b",
-            "org.telegram.messenger",
-            "com.facebook.orca",
-            "com.google.android.apps.messaging",
-            "com.android.mms",
-            "com.viber.voip",
-            "com.instagram.android"
-        ),
-        AppCategory.EMAIL to listOf(
-            "com.google.android.gm",
-            "com.microsoft.office.outlook",
-            "com.yahoo.mobile.client.android.mail"
-        ),
-        AppCategory.BROWSER to listOf(
-            "com.android.chrome",
-            "org.mozilla.firefox",
-            "com.brave.browser",
-            "com.opera.browser"
-        ),
-        AppCategory.CAMERA to listOf(
-            "com.android.camera",
-            "com.google.android.GoogleCamera",
-            "com.android.camera2"
-        ),
-        AppCategory.MUSIC to listOf(
-            "com.spotify.music",
-            "com.google.android.apps.youtube.music",
-            "com.soundcloud.android",
-            "org.videolan.vlc"
-        ),
-        AppCategory.VIDEO to listOf(
-            "com.google.android.youtube",
-            "com.mxtech.videoplayer.ad",
-            "org.videolan.vlc"
-        ),
-        AppCategory.PHONE to listOf(
-            "com.android.dialer",
-            "com.google.android.dialer",
-            "com.android.contacts"
-        ),
-        AppCategory.NOTES to listOf(
-            "com.google.android.keep",
-            "notion.id",
-            "com.samsung.android.app.notes"
-        ),
-        AppCategory.CALENDAR to listOf(
-            "com.google.android.calendar",
-            "com.samsung.android.calendar"
-        )
+        AppCategory.MAPS to listOf("com.google.earth", "com.google.android.apps.maps", "net.osmand", "com.waze"),
+        AppCategory.MESSAGING to listOf("com.whatsapp", "org.telegram.messenger", "com.facebook.orca", "com.google.android.apps.messaging"),
+        AppCategory.EMAIL to listOf("com.google.android.gm", "com.microsoft.office.outlook"),
+        AppCategory.BROWSER to listOf("com.android.chrome", "org.mozilla.firefox", "com.brave.browser")
     )
 
     fun findAppsForCategory(category: AppCategory): List<InstalledApp> {
@@ -100,19 +38,16 @@ class AppResolver(private val context: Context) {
         for (pkg in knownPackages) {
             try {
                 val appInfo = pm.getApplicationInfo(pkg, 0)
-                result.add(
-                    InstalledApp(
-                        packageName = pkg,
-                        appName = pm.getApplicationLabel(appInfo).toString()
-                    )
-                )
-            } catch (e: PackageManager.NameNotFoundException) {
-                // غير مثبت
-            }
+                result.add(InstalledApp(pkg, pm.getApplicationLabel(appInfo).toString()))
+            } catch (e: PackageManager.NameNotFoundException) { /* تخطي */ }
         }
         return result
     }
 
+    /**
+     * الدالة المطورة: تجلب جميع التطبيقات القابلة للإطلاق (Launchable Apps)
+     * متوافقة مع أندرويد 11+ بفضل QUERY_ALL_PACKAGES
+     */
     fun getAllInstalledApps(): List<InstalledApp> {
         val pm = context.packageManager
         val intent = Intent(Intent.ACTION_MAIN, null).apply {
@@ -120,17 +55,17 @@ class AppResolver(private val context: Context) {
         }
 
         return try {
-            pm.queryIntentActivities(intent, PackageManager.MATCH_DEFAULT_ONLY)
-                .map { resolveInfo ->
-                    InstalledApp(
-                        packageName = resolveInfo.activityInfo.packageName,
-                        appName = resolveInfo.loadLabel(pm).toString()
-                    )
-                }
-                .distinctBy { it.packageName }
-                .sortedBy { it.appName.lowercase() }
+            // استخدام MATCH_ALL لضمان عدم استبعاد أي تطبيق
+            val apps = pm.queryIntentActivities(intent, PackageManager.MATCH_ALL)
+            apps.map { resolveInfo ->
+                InstalledApp(
+                    packageName = resolveInfo.activityInfo.packageName,
+                    appName = resolveInfo.loadLabel(pm).toString()
+                )
+            }.distinctBy { it.packageName }
+             .sortedBy { it.appName.lowercase() }
         } catch (e: Exception) {
-            Log.e(TAG, "فشل جلب التطبيقات", e)
+            Log.e(TAG, "فشل جلب التطبيقات: ${e.message}")
             emptyList()
         }
     }
@@ -142,13 +77,10 @@ class AppResolver(private val context: Context) {
 
     fun openApp(packageName: String): Boolean {
         return try {
-            val intent = context.packageManager
-                .getLaunchIntentForPackage(packageName)
-                ?.apply { addFlags(Intent.FLAG_ACTIVITY_NEW_TASK) }
-            if (intent != null) {
-                context.startActivity(intent)
-                true
-            } else false
+            val intent = context.packageManager.getLaunchIntentForPackage(packageName)?.apply {
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            }
+            if (intent != null) { context.startActivity(intent); true } else false
         } catch (e: Exception) {
             Log.e(TAG, "فشل فتح $packageName", e)
             false
@@ -165,8 +97,17 @@ class AppResolver(private val context: Context) {
             context.startActivity(intent)
             true
         } catch (e: Exception) {
-            Log.e(TAG, "فشل فتح الخريطة", e)
-            false
+            try {
+                val fallbackUri = Uri.parse("geo:$lat,$lon?q=$lat,$lon")
+                val fallbackIntent = Intent(Intent.ACTION_VIEW, fallbackUri).apply {
+                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                }
+                context.startActivity(fallbackIntent)
+                true
+            } catch (e2: Exception) {
+                Log.e(TAG, "فشل فتح الخريطة تماماً", e2)
+                false
+            }
         }
     }
 }
