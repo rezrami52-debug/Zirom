@@ -54,7 +54,8 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
 
     private val appResolver = AppResolver(application)
     private val contactResolver = ContactResolver(application)
-    private val intentHandler = IntentHandler(application, appResolver, contactResolver)
+    private val systemController = com.racha.ai.core.tools.SystemController(application)
+    private val intentHandler = IntentHandler(application, appResolver, contactResolver, systemController)
 
     private var geminiService: GeminiService? = null
     private var qwenService: QwenService? = null
