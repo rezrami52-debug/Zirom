@@ -1,5 +1,6 @@
 package com.racha.ai.core.faceauth
 
+import android.app.Activity
 import android.os.Build
 import android.util.Log
 import androidx.biometric.BiometricManager
@@ -78,6 +79,18 @@ fun BiometricLockScreen(
     }
 }
 
+// ✅ دالة مساعدة لاستخراج Activity من Context بشكل آمن
+private fun getActivityFromContext(context: android.content.Context): Activity? {
+    var ctx = context
+    while (ctx is android.content.ContextWrapper) {
+        if (ctx is Activity) {
+            return ctx
+        }
+        ctx = ctx.baseContext
+    }
+    return null
+}
+
 private fun startBiometricAuth(
     context: android.content.Context,
     onAuthSuccess: () -> Unit,
@@ -86,7 +99,14 @@ private fun startBiometricAuth(
     onStateChanged: (Boolean) -> Unit
 ) {
     try {
-        val activity = context as? FragmentActivity ?: run { onError("خطأ في السياق"); return }
+        // ✅ استخدام الدالة المساعدة بدلاً من Casting المباشر
+        val activity = getActivityFromContext(context) as? FragmentActivity
+        
+        if (activity == null) {
+            onError("لا يمكن الوصول للنشاط الرئيسي. جرب إعادة فتح التطبيق.")
+            Log.e("BiometricLock", "Failed to get FragmentActivity from context")
+            return
+        }
 
         val biometricManager = BiometricManager.from(context)
         val canAuthenticate = biometricManager.canAuthenticate(
@@ -95,7 +115,7 @@ private fun startBiometricAuth(
 
         when (canAuthenticate) {
             BiometricManager.BIOMETRIC_SUCCESS -> { /* متابعة */ }
-            BiometricManager.BIOMETRIC_ERROR_NO_HARDWARE -> { onError("لا يوجد مستشعر بيومتري"); return }
+            BiometricManager.BIOMETRIC_ERROR_NO_HARDWARE -> { onError("لا يوجد مستشعر بيومتري في هذا الجهاز"); return }
             BiometricManager.BIOMETRIC_ERROR_HW_UNAVAILABLE -> { onError("المستشعر غير متاح حالياً"); return }
             BiometricManager.BIOMETRIC_ERROR_NONE_ENROLLED -> { onError("لم تقم بتسجيل بصمة أو وجه في إعدادات الهاتف"); return }
             else -> { onError("البيومترية غير مدعومة"); return }
@@ -140,7 +160,7 @@ private fun startBiometricAuth(
         onStateChanged(true)
         biometricPrompt.authenticate(promptInfoBuilder.build())
     } catch (e: Exception) {
-        Log.e("BiometricLock", "خطأ: ${e.message}", e)
-        onError("خطأ: ${e.message ?: "غير معروف"}")
+        Log.e("BiometricLock", "خطأ استثنائي: ${e.message}", e)
+        onError("خطأ غير متوقع: ${e.message ?: "راجع السجلات"}")
     }
 }
