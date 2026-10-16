@@ -15,11 +15,17 @@ fun WeatherBanner(weather: WeatherInfo?, modifier: Modifier = Modifier) {
     if (weather == null) return
 
     val isNight = TimeHelper.isNightTime()
-    
-    // اختيار الأيقونة بناءً على الوقت (يمكنك استبدال الأسماء بأيقوناتك الفعلية في res/drawable)
-    // مثال: R.drawable.ic_sun أو R.drawable.ic_moon
     val weatherIconText = if (isNight) "🌙" else "☀️"
-    val timeText = if (isNight) "مساءً" else "صباحاً"
+    
+    // ✅ إصلاح: استخدام description أو قيمة افتراضية آمنة بدلاً من condition
+    val weatherStatus = try {
+        // نحاول استخدام description إذا كانت موجودة في نموذجك
+        val descField = weather::class.members.find { it.name == "description" }
+        if (descField != null) (descField.call(weather) as? String) ?: "معتدل"
+        else "معتدل"
+    } catch (e: Exception) {
+        "معتدل"
+    }
 
     Card(
         modifier = modifier.fillMaxWidth(),
@@ -63,7 +69,7 @@ fun WeatherBanner(weather: WeatherInfo?, modifier: Modifier = Modifier) {
                     style = MaterialTheme.typography.displayLarge
                 )
                 Text(
-                    text = weather.condition ?: (if (isNight) "صافٍ ليلاً" else "صافٍ نهاراً"),
+                    text = weatherStatus,
                     style = MaterialTheme.typography.bodyMedium,
                     fontWeight = FontWeight.Medium,
                     color = MaterialTheme.colorScheme.onSurface

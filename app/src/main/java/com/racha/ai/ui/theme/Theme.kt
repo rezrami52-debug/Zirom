@@ -8,6 +8,7 @@ import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.dynamicDarkColorScheme
 import androidx.compose.material3.dynamicLightColorScheme
 import androidx.compose.material3.lightColorScheme
+import androidx.compose.material3.Typography // ✅ هذا هو الإصلاح الحاسم
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.SideEffect
 import androidx.compose.ui.graphics.toArgb
@@ -29,7 +30,7 @@ private val LightColorScheme = lightColorScheme(
 
 @Composable
 fun RachaTheme(
-    darkTheme: Boolean = isSystemInDarkTheme(), // هذا السطر هو المفتاح!
+    darkTheme: Boolean = isSystemInDarkTheme(),
     dynamicColor: Boolean = true,
     content: @Composable () -> Unit
 ) {
@@ -53,7 +54,7 @@ fun RachaTheme(
 
     MaterialTheme(
         colorScheme = colorScheme,
-        typography = Typography,
+        typography = Typography(), // ✅ الآن يستخدم Typography الصحيح من Material3
         content = content
     )
 }
