@@ -4,23 +4,13 @@ import java.util.Calendar
 
 object TimeHelper {
     
-    /**
-     * يحدد ما إذا كان الوقت الحالي ليلاً (من 6 مساءً حتى 6 صباحاً)
-     */
     fun isNightTime(): Boolean {
         val currentHour = Calendar.getInstance().get(Calendar.HOUR_OF_DAY)
-        // الليل يبدأ من الساعة 18 (6 مساءً) وينتهي عند الساعة 6 صباحاً
         return currentHour >= 18 || currentHour < 6
     }
 
-    /**
-     * يحدد ما إذا كان الوقت نهاراً
-     */
     fun isDayTime(): Boolean = !isNightTime()
 
-    /**
-     * يحصل على الوقت الحالي كنص (مثال: "10:30 مساءً")
-     */
     fun getCurrentTimeString(): String {
         val calendar = Calendar.getInstance()
         val hour = calendar.get(Calendar.HOUR_OF_DAY)
