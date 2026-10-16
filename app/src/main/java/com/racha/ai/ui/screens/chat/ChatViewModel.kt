@@ -242,6 +242,34 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                     _uiState.value = _uiState.value.copy(isSending = false)
                     return@launch
                 }
+                is IntentHandler.HandlerResult.NeedsCorrection -> {
+                    // ✅ التصحيح: نرسل لـ Qwen مع السياق
+                    val recent = memory.getRecentForContext()
+                    val history = recent.dropLast(1)
+                    val profileContext = profileRepo.getPromptContext()
+                    val contextPrompt = contextBuilder.build(history, text).toPrompt()
+
+                    // نبني سياق تصحيح مُوسَّع
+                    val correctionContext = buildCorrectionContext(text, history)
+
+                    val provider = _uiState.value.activeLLM
+                    if (provider == "qwen" && augmenter != null) {
+                        sendWithAugmenter(
+                            text,
+                            history,
+                            "$contextPrompt\n\n$correctionContext",
+                            profileContext
+                        )
+                    } else {
+                        sendToGemini(
+                            text,
+                            history,
+                            "$contextPrompt\n\n$correctionContext",
+                            profileContext
+                        )
+                    }
+                    return@launch
+                }
                 is IntentHandler.HandlerResult.Unknown -> { /* نكمل */ }
             }
 
@@ -269,6 +297,29 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                 sendToGemini(text, history, contextPrompt, profileContext)
             }
         }
+    }
+
+    /**
+     * بناء سياق التصحيح: نُخبر Qwen أن المستخدم يصحّح معلومة.
+     */
+    private fun buildCorrectionContext(
+        userText: String,
+        history: List<ChatMessageEntity>
+    ): String {
+        val lastRachaReply = history.lastOrNull { !it.isFromUser }?.text ?: ""
+        val lastUserMsg = history.lastOrNull { it.isFromUser }?.text ?: ""
+
+        return """
+            [تصحيح من المستخدم]
+            آخر سؤال: "$lastUserMsg"
+            ردي السابق: "${lastRachaReply.take(200)}"
+            تصحيح المستخدم: "$userText"
+            
+            المطلوب:
+            - أعد الإجابة بالسياق المصحّح.
+            - لا تكتفِ بالشكر أو "تمام".
+            - اعتمد على المعلومة الجديدة التي قدّمها المستخدم.
+        """.trimIndent()
     }
 
     private suspend fun sendWithAugmenter(

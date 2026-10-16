@@ -17,6 +17,8 @@ class IntentHandler(
         private const val TAG = "RachaIntentHandler"
     }
 
+    private val setAlarmHandler = SetAlarmHandler(context)
+
     sealed class HandlerResult {
         data class DirectReply(val message: String) : HandlerResult()
         data class ShowChooser(
@@ -25,6 +27,7 @@ class IntentHandler(
             val pendingAction: PendingAction
         ) : HandlerResult()
         data class Error(val message: String) : HandlerResult()
+        data class NeedsCorrection(val text: String) : HandlerResult()
         object Unknown : HandlerResult()
     }
 
@@ -40,6 +43,8 @@ class IntentHandler(
             IntentClassifier.IntentType.OPEN_BROWSER -> handleOpenBrowser()
             IntentClassifier.IntentType.OPEN_CAMERA -> handleOpenCamera()
             IntentClassifier.IntentType.LIST_APPS -> handleListApps()
+            IntentClassifier.IntentType.SET_ALARM -> handleSetAlarm(text)
+            IntentClassifier.IntentType.CORRECTION -> HandlerResult.NeedsCorrection(text)
             else -> HandlerResult.Unknown
         }
     }
@@ -75,16 +80,7 @@ class IntentHandler(
         return if (success) {
             HandlerResult.DirectReply("🗺️ تم فتح ${preferredApp.appName}")
         } else {
-            try {
-                val uri = Uri.parse("geo:${location.latitude},${location.longitude}?q=${location.latitude},${location.longitude}")
-                val intent = Intent(Intent.ACTION_VIEW, uri).apply {
-                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                }
-                context.startActivity(intent)
-                HandlerResult.DirectReply("🗺️ تم فتح الخريطة")
-            } catch (e: Exception) {
-                HandlerResult.Error("⚠️ فشل فتح الخريطة")
-            }
+            HandlerResult.Error("⚠️ فشل فتح الخريطة")
         }
     }
 
@@ -138,10 +134,7 @@ class IntentHandler(
             val contacts = contactResolver.searchContact(contactName)
             if (contacts.isEmpty()) {
                 return HandlerResult.Error(
-                    "⚠️ لم أجد جهة اتصال باسم '$contactName'.\n" +
-                    "يمكنك:\n" +
-                    "1. إدخال الرقم مباشرة\n" +
-                    "2. التأكد من وجود الاسم في جهات الاتصال"
+                    "⚠️ لم أجد جهة اتصال باسم '$contactName'."
                 )
             }
 
@@ -150,7 +143,7 @@ class IntentHandler(
             }
 
             val contactsInfo = contacts.joinToString("\n") { "👤 ${it.name} - 📞 ${it.phoneNumber}" }
-            return HandlerResult.DirectReply("وجدت عدة جهات اتصال:\n$contactsInfo\n\nمن تريد الاتصال به؟")
+            return HandlerResult.DirectReply("وجدت عدة جهات اتصال:\n$contactsInfo\n\nحدد من تريد.")
         }
 
         return HandlerResult.Error("⚠️ أدخل اسم جهة الاتصال أو الرقم مباشرة")
@@ -203,21 +196,30 @@ class IntentHandler(
         val totalCount = allApps.size
         val previewApps = allApps.take(30)
 
-        val appsList = previewApps.joinToString("\n") { app ->
-            "• ${app.appName}"
-        }
-
-        val moreText = if (totalCount > 30) {
-            "\n\n... و ${totalCount - 30} تطبيق آخر"
-        } else {
-            ""
-        }
+        val appsList = previewApps.joinToString("\n") { "• ${it.appName}" }
+        val moreText = if (totalCount > 30) "\n\n... و ${totalCount - 30} تطبيق آخر" else ""
 
         return HandlerResult.DirectReply(
-            "📱 لديك $totalCount تطبيق مثبت:\n\n" +
-            appsList +
-            moreText
+            "📱 لديك $totalCount تطبيق مثبت:\n\n$appsList$moreText"
         )
+    }
+
+    private suspend fun handleSetAlarm(text: String): HandlerResult {
+        val request = setAlarmHandler.parseAlarmRequest(text)
+            ?: return HandlerResult.Error(
+                "⚠️ لم أفهم وقت المنبه.\n\n" +
+                "مثال:\n" +
+                "• اضبط المنبه على الساعة 7 صباحاً\n" +
+                "• نبهني على الساعة 3 بعد الزوال"
+            )
+
+        val timeStr = setAlarmHandler.formatTime(request.hour, request.minute)
+
+        return if (setAlarmHandler.setAlarm(request)) {
+            HandlerResult.DirectReply("⏰ جاري ضبط المنبه على $timeStr")
+        } else {
+            HandlerResult.Error("⚠️ فشل ضبط المنبه")
+        }
     }
 
     fun executeChoice(app: AppResolver.InstalledApp, action: PendingAction): String {
