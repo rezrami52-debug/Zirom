@@ -17,17 +17,28 @@ class AppResolver(private val context: Context) {
         val appName: String
     )
 
+    // ✅ تم استعادة NOTES و CALENDAR لإصلاح خطأ البناء
     enum class AppCategory(val arabic: String) {
-        MAPS("الخرائط"), MESSAGING("المراسلة"), EMAIL("البريد"),
-        PHONE("الاتصال"), CAMERA("الكاميرا"), MUSIC("الموسيقى"),
-        VIDEO("الفيديو"), BROWSER("المتصفح"), UNKNOWN("أخرى")
+        MAPS("الخرائط"),
+        MESSAGING("المراسلة"),
+        EMAIL("البريد"),
+        PHONE("الاتصال"),
+        CAMERA("الكاميرا"),
+        MUSIC("الموسيقى"),
+        VIDEO("الفيديو"),
+        BROWSER("المتصفح"),
+        NOTES("الملاحظات"),
+        CALENDAR("التقويم"),
+        UNKNOWN("أخرى")
     }
 
     private val knownApps = mapOf(
         AppCategory.MAPS to listOf("com.google.earth", "com.google.android.apps.maps", "net.osmand", "com.waze"),
         AppCategory.MESSAGING to listOf("com.whatsapp", "org.telegram.messenger", "com.facebook.orca", "com.google.android.apps.messaging"),
         AppCategory.EMAIL to listOf("com.google.android.gm", "com.microsoft.office.outlook"),
-        AppCategory.BROWSER to listOf("com.android.chrome", "org.mozilla.firefox", "com.brave.browser")
+        AppCategory.BROWSER to listOf("com.android.chrome", "org.mozilla.firefox", "com.brave.browser"),
+        AppCategory.NOTES to listOf("com.google.android.keep", "notion.id", "com.samsung.android.app.notes"),
+        AppCategory.CALENDAR to listOf("com.google.android.calendar", "com.samsung.android.calendar")
     )
 
     fun findAppsForCategory(category: AppCategory): List<InstalledApp> {
@@ -46,7 +57,7 @@ class AppResolver(private val context: Context) {
 
     /**
      * الدالة المطورة: تجلب جميع التطبيقات القابلة للإطلاق (Launchable Apps)
-     * متوافقة مع أندرويد 11+ بفضل QUERY_ALL_PACKAGES
+     * متوافقة مع أندرويد 11+ بفضل QUERY_ALL_PACKAGES و MATCH_ALL
      */
     fun getAllInstalledApps(): List<InstalledApp> {
         val pm = context.packageManager
@@ -55,7 +66,6 @@ class AppResolver(private val context: Context) {
         }
 
         return try {
-            // استخدام MATCH_ALL لضمان عدم استبعاد أي تطبيق
             val apps = pm.queryIntentActivities(intent, PackageManager.MATCH_ALL)
             apps.map { resolveInfo ->
                 InstalledApp(
@@ -74,6 +84,8 @@ class AppResolver(private val context: Context) {
     fun getMessagingApps(): List<InstalledApp> = findAppsForCategory(AppCategory.MESSAGING)
     fun getEmailApps(): List<InstalledApp> = findAppsForCategory(AppCategory.EMAIL)
     fun getBrowserApps(): List<InstalledApp> = findAppsForCategory(AppCategory.BROWSER)
+    fun getNotesApps(): List<InstalledApp> = findAppsForCategory(AppCategory.NOTES)
+    fun getCalendarApps(): List<InstalledApp> = findAppsForCategory(AppCategory.CALENDAR)
 
     fun openApp(packageName: String): Boolean {
         return try {
