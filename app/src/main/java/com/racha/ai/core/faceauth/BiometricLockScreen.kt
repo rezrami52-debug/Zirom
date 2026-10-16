@@ -1,184 +1,146 @@
 package com.racha.ai.core.faceauth
 
+import android.os.Build
+import android.util.Log
 import androidx.biometric.BiometricManager
 import androidx.biometric.BiometricPrompt
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.padding
-import androidx.compose.material3.Button
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Text
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
+import androidx.compose.foundation.layout.*
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
 import androidx.fragment.app.FragmentActivity
-import com.racha.ai.core.preferences.AppPreferences
-import com.racha.ai.data.repository.LockAttemptRepository
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.launch
 
 @Composable
 fun BiometricLockScreen(
     onSuccess: () -> Unit,
-    onCancel: () -> Unit
+    onCancel: () -> Unit,
+    onBypass: (() -> Unit)? = null,
+    modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
-    val lifecycleOwner = LocalLifecycleOwner.current
-
-    var statusText by remember { mutableStateOf("يجب التحقق من هويتك لفتح Racha") }
-    var hasPrompted by remember { mutableStateOf(false) }
-    var failureCount by remember { mutableStateOf(0) }
-
-    val appPrefs = remember { AppPreferences(context) }
-    val attemptRepo = remember { LockAttemptRepository(context) }
+    var errorMessage by remember { mutableStateOf<String?>(null) }
+    var isAuthenticating by remember { mutableStateOf(false) }
 
     LaunchedEffect(Unit) {
-        // تنظيف الصور القديمة
-        CoroutineScope(Dispatchers.IO).launch {
-            attemptRepo.cleanupOld(appPrefs.getIntruderRetentionDays())
+        startBiometricAuth(context, 
+            onAuthSuccess = onSuccess,
+            onAuthFailed = { errorMessage = "فشل التحقق. حاول مرة أخرى." },
+            onError = { errorMessage = it },
+            onStateChanged = { isAuthenticating = it }
+        )
+    }
+
+    Column(
+        modifier = modifier.fillMaxSize().padding(32.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center
+    ) {
+        Text(text = "🔒", fontSize = 80.sp, modifier = Modifier.padding(bottom = 24.dp))
+        Text(text = "Racha محمي", fontSize = 28.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(bottom = 16.dp))
+
+        if (errorMessage != null) {
+            Text(text = "⚠️ $errorMessage", color = MaterialTheme.colorScheme.error, textAlign = TextAlign.Center, modifier = Modifier.padding(bottom = 24.dp))
+        } else if (isAuthenticating) {
+            Text(text = "جاري التحقق من هويتك...", style = MaterialTheme.typography.bodyLarge, textAlign = TextAlign.Center, modifier = Modifier.padding(bottom = 24.dp))
+        } else {
+            Text(text = "استخدم بصمة الإصبع أو وجهك لفتح التطبيق", style = MaterialTheme.typography.bodyLarge, textAlign = TextAlign.Center, modifier = Modifier.padding(bottom = 24.dp))
         }
 
-        if (hasPrompted) return@LaunchedEffect
-        hasPrompted = true
-
-        if (context !is FragmentActivity) {
-            statusText = "⚠️ خطأ: نشاط غير مدعوم"
-            return@LaunchedEffect
+        Button(
+            onClick = {
+                errorMessage = null
+                startBiometricAuth(context, onAuthSuccess = onSuccess, onAuthFailed = { errorMessage = "فشل التحقق." }, onError = { errorMessage = it }, onStateChanged = { isAuthenticating = it })
+            },
+            modifier = Modifier.fillMaxWidth(),
+            enabled = !isAuthenticating
+        ) {
+            Text("إعادة المحاولة")
         }
+
+        Spacer(modifier = Modifier.height(16.dp))
+
+        if (onBypass != null) {
+            OutlinedButton(onClick = onBypass, modifier = Modifier.fillMaxWidth()) {
+                Text("الدخول بدون تحقق (غير آمن)")
+            }
+        } else {
+            OutlinedButton(onClick = onCancel, modifier = Modifier.fillMaxWidth()) {
+                Text("إلغاء")
+            }
+        }
+    }
+}
+
+private fun startBiometricAuth(
+    context: android.content.Context,
+    onAuthSuccess: () -> Unit,
+    onAuthFailed: (String) -> Unit,
+    onError: (String) -> Unit,
+    onStateChanged: (Boolean) -> Unit
+) {
+    try {
+        val activity = context as? FragmentActivity ?: run { onError("خطأ في السياق"); return }
 
         val biometricManager = BiometricManager.from(context)
-        val authenticators = BiometricManager.Authenticators.BIOMETRIC_STRONG or
-                             BiometricManager.Authenticators.BIOMETRIC_WEAK
+        val canAuthenticate = biometricManager.canAuthenticate(
+            BiometricManager.Authenticators.BIOMETRIC_STRONG or BiometricManager.Authenticators.DEVICE_CREDENTIAL
+        )
 
-        val canAuthenticate = biometricManager.canAuthenticate(authenticators)
-
-        if (canAuthenticate != BiometricManager.BIOMETRIC_SUCCESS) {
-            statusText = when (canAuthenticate) {
-                BiometricManager.BIOMETRIC_ERROR_NO_HARDWARE ->
-                    "⚠️ الجهاز لا يدعم البصمة أو الوجه"
-                BiometricManager.BIOMETRIC_ERROR_HW_UNAVAILABLE ->
-                    "⚠️ مستشعر البصمة غير متاح حالياً"
-                BiometricManager.BIOMETRIC_ERROR_NONE_ENROLLED ->
-                    "⚠️ لم تسجّل بصمة/وجه في إعدادات الهاتف"
-                else -> "⚠️ خطأ في المصادقة"
-            }
-            return@LaunchedEffect
+        when (canAuthenticate) {
+            BiometricManager.BIOMETRIC_SUCCESS -> { /* متابعة */ }
+            BiometricManager.BIOMETRIC_ERROR_NO_HARDWARE -> { onError("لا يوجد مستشعر بيومتري"); return }
+            BiometricManager.BIOMETRIC_ERROR_HW_UNAVAILABLE -> { onError("المستشعر غير متاح حالياً"); return }
+            BiometricManager.BIOMETRIC_ERROR_NONE_ENROLLED -> { onError("لم تقم بتسجيل بصمة أو وجه في إعدادات الهاتف"); return }
+            else -> { onError("البيومترية غير مدعومة"); return }
         }
 
         val executor = ContextCompat.getMainExecutor(context)
-        val promptInfo = BiometricPrompt.PromptInfo.Builder()
-            .setTitle("🔒 Racha")
-            .setSubtitle("التحقق من هويتك")
-            .setDescription("استخدم بصمتك أو وجهك")
-            .setAllowedAuthenticators(authenticators)
+        val promptInfoBuilder = BiometricPrompt.PromptInfo.Builder()
+            .setTitle("التحقق من الهوية")
+            .setSubtitle("افتح Racha")
             .setNegativeButtonText("إلغاء")
-            .build()
 
-        val prompt = BiometricPrompt(
-            context,
-            executor,
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            promptInfoBuilder.setAllowedAuthenticators(
+                BiometricManager.Authenticators.BIOMETRIC_STRONG or BiometricManager.Authenticators.DEVICE_CREDENTIAL
+            )
+        } else {
+            promptInfoBuilder.setDeviceCredentialAllowed(true)
+        }
+
+        val biometricPrompt = BiometricPrompt(activity, executor,
             object : BiometricPrompt.AuthenticationCallback() {
-
                 override fun onAuthenticationSucceeded(result: BiometricPrompt.AuthenticationResult) {
                     super.onAuthenticationSucceeded(result)
-                    statusText = "✅ تم التحقق"
-                    // تسجيل النجاح
-                    CoroutineScope(Dispatchers.IO).launch {
-                        attemptRepo.recordAttempt(success = true)
-                    }
-                    onSuccess()
+                    onStateChanged(false)
+                    onAuthSuccess()
                 }
-
                 override fun onAuthenticationFailed() {
                     super.onAuthenticationFailed()
-                    failureCount++
-                    statusText = "❌ لم يتم التعرف. حاول مرة أخرى ($failureCount)"
-
-                    // ✅ هل وصلنا للحد الأدنى؟
-                    val threshold = appPrefs.getIntruderThreshold()
-                    val intruderEnabled = appPrefs.isIntruderPhotoEnabled()
-
-                    if (intruderEnabled && failureCount == threshold) {
-                        // التقاط صورة المتسلل
-                        statusText = "🔍 جاري التحقق من المحيط..."
-
-                        IntruderPhotoCapture.capture(
-                            context = context,
-                            lifecycleOwner = lifecycleOwner
-                        ) { file ->
-                            CoroutineScope(Dispatchers.IO).launch {
-                                attemptRepo.recordAttempt(
-                                    success = false,
-                                    photoPath = file?.absolutePath
-                                )
-                            }
-                        }
-                    }
+                    onStateChanged(false)
+                    onAuthFailed("فشل التحقق.")
                 }
-
                 override fun onAuthenticationError(errorCode: Int, errString: CharSequence) {
                     super.onAuthenticationError(errorCode, errString)
-                    statusText = "⚠️ $errString"
+                    onStateChanged(false)
+                    if (errorCode != BiometricPrompt.ERROR_USER_CANCELED && errorCode != BiometricPrompt.ERROR_NEGATIVE_BUTTON) {
+                        onError(errString.toString())
+                    }
                 }
             }
         )
 
-        prompt.authenticate(promptInfo)
-    }
-
-    Box(
-        modifier = Modifier.fillMaxSize(),
-        contentAlignment = Alignment.Center
-    ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(32.dp),
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.Center
-        ) {
-            Text(
-                text = "🔒",
-                style = MaterialTheme.typography.displayLarge
-            )
-            Spacer(modifier = Modifier.height(16.dp))
-            Text(
-                text = "Racha محمي",
-                style = MaterialTheme.typography.headlineMedium,
-                fontWeight = FontWeight.Bold
-            )
-            Spacer(modifier = Modifier.height(12.dp))
-            Text(
-                text = statusText,
-                style = MaterialTheme.typography.bodyLarge,
-                textAlign = TextAlign.Center,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-            Spacer(modifier = Modifier.height(24.dp))
-
-            Button(
-                onClick = onCancel,
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Text("إغلاق التطبيق")
-            }
-        }
+        onStateChanged(true)
+        biometricPrompt.authenticate(promptInfoBuilder.build())
+    } catch (e: Exception) {
+        Log.e("BiometricLock", "خطأ: ${e.message}", e)
+        onError("خطأ: ${e.message ?: "غير معروف"}")
     }
 }

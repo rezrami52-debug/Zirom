@@ -38,7 +38,7 @@ sealed class Screen {
 
 @Composable
 fun RachaApp(
-    enableBiometricLock: Boolean = true // ✅ معامل جديد للتحكم في القفل
+    enableBiometricLock: Boolean = true
 ) {
     val context = LocalContext.current
     val appPrefs = remember { AppPreferences(context) }
@@ -62,9 +62,9 @@ fun RachaApp(
 
     when (currentScreen) {
         is Screen.BiometricLock -> BiometricLockScreen(
-            onAuthSuccess = { currentScreen = Screen.Chat },
-            onAuthFailed = { /* يمكن للمستخدم المحاولة مرة أخرى */ },
-            onBypass = { currentScreen = Screen.Chat } // ✅ زر الطوارئ للدخول بدون تحقق
+            onSuccess = { currentScreen = Screen.Chat },
+            onCancel = { android.os.Process.killProcess(android.os.Process.myPid()) },
+            onBypass = { currentScreen = Screen.Chat } // ✅ زر الطوارئ
         )
 
         is Screen.Onboarding -> OnboardingScreen(
@@ -86,9 +86,7 @@ fun RachaApp(
             onOpenSecurityLog = { currentScreen = Screen.SecurityLog }
         )
 
-        is Screen.Profile -> ProfileScreen(
-            onBack = { currentScreen = Screen.Settings }
-        )
+        is Screen.Profile -> ProfileScreen(onBack = { currentScreen = Screen.Settings })
 
         is Screen.FaceEnrollment -> FaceCaptureScreen(
             onCaptured = { bitmap: Bitmap ->
@@ -99,22 +97,10 @@ fun RachaApp(
             onCancel = { currentScreen = Screen.Settings }
         )
 
-        is Screen.SecurityLog -> SecurityLogScreen(
-            onBack = { currentScreen = Screen.Settings }
-        )
-
-        is Screen.Notifications -> NotificationsScreen(
-            onBack = { currentScreen = Screen.Chat }
-        )
-
-        is Screen.Prayer -> PrayerScreen(
-            onBack = { currentScreen = Screen.Chat }
-        )
-
-        is Screen.Routine -> RoutineScreen(
-            onBack = { currentScreen = Screen.Chat }
-        )
-
+        is Screen.SecurityLog -> SecurityLogScreen(onBack = { currentScreen = Screen.Settings })
+        is Screen.Notifications -> NotificationsScreen(onBack = { currentScreen = Screen.Chat })
+        is Screen.Prayer -> PrayerScreen(onBack = { currentScreen = Screen.Chat })
+        is Screen.Routine -> RoutineScreen(onBack = { currentScreen = Screen.Chat })
         is Screen.Welcome -> WelcomeScreen(
             onOpenSettings = { currentScreen = Screen.Settings },
             onOpenChat = { currentScreen = Screen.Chat },
