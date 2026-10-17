@@ -205,7 +205,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
             // 3. بناء السياق والذكاء الاصطناعي
             val currentConvId = _uiState.value.currentConversationId
             val recent = memory.getRecentForContext(currentConvId)
-            val history = recent.dropLast(1).reversed() // لعكس الترتيب ليتوافق مع توقعات LLM
+            val history = recent.dropLast(1).reversed()
             val context = contextBuilder.build(history, text)
             
             val smartReply = SmartReplies.tryReply(text, context)
@@ -283,12 +283,14 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         _uiState.value = _uiState.value.copy(pendingSpecialTool = null)
     }
 
+    // ✅ الإصلاح الحاسم هنا: إضافة conversationId = convId
     private suspend fun saveMessageEntity(message: Message) {
         val convId = _uiState.value.currentConversationId
         memory.saveMessage(
             convId,
             ChatMessageEntity(
                 id = message.id,
+                conversationId = convId, // ✅ هذا هو السطر الذي كان مفقوداً
                 text = message.text,
                 isFromUser = message.isFromUser,
                 isError = message.isError,
@@ -319,7 +321,6 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
     fun clearHistory() {
         viewModelScope.launch {
             memory.clearAll()
-            // نبدأ محادثة جديدة بعد المسح
             startNewChat()
         }
     }

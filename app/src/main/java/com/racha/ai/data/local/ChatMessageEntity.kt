@@ -7,7 +7,7 @@ import java.util.UUID
 @Entity(tableName = "chat_messages")
 data class ChatMessageEntity(
     @PrimaryKey val id: String = UUID.randomUUID().toString(),
-    val conversationId: String, // ✅ ربط الرسالة بالمحادثة
+    val conversationId: String = "", // ✅ إضافة قيمة افتراضية لتجنب أخطاء البناء
     val text: String,
     val isFromUser: Boolean,
     val isError: Boolean = false,
