@@ -16,22 +16,54 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
 import androidx.core.view.WindowCompat
 
-private val DarkColorScheme = darkColorScheme(
-    primary = Purple80,
-    secondary = PurpleGrey80,
-    tertiary = Pink80
+//  ثيم النهار (ألوان الورود)
+private val DayColorScheme = lightColorScheme(
+    primary = RosePurplePrimary,
+    onPrimary = Color.White,
+    primaryContainer = LavenderLight,
+    onPrimaryContainer = Color.Black,
+    secondary = LavenderPrimary,
+    onSecondary = Color.White,
+    secondaryContainer = LavenderLight,
+    onSecondaryContainer = Color.Black,
+    tertiary = RosePurpleDark,
+    onTertiary = Color.White,
+    background = Color(0xFFFFFBFF),  // أبيض مائل للوردي قليلاً
+    onBackground = Color.Black,
+    surface = Color(0xFFFFF9FF),
+    onSurface = Color.Black,
+    surfaceVariant = LavenderLight,
+    onSurfaceVariant = Color.Black,
+    error = Color(0xFFBA1A1A),
+    onError = Color.White
 )
 
-private val LightColorScheme = lightColorScheme(
-    primary = Purple40,
-    secondary = PurpleGrey40,
-    tertiary = Pink40
+// 🌳 ثيم الليل (ألوان الأشجار)
+private val NightColorScheme = darkColorScheme(
+    primary = NightPrimary,
+    onPrimary = Color.White,
+    primaryContainer = DeepPurpleNight,
+    onPrimaryContainer = Color.White,
+    secondary = NightSecondary,
+    onSecondary = Color.White,
+    secondaryContainer = MidnightPurple,
+    onSecondaryContainer = Color.White,
+    tertiary = Color(0xFF9B7FD9),
+    onTertiary = Color.White,
+    background = Color(0xFF1A1230),  // داكن جداً
+    onBackground = Color.White,
+    surface = Color(0xFF241840),
+    onSurface = Color.White,
+    surfaceVariant = NightSurface,
+    onSurfaceVariant = Color.White,
+    error = Color(0xFFCF6679),
+    onError = Color.Black
 )
 
 @Composable
 fun RachaTheme(
-    darkTheme: Boolean = isSystemInDarkTheme(),
-    dynamicColor: Boolean = true,
+    darkTheme: Boolean = isSystemInDarkTheme(), // ✅ يتبع إعدادات النظام تلقائياً
+    dynamicColor: Boolean = false, // ❌ نعطل الألوان الديناميكية لنستخدم ألواننا الخاصة
     content: @Composable () -> Unit
 ) {
     val colorScheme = when {
@@ -39,8 +71,8 @@ fun RachaTheme(
             val context = LocalContext.current
             if (darkTheme) dynamicDarkColorScheme(context) else dynamicLightColorScheme(context)
         }
-        darkTheme -> DarkColorScheme
-        else -> LightColorScheme
+        darkTheme -> NightColorScheme
+        else -> DayColorScheme
     }
     
     val view = LocalView.current
