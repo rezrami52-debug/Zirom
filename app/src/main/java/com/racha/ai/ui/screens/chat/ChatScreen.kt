@@ -171,18 +171,28 @@ fun ChatScreen(
     ) { paddingValues ->
         Column(modifier = Modifier.fillMaxSize().padding(paddingValues)) {
             
-            // ✅ التحديث الذكي: عرض حالة الطقس (تحميل، خطأ، أو نجاح)
+            // ✅ العرض الذكي لحالة الطقس (تحميل، خطأ، أو نجاح)
             when {
                 weatherState.isLoading -> {
-                    Row(modifier = Modifier.fillMaxWidth().padding(16.dp), horizontalArrangement = Arrangement.Center) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth().padding(16.dp), 
+                        horizontalArrangement = Arrangement.Center,
+                        verticalAlignment = Alignment.CenterVertically // ✅ تم نقلها هنا بشكل صحيح
+                    ) {
                         CircularProgressIndicator(modifier = Modifier.size(24.dp))
                         Spacer(modifier = Modifier.width(8.dp))
-                        Text("جاري تحديث الطقس...", verticalAlignment = Alignment.CenterVertically)
+                        Text("جاري تحديث الطقس...")
                     }
                 }
                 weatherState.error != null -> {
-                    Card(modifier = Modifier.fillMaxWidth().padding(16.dp), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer)) {
-                        Row(modifier = Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Card(
+                        modifier = Modifier.fillMaxWidth().padding(16.dp), 
+                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer)
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(12.dp), 
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
                             Icon(Icons.Default.LocationOff, contentDescription = null, tint = MaterialTheme.colorScheme.onErrorContainer)
                             Spacer(modifier = Modifier.width(8.dp))
                             Text(weatherState.error ?: "خطأ في الطقس", color = MaterialTheme.colorScheme.onErrorContainer)
