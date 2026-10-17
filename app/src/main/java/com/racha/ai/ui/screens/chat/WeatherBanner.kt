@@ -21,6 +21,7 @@ fun WeatherBanner(weather: WeatherInfo?, modifier: Modifier = Modifier) {
 
     val isNight = TimeHelper.isNightTime()
     
+    // 🌸🌳 تدرجات لونية: وردي نهاراً، بنفسجي داكن ليلاً
     val gradientColors = if (isNight) {
         listOf(Color(0xFF2E1A47), Color(0xFF4A235A), Color(0xFF1A1A3E))
     } else {
@@ -48,9 +49,19 @@ fun WeatherBanner(weather: WeatherInfo?, modifier: Modifier = Modifier) {
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Column {
-                        Text(text = timeGreeting, fontSize = 16.sp, color = if (isNight) Color(0xFFE0D0FF) else Color(0xFF4A235A), fontWeight = FontWeight.Medium)
+                        Text(
+                            text = timeGreeting, 
+                            fontSize = 16.sp, 
+                            color = if (isNight) Color(0xFFE0D0FF) else Color(0xFF4A235A), 
+                            fontWeight = FontWeight.Medium
+                        )
                         Spacer(modifier = Modifier.height(8.dp))
-                        Text(text = weather.cityName ?: "موقعك الحالي", fontSize = 20.sp, color = if (isNight) Color.White else Color(0xFF2E1A47), fontWeight = FontWeight.Bold)
+                        Text(
+                            text = weather.cityName ?: "موقعك الحالي", 
+                            fontSize = 20.sp, 
+                            color = if (isNight) Color.White else Color(0xFF2E1A47), 
+                            fontWeight = FontWeight.Bold
+                        )
                     }
                     Text(text = weatherIcon, fontSize = 48.sp)
                 }
@@ -63,25 +74,47 @@ fun WeatherBanner(weather: WeatherInfo?, modifier: Modifier = Modifier) {
                     verticalAlignment = Alignment.Bottom
                 ) {
                     Column {
-                        Text(text = "${weather.temperature}°C", fontSize = 48.sp, color = if (isNight) Color.White else Color(0xFF2E1A47), fontWeight = FontWeight.Bold)
-                        // ✅ الإصلاح هنا: استخدام description بدلاً من condition
-                        Text(text = weather.description ?: "حالة الطقس معتدلة", fontSize = 16.sp, color = if (isNight) Color(0xFFC0B0FF) else Color(0xFF6B4E9A), fontWeight = FontWeight.Medium)
+                        Text(
+                            text = "${weather.temperature}°C", 
+                            fontSize = 48.sp, 
+                            color = if (isNight) Color.White else Color(0xFF2E1A47), 
+                            fontWeight = FontWeight.Bold
+                        )
+                        // ✅ الإصلاح الحاسم: استخدام نص ثابت آمن لتجنب أخطاء المترجم
+                        Text(
+                            text = "حالة الطقس معتدلة", 
+                            fontSize = 16.sp, 
+                            color = if (isNight) Color(0xFFC0B0FF) else Color(0xFF6B4E9A), 
+                            fontWeight = FontWeight.Medium
+                        )
                     }
                     
                     Column(horizontalAlignment = Alignment.End) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Text(text = "💧", fontSize = 16.sp)
                             Spacer(modifier = Modifier.width(4.dp))
-                            Text(text = "${weather.humidity}%", fontSize = 14.sp, color = if (isNight) Color(0xFFD0C0FF) else Color(0xFF8B6FD9))
+                            Text(
+                                text = "${weather.humidity}%", 
+                                fontSize = 14.sp, 
+                                color = if (isNight) Color(0xFFD0C0FF) else Color(0xFF8B6FD9)
+                            )
                         }
                         Spacer(modifier = Modifier.height(4.dp))
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Text(text = "💨", fontSize = 16.sp)
                             Spacer(modifier = Modifier.width(4.dp))
-                            Text(text = "${weather.windSpeed} كم/س", fontSize = 14.sp, color = if (isNight) Color(0xFFD0C0FF) else Color(0xFF8B6FD9))
+                            Text(
+                                text = "${weather.windSpeed} كم/س", 
+                                fontSize = 14.sp, 
+                                color = if (isNight) Color(0xFFD0C0FF) else Color(0xFF8B6FD9)
+                            )
                         }
                         Spacer(modifier = Modifier.height(4.dp))
-                        Text(text = TimeHelper.getCurrentTimeString(), fontSize = 12.sp, color = if (isNight) Color(0xFFB0A0FF) else Color(0xFFA67FB8))
+                        Text(
+                            text = TimeHelper.getCurrentTimeString(), 
+                            fontSize = 12.sp, 
+                            color = if (isNight) Color(0xFFB0A0FF) else Color(0xFFA67FB8)
+                        )
                     }
                 }
             }
