@@ -30,8 +30,10 @@ import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.Schedule
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Send
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -92,6 +94,7 @@ fun ChatScreen(
 
     var isListening by remember { mutableStateOf(false) }
     var voiceError by remember { mutableStateOf<String?>(null) }
+    var showHistoryDialog by remember { mutableStateOf(false) }
 
     val voiceHelper = remember { VoiceInputHelper(context) }
 
@@ -467,4 +470,46 @@ fun TypingIndicator() {
             }
         }
     }
+
+    // نافذة المحادثات السابقة
+    if (showHistoryDialog) {
+        AlertDialog(
+            onDismissRequest = { showHistoryDialog = false },
+            title = { Text("المحادثات السابقة") },
+            text = {
+                LazyColumn(modifier = Modifier.heightIn(max = 400.dp)) {
+                    items(state.conversations) { conv ->
+                        val isSelected = conv.id == state.currentConversationId
+                        Card(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(vertical = 4.dp)
+                                .clickable {
+                                    viewModel.loadConversation(conv.id)
+                                    showHistoryDialog = false
+                                },
+                            colors = CardDefaults.cardColors(
+                                containerColor = if (isSelected) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surface
+                            )
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(12.dp).fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = androidx.compose.ui.Alignment.CenterVertically
+                            ) {
+                                Text(conv.title, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold)
+                                if (isSelected) Text("حالي", fontSize = 12.sp, color = MaterialTheme.colorScheme.primary)
+                            }
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                Button(onClick = { showHistoryDialog = false }) {
+                    Text("إغلاق")
+                }
+            }
+        )
+    }
+
 }
