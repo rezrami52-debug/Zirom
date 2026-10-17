@@ -44,8 +44,8 @@ data class ChatUiState(
     val qwenCopying: Boolean = false,
     val isSearching: Boolean = false,
     val appChooser: AppChooserState = AppChooserState(),
-    val currentConversationId: String = UUID.randomUUID().toString(), // ✅ معرف المحادثة الحالية
-    val conversations: List<ConversationEntity> = emptyList() // ✅ قائمة المحادثات
+    val currentConversationId: String = UUID.randomUUID().toString(),
+    val conversations: List<ConversationEntity> = emptyList()
 )
 
 class ChatViewModel(application: Application) : AndroidViewModel(application) {
@@ -71,7 +71,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
     init {
         initializeServices()
         observeConversations()
-        startNewChat() // ✅ يبدأ بمحادثة جديدة دائماً عند فتح التطبيق
+        startNewChat()
     }
 
     private fun initializeServices() {
@@ -107,7 +107,6 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                 inputText = "",
                 isSending = false
             )
-            // رسالة ترحيبية اختيارية
             saveMessageEntity(Message(text = "أهلاً بك! أنا Racha، كيف يمكنني مساعدتك اليوم؟", isFromUser = false))
         }
     }
@@ -137,6 +136,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
             saveMessageEntity(userMessage)
             _uiState.value = _uiState.value.copy(inputText = "", isSending = true)
 
+            // 1. LocalAgent
             val localResult = localAgent.processCommand(text)
             when (localResult) {
                 is CommandResult.Executed -> {
@@ -156,6 +156,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                 is CommandResult.NeedsLLM -> { /* نكمل */ }
             }
 
+            // 2. IntentHandler
             val intentResult = intentHandler.handle(text)
             when (intentResult) {
                 is IntentHandler.HandlerResult.DirectReply -> {
@@ -178,10 +179,46 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                 is IntentHandler.HandlerResult.NeedsCorrection, is IntentHandler.HandlerResult.Unknown -> { /* نكمل للذكاء الاصطناعي */ }
             }
 
-            // هنا يتم استدعاء الذكاء الاصطناعي (Gemini/Qwen) بشكل مبسط للتركيز على ميزة المحادثات
-            saveMessageEntity(Message(text = "جاري المعالجة...", isFromUser = false))
-            _uiState.value = _uiState.value.copy(isSending = false)
+            // 3. الذكاء الاصطناعي (LLM)
+            val recent = memory.getMessagesByConversation(_uiState.value.currentConversationId) // ملاحظة: قد تحتاج لدالة getRecent في Repository
+            // للتبسيط والأمان، سنستخدم ردود SmartReplies أو نرسل لـ LLM مباشرة
+            val profileContext = profileRepo.getPromptContext()
+            
+            val provider = _uiState.value.activeLLM
+            if (provider == "qwen" && augmenter != null && qwenService?.isModelPresent() == true) {
+                sendWithAugmenter(text, profileContext)
+            } else {
+                sendToGemini(text, profileContext)
+            }
         }
+    }
+
+    private suspend fun sendWithAugmenter(text: String, profileContext: String) {
+        val aug = augmenter ?: run { sendToGemini(text, profileContext); return }
+        if (qwenService?.isReady() != true) _uiState.value = _uiState.value.copy(qwenLoading = true)
+        
+        val result = aug.smartAnswer(text, profileContext, emptyList()) // مبسط للسلامة
+        saveMessageEntity(Message(text = result.answer, isFromUser = false, isError = false))
+        _uiState.value = _uiState.value.copy(isSending = false, qwenLoading = false)
+    }
+
+    private suspend fun sendToGemini(text: String, profileContext: String) {
+        val service = geminiService ?: run {
+            saveMessageEntity(Message(text = "⚠️ مفتاح Gemini غير موجود.", isFromUser = false, isError = true))
+            _uiState.value = _uiState.value.copy(isSending = false)
+            return
+        }
+        val result = service.sendMessageWithContext(emptyList(), text, profileContext)
+        result.fold(
+            onSuccess = { reply ->
+                saveMessageEntity(Message(text = reply, isFromUser = false))
+                _uiState.value = _uiState.value.copy(isSending = false)
+            },
+            onFailure = { error ->
+                saveMessageEntity(Message(text = "⚠️ خطأ: ${error.message ?: "غير معروف"}", isFromUser = false, isError = true))
+                _uiState.value = _uiState.value.copy(isSending = false)
+            }
+        )
     }
 
     private suspend fun saveMessageEntity(message: Message) {
@@ -195,6 +232,10 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                 timestamp = message.timestamp
             )
         )
+        // تحديث القائمة المحلية فوراً
+        val currentMessages = _uiState.value.messages.toMutableList()
+        currentMessages.add(message)
+        _uiState.value = _uiState.value.copy(messages = currentMessages)
     }
 
     fun onAppSelected(app: AppResolver.InstalledApp) {
