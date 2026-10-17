@@ -16,11 +16,11 @@ class LocalAgent(private val context: Context) {
             lower.contains("انستغرام") || lower.contains("واتساب") || lower.contains("يوتيوب") ||
             lower.contains("facebook") || lower.contains("instagram") || lower.contains("whatsapp")) {
             
-            // ✅ إضافة الأقواس () لأن المترجم يطلب تهيئة الكلاس
-            return CommandResult.NeedsLLM() 
+            // ✅ تمرير النص الأصلي كمعامل مطلوب حسب تعريف مشروعك
+            return CommandResult.NeedsLLM(text) 
         }
 
-        // ✅ إضافة الأقواس () هنا أيضاً
-        return CommandResult.NeedsLLM()
+        // ✅ تمرير النص الأصلي كمعامل مطلوب هنا أيضاً
+        return CommandResult.NeedsLLM(text)
     }
 }
