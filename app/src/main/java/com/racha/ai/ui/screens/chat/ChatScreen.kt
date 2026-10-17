@@ -62,8 +62,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.google.accompanist.permissions.ExperimentalPermissionsApi
-import com.google.accompanist.permissions.rememberPermissionState
 import com.google.accompanist.permissions.isGranted
+import com.google.accompanist.permissions.rememberPermissionState
 import com.racha.ai.core.apps.AppChooserDialog
 import com.racha.ai.core.tools.PhotoCaptureActivity
 import com.racha.ai.core.voice.VoiceInputHelper
@@ -141,7 +141,7 @@ fun ChatScreen(
                     IconButton(onClick = { viewModel.startNewChat() }) {
                         Icon(Icons.Default.Add, contentDescription = "محادثة جديدة")
                     }
-                    IconButton(onClick = { onOpenNotifications() }) {
+                    IconButton(onClick = onOpenNotifications) {
                         Box {
                             Icon(Icons.Default.Notifications, contentDescription = "الإشعارات")
                             if (unreadCount > 0) {
@@ -196,8 +196,11 @@ fun ChatScreen(
                 Spacer(modifier = Modifier.width(8.dp))
                 IconButton(
                     onClick = {
-                        if (state.inputText.isNotBlank()) viewModel.sendMessage()
-                        else if (micPermission.status.isGranted) {
+                        if (state.inputText.isNotBlank()) {
+                            // ✅ إرسال الرسالة
+                            viewModel.sendMessage()
+                        } else if (micPermission.status.isGranted) {
+                            // ✅ تسجيل الصوت
                             isListening = true
                             voiceHelper.startListening(
                                 onResult = { viewModel.onInputChange(it); isListening = false },
@@ -209,42 +212,53 @@ fun ChatScreen(
                     },
                     modifier = Modifier.background(MaterialTheme.colorScheme.primary, RoundedCornerShape(50)).size(48.dp)
                 ) {
-                    if (isListening) CircularProgressIndicator(color = MaterialTheme.colorScheme.onPrimary, modifier = Modifier.size(24.dp))
-                    else Icon(Icons.Default.Mic, contentDescription = "صوت", tint = MaterialTheme.colorScheme.onPrimary)
+                    if (isListening) {
+                        CircularProgressIndicator(color = MaterialTheme.colorScheme.onPrimary, modifier = Modifier.size(24.dp))
+                    } else if (state.inputText.isNotBlank()) {
+                        // ✅ إظهار زر الإرسال عند وجود نص
+                        Icon(Icons.Default.Send, contentDescription = "إرسال", tint = MaterialTheme.colorScheme.onPrimary)
+                    } else {
+                        // ✅ إظهار الميكروفون عند عدم وجود نص
+                        Icon(Icons.Default.Mic, contentDescription = "صوت", tint = MaterialTheme.colorScheme.onPrimary)
+                    }
                 }
             }
             
             if (voiceError != null) {
-                Text(text = "⚠️ $voiceError", color = MaterialTheme.colorScheme.error, modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp), fontSize = 12.sp)
+                Text(text = "️ $voiceError", color = MaterialTheme.colorScheme.error, modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp), fontSize = 12.sp)
             }
         }
     }
 
-    // ✅ نافذة المحادثات السابقة (داخل الدالة Composable بشكل صحيح)
+    // نافذة المحادثات السابقة
     if (showHistoryDialog) {
         AlertDialog(
             onDismissRequest = { showHistoryDialog = false },
             title = { Text("المحادثات السابقة") },
             text = {
-                LazyColumn(modifier = Modifier.heightIn(max = 400.dp)) {
-                    items(state.conversations) { conv ->
-                        val isSelected = conv.id == state.currentConversationId
-                        Card(
-                            modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp).clickable {
-                                viewModel.loadConversation(conv.id)
-                                showHistoryDialog = false
-                            },
-                            colors = CardDefaults.cardColors(
-                                containerColor = if (isSelected) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surface
-                            )
-                        ) {
-                            Row(
-                                modifier = Modifier.padding(12.dp).fillMaxWidth(),
-                                horizontalArrangement = Arrangement.SpaceBetween,
-                                verticalAlignment = Alignment.CenterVertically
+                if (state.conversations.isEmpty()) {
+                    Text("لا توجد محادثات سابقة", modifier = Modifier.padding(16.dp))
+                } else {
+                    LazyColumn(modifier = Modifier.heightIn(max = 400.dp)) {
+                        items(state.conversations) { conv ->
+                            val isSelected = conv.id == state.currentConversationId
+                            Card(
+                                modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp).clickable {
+                                    viewModel.loadConversation(conv.id)
+                                    showHistoryDialog = false
+                                },
+                                colors = CardDefaults.cardColors(
+                                    containerColor = if (isSelected) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surface
+                                )
                             ) {
-                                Text(conv.title, fontWeight = FontWeight.Bold)
-                                if (isSelected) Text("حالي", fontSize = 12.sp, color = MaterialTheme.colorScheme.primary)
+                                Row(
+                                    modifier = Modifier.padding(12.dp).fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Text(conv.title, fontWeight = FontWeight.Bold)
+                                    if (isSelected) Text("حالي", fontSize = 12.sp, color = MaterialTheme.colorScheme.primary)
+                                }
                             }
                         }
                     }
