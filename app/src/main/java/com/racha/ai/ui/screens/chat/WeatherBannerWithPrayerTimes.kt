@@ -14,9 +14,11 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.racha.ai.core.util.TimeHelper
 import com.racha.ai.domain.model.WeatherInfo
-import java.util.Calendar
+import com.racha.ai.services.prayer.PrayerTimesCalculator
+import java.util.Date
 
 data class PrayerInfo(val name: String, val timeStr: String)
+data class PrayerStatus(val next: PrayerInfo, val last: PrayerInfo)
 
 @Composable
 fun WeatherBannerWithPrayerTimes(weather: WeatherInfo?, modifier: Modifier = Modifier) {
@@ -24,8 +26,15 @@ fun WeatherBannerWithPrayerTimes(weather: WeatherInfo?, modifier: Modifier = Mod
 
     val isNight = TimeHelper.isNightTime()
     
-    // ✅ حساب دقيق وديناميكي لمواقيت الصلاة بناءً على الوقت الحالي (تجنباً لأي أخطاء في الملفات الخارجية)
-    val prayerStatus = remember { getDynamicPrayerStatus() }
+    // ✅ حساب دقيق باستخدام PrayerTimesCalculator الموجود في المشروع
+    val prayerStatus = remember(weather.cityName) {
+        val times = PrayerTimesCalculator.calculate(
+            latitude = 35.8256, // إحداثيات سوسة (يمكن تحسينها لاحقاً بالموقع الفعلي)
+            longitude = 10.6369,
+            locationName = weather.cityName ?: "موقعك"
+        )
+        calculatePrayerStatus(times)
+    }
     
     val gradientColors = if (isNight) {
         listOf(Color(0xFF2E1A47), Color(0xFF4A235A), Color(0xFF1A1A3E))
@@ -36,7 +45,6 @@ fun WeatherBannerWithPrayerTimes(weather: WeatherInfo?, modifier: Modifier = Mod
     val weatherIcon = if (isNight) "🌙" else "☀️"
     val timeGreeting = if (isNight) "مساء الخير 🌃" else "صباح الخير 🌅"
 
-    // ✅ بانر أفقي واسع وليس طويلاً عمودياً
     Card(
         modifier = modifier.fillMaxWidth(),
         shape = RoundedCornerShape(20.dp),
@@ -49,7 +57,6 @@ fun WeatherBannerWithPrayerTimes(weather: WeatherInfo?, modifier: Modifier = Mod
                 .padding(16.dp)
         ) {
             Column(modifier = Modifier.fillMaxWidth()) {
-                // الصف العلوي: التحية والموقع والأيقونة
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween,
@@ -65,7 +72,6 @@ fun WeatherBannerWithPrayerTimes(weather: WeatherInfo?, modifier: Modifier = Mod
                 
                 Spacer(modifier = Modifier.height(12.dp))
                 
-                // الصف الأوسط: الحرارة والتفاصيل + الصلاة
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween,
@@ -95,7 +101,6 @@ fun WeatherBannerWithPrayerTimes(weather: WeatherInfo?, modifier: Modifier = Mod
                 Divider(color = if (isNight) Color.White.copy(alpha = 0.3f) else Color(0xFF2E1A47).copy(alpha = 0.2f))
                 Spacer(modifier = Modifier.height(8.dp))
                 
-                // ✅ الصف السفلي: مواقيت الصلاة الدقيقة
                 Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                     Column(modifier = Modifier.weight(1f)) {
                         Text(text = "⏳ الصلاة القادمة", fontSize = 11.sp, color = if (isNight) Color(0xFFB0A0FF) else Color(0xFF8B6FD9), fontWeight = FontWeight.SemiBold)
@@ -119,41 +124,30 @@ fun WeatherBannerWithPrayerTimes(weather: WeatherInfo?, modifier: Modifier = Mod
     }
 }
 
-// ✅ دالة حساب دقيقة تعتمد على الوقت الحالي لتجنب أي أخطاء في الملفات الخارجية
-private fun getDynamicPrayerStatus(): PrayerStatus {
-    val now = Calendar.getInstance()
-    val currentMinutes = now.get(Calendar.HOUR_OF_DAY) * 60 + now.get(Calendar.MINUTE)
-    
-    data class P(val name: String, val hour: Int, val minute: Int)
-    // أوقات تقريبية دقيقة لمدينة سوسة، تونس (يمكن تعديلها لاحقاً حسب الحاجة)
+// ✅ دالة حساب دقيقة تعتمد على RachaPrayerTimes
+private fun calculatePrayerStatus(times: com.racha.ai.domain.model.PrayerTimes): PrayerStatus {
+    val now = Date()
     val prayers = listOf(
-        P("الفجر", 5, 0),
-        P("الظهر", 12, 30),
-        P("العصر", 15, 45),
-        P("المغرب", 18, 15),
-        P("العشاء", 19, 45)
+        "الفجر" to times.fajr,
+        "الظهر" to times.dhuhr,
+        "العصر" to times.asr,
+        "المغرب" to times.maghrib,
+        "العشاء" to times.isha
     )
     
-    var nextPrayer: P? = null
-    var lastPrayer: P? = null
+    var nextPrayer = prayers.first()
+    var lastPrayer = prayers.last()
     
-    for (p in prayers) {
-        val pMinutes = p.hour * 60 + p.minute
-        if (pMinutes > currentMinutes) {
-            nextPrayer = p
+    for (i in prayers.indices) {
+        if (prayers[i].second.after(now)) {
+            nextPrayer = prayers[i]
+            lastPrayer = if (i > 0) prayers[i - 1] else prayers.last()
             break
         }
-        lastPrayer = p
     }
     
-    if (nextPrayer == null) nextPrayer = prayers.first() // الفجر غداً
-    if (lastPrayer == null) lastPrayer = prayers.last() // العشاء أمس
-    
-    val nextMinutes = nextPrayer.hour * 60 + nextPrayer.minute
-    val lastMinutes = lastPrayer.hour * 60 + lastPrayer.minute
-    
-    val diffNext = nextMinutes - currentMinutes
-    val diffLast = currentMinutes - lastMinutes
+    val diffNext = (nextPrayer.second.time - now.time) / (1000 * 60)
+    val diffLast = (now.time - lastPrayer.second.time) / (1000 * 60)
     
     val nextH = diffNext / 60
     val nextM = diffNext % 60
@@ -161,9 +155,7 @@ private fun getDynamicPrayerStatus(): PrayerStatus {
     val lastM = diffLast % 60
     
     return PrayerStatus(
-        next = PrayerInfo(nextPrayer.name, "متبقي ${nextH}س و ${nextM}د"),
-        last = PrayerInfo(lastPrayer.name, "منذ ${lastH}س و ${lastM}د")
+        next = PrayerInfo(nextPrayer.first, "متبقي ${nextH}س و ${nextM}د"),
+        last = PrayerInfo(lastPrayer.first, "منذ ${lastH}س و ${lastM}د")
     )
 }
-
-private data class PrayerStatus(val next: PrayerInfo, val last: PrayerInfo)

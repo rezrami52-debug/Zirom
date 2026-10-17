@@ -176,8 +176,8 @@ fun ChatScreen(
                     TopAppBar(
                         title = {
                             Column(modifier = Modifier.clickable { viewModel.switchLLM(if (state.activeLLM == "qwen") "gemini" else "qwen") }) {
-                                Text(text = "Racha AI", fontWeight = FontWeight.Bold, color = Color.White)
-                                Text(text = if (state.activeLLM == "qwen") "محلي" else "سحابي", fontSize = 12.sp, color = Color(0xFFD0C0FF))
+                                Text(text = "Racha AI", fontWeight = FontWeight.Bold, color = Color(0xFF2E1A47))
+                                Text(text = if (state.activeLLM == "qwen") "محلي" else "سحابي", fontSize = 12.sp, color = Color(0xFF6B4E9A))
                             }
                         },
                         navigationIcon = {
@@ -189,16 +189,20 @@ fun ChatScreen(
                             IconButton(onClick = { viewModel.startNewChat() }) { Icon(Icons.Default.Add, contentDescription = "محادثة جديدة", tint = MaterialTheme.colorScheme.primary) }
                             IconButton(onClick = onOpenNotifications) {
                                 Box {
-                                    Icon(Icons.Default.Notifications, contentDescription = "الإشعارات", tint = MaterialTheme.colorScheme.primary)
+                                    // 🔔 برتقالي
+                                    Icon(Icons.Default.Notifications, contentDescription = "الإشعارات", tint = Color(0xFFFF9800))
                                     if (unreadCount > 0) {
                                         Text(text = if (unreadCount > 99) "99+" else unreadCount.toString(), modifier = Modifier.align(Alignment.TopEnd).background(MaterialTheme.colorScheme.error, RoundedCornerShape(50)).padding(horizontal = 4.dp, vertical = 2.dp), color = Color.White, fontSize = 10.sp, fontWeight = FontWeight.Bold)
                                     }
                                 }
                             }
-                            IconButton(onClick = onOpenPrayer) { Icon(Icons.Default.Mosque, contentDescription = "مواقيت الصلاة", tint = MaterialTheme.colorScheme.primary) }
-                            IconButton(onClick = onOpenSettings) { Icon(Icons.Default.Settings, contentDescription = "الإعدادات", tint = MaterialTheme.colorScheme.primary) }
+                            // 🕌 أخضر
+                            IconButton(onClick = onOpenPrayer) { Icon(Icons.Default.Mosque, contentDescription = "مواقيت الصلاة", tint = Color(0xFF4CAF50)) }
+                            // ⚙️ أزرق
+                            IconButton(onClick = onOpenSettings) { Icon(Icons.Default.Settings, contentDescription = "الإعدادات", tint = Color(0xFF2196F3)) }
                         },
-                        colors = TopAppBarDefaults.topAppBarColors(containerColor = Color(0xFF2E1A47)) // ✅ لون داكن متناسق مع بانر الطقس
+                        // ✅ خلفية فاتحة لتبرز الألوان
+                        colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.surface)
                     )
                 }
             ) { paddingValues ->
@@ -208,7 +212,7 @@ fun ChatScreen(
                             Row(modifier = Modifier.fillMaxWidth().padding(16.dp), horizontalArrangement = Arrangement.Center, verticalAlignment = Alignment.CenterVertically) {
                                 CircularProgressIndicator(modifier = Modifier.size(24.dp))
                                 Spacer(modifier = Modifier.width(8.dp))
-                                Text("جاري تحديث الطقس...", color = Color.White)
+                                Text("جاري تحديث الطقس...")
                             }
                         }
                         weatherState.error != null -> {
