@@ -26,12 +26,13 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.LocationOff
 import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material.icons.filled.Send
 import androidx.compose.material.icons.filled.Settings
-import androidx.compose.material.icons.filled.Mosque // ✅ أيقونة الصلاة
+import androidx.compose.material.icons.filled.Mosque
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
@@ -139,37 +140,27 @@ fun ChatScreen(
                     }
                 },
                 actions = {
-                    // ✅ 1. زر محادثة جديدة
                     IconButton(onClick = { viewModel.startNewChat() }) {
                         Icon(Icons.Default.Add, contentDescription = "محادثة جديدة")
                     }
-                    // ✅ 2. زر الإشعارات (مع إصلاح العداد)
                     IconButton(onClick = onOpenNotifications) {
                         Box {
                             Icon(Icons.Default.Notifications, contentDescription = "الإشعارات")
                             if (unreadCount > 0) {
                                 Text(
                                     text = if (unreadCount > 99) "99+" else unreadCount.toString(),
-                                    modifier = Modifier
-                                        .align(Alignment.TopEnd)
-                                        .background(MaterialTheme.colorScheme.error, RoundedCornerShape(50))
-                                        .padding(horizontal = 4.dp, vertical = 2.dp),
-                                    color = MaterialTheme.colorScheme.onError,
-                                    fontSize = 10.sp,
-                                    fontWeight = FontWeight.Bold
+                                    modifier = Modifier.align(Alignment.TopEnd).background(MaterialTheme.colorScheme.error, RoundedCornerShape(50)).padding(horizontal = 4.dp, vertical = 2.dp),
+                                    color = MaterialTheme.colorScheme.onError, fontSize = 10.sp, fontWeight = FontWeight.Bold
                                 )
                             }
                         }
                     }
-                    // ✅ 3. زر مواقيت الصلاة (تمت إعادته)
                     IconButton(onClick = onOpenPrayer) {
                         Icon(Icons.Default.Mosque, contentDescription = "مواقيت الصلاة")
                     }
-                    // ✅ 4. زر سجل المحادثات
                     IconButton(onClick = { showHistoryDialog = true }) {
                         Icon(Icons.Default.Schedule, contentDescription = "المحادثات السابقة")
                     }
-                    // ✅ 5. زر الإعدادات
                     IconButton(onClick = onOpenSettings) {
                         Icon(Icons.Default.Settings, contentDescription = "الإعدادات")
                     }
@@ -179,8 +170,28 @@ fun ChatScreen(
         }
     ) { paddingValues ->
         Column(modifier = Modifier.fillMaxSize().padding(paddingValues)) {
-            if (weatherState.weather != null) {
-                WeatherBanner(weather = weatherState.weather, modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp))
+            
+            // ✅ التحديث الذكي: عرض حالة الطقس (تحميل، خطأ، أو نجاح)
+            when {
+                weatherState.isLoading -> {
+                    Row(modifier = Modifier.fillMaxWidth().padding(16.dp), horizontalArrangement = Arrangement.Center) {
+                        CircularProgressIndicator(modifier = Modifier.size(24.dp))
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text("جاري تحديث الطقس...", verticalAlignment = Alignment.CenterVertically)
+                    }
+                }
+                weatherState.error != null -> {
+                    Card(modifier = Modifier.fillMaxWidth().padding(16.dp), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer)) {
+                        Row(modifier = Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
+                            Icon(Icons.Default.LocationOff, contentDescription = null, tint = MaterialTheme.colorScheme.onErrorContainer)
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(weatherState.error ?: "خطأ في الطقس", color = MaterialTheme.colorScheme.onErrorContainer)
+                        }
+                    }
+                }
+                weatherState.weather != null -> {
+                    WeatherBanner(weather = weatherState.weather, modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp))
+                }
             }
 
             LazyColumn(
@@ -244,7 +255,6 @@ fun ChatScreen(
         }
     }
 
-    // نافذة المحادثات السابقة
     if (showHistoryDialog) {
         AlertDialog(
             onDismissRequest = { showHistoryDialog = false },
