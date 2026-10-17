@@ -258,9 +258,9 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
             onFailure = { error ->
                 val errorMessage = error.message ?: ""
                 val userFriendly = when {
-                    errorMessage.contains("503") || errorMessage.contains("UNAVAILABLE") -> "⚠️ Gemini مزدحم حالياً."
+                    errorMessage.contains("503") || errorMessage.contains("UNAVAILABLE") -> "️ Gemini مزدحم حالياً."
                     errorMessage.contains("API key") -> "⚠️ المفتاح غير صالح."
-                    errorMessage.contains("quota") -> "⚠️ استُهلكت الحصة."
+                    errorMessage.contains("quota") -> "️ استُهلكت الحصة."
                     else -> "⚠️ خطأ: ${error.message ?: "غير معروف"}"
                 }
                 saveMessageEntity(Message(text = userFriendly, isFromUser = false, isError = true))
@@ -283,21 +283,19 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         _uiState.value = _uiState.value.copy(pendingSpecialTool = null)
     }
 
-    // ✅ الإصلاح الحاسم هنا: إضافة conversationId = convId
     private suspend fun saveMessageEntity(message: Message) {
         val convId = _uiState.value.currentConversationId
         memory.saveMessage(
             convId,
             ChatMessageEntity(
                 id = message.id,
-                conversationId = convId, // ✅ هذا هو السطر الذي كان مفقوداً
+                conversationId = convId,
                 text = message.text,
                 isFromUser = message.isFromUser,
                 isError = message.isError,
                 timestamp = message.timestamp
             )
         )
-        // تحديث فوري للواجهة
         val currentMessages = _uiState.value.messages.toMutableList()
         currentMessages.add(message)
         _uiState.value = _uiState.value.copy(messages = currentMessages)
