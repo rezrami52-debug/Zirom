@@ -26,14 +26,12 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.Chat
 import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.Explore
-import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.LocationOff
 import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.Mic
-import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.filled.Mosque
+import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.Send
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.BottomAppBar
@@ -198,16 +196,12 @@ fun ChatScreen(
                             }
                         },
                         actions = {
-                            // ✅ "رسلة" مع أيقونة روبوت على اليمين
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Text("رسلة", fontSize = 16.sp, fontWeight = FontWeight.Bold, color = Color(0xFFBD4CFF), modifier = Modifier.padding(end = 4.dp))
-                                Icon(
-                                    imageVector = Icons.Default.Person,
-                                    contentDescription = "روبوت",
-                                    tint = Color(0xFFBD4CFF),
-                                    modifier = Modifier.size(32.dp)
-                                )
-                            }
+                            // ✅ أيقونة الروبوت فقط (بدون كلمة "رسلة")
+                            Text(
+                                text = "🤖",
+                                fontSize = 28.sp,
+                                modifier = Modifier.padding(end = 12.dp)
+                            )
                         },
                         colors = TopAppBarDefaults.topAppBarColors(
                             containerColor = Color(0xFF1A1A2E),
@@ -221,57 +215,86 @@ fun ChatScreen(
                         contentColor = Color(0xFFBD4CFF),
                         tonalElevation = 8.dp
                     ) {
+                        // ✅ 1. الصلاة
                         NavigationBarItem(
                             icon = { 
                                 Icon(
-                                    Icons.Default.Home, 
-                                    contentDescription = "الرئيسية", 
+                                    Icons.Default.Mosque, 
+                                    contentDescription = "الصلاة", 
                                     modifier = Modifier.size(24.dp),
                                     tint = if (selectedTab == 0) Color(0xFFBD4CFF) else Color(0xFFE0E0FF).copy(alpha = 0.5f)
                                 ) 
                             },
-                            label = { Text("الرئيسية", fontSize = 11.sp, color = if (selectedTab == 0) Color(0xFFBD4CFF) else Color(0xFFE0E0FF).copy(alpha = 0.5f)) },
+                            label = { Text("الصلاة", fontSize = 11.sp, color = if (selectedTab == 0) Color(0xFFBD4CFF) else Color(0xFFE0E0FF).copy(alpha = 0.5f)) },
                             selected = selectedTab == 0,
-                            onClick = { selectedTab = 0 }
+                            onClick = { 
+                                selectedTab = 0
+                                onOpenPrayer()
+                            }
                         )
+                        // ✅ 2. الإشعارات
                         NavigationBarItem(
                             icon = { 
                                 Icon(
-                                    Icons.Default.Chat, 
-                                    contentDescription = "المحادثات", 
+                                    Icons.Default.Notifications, 
+                                    contentDescription = "الإشعارات", 
                                     modifier = Modifier.size(24.dp),
                                     tint = if (selectedTab == 1) Color(0xFFBD4CFF) else Color(0xFFE0E0FF).copy(alpha = 0.5f)
                                 ) 
                             },
-                            label = { Text("المحادثات", fontSize = 11.sp, color = if (selectedTab == 1) Color(0xFFBD4CFF) else Color(0xFFE0E0FF).copy(alpha = 0.5f)) },
+                            label = { 
+                                Box {
+                                    Text("الإشعارات", fontSize = 11.sp, color = if (selectedTab == 1) Color(0xFFBD4CFF) else Color(0xFFE0E0FF).copy(alpha = 0.5f))
+                                    if (unreadCount > 0) {
+                                        Text(
+                                            text = if (unreadCount > 99) "99+" else unreadCount.toString(),
+                                            modifier = Modifier.align(Alignment.TopEnd).background(Color.Red, RoundedCornerShape(50)).padding(horizontal = 3.dp),
+                                            color = Color.White,
+                                            fontSize = 8.sp,
+                                            fontWeight = FontWeight.Bold
+                                        )
+                                    }
+                                }
+                            },
                             selected = selectedTab == 1,
-                            onClick = { selectedTab = 1 }
+                            onClick = { 
+                                selectedTab = 1
+                                onOpenNotifications()
+                            }
                         )
+                        // ✅ 3. الإعدادات
                         NavigationBarItem(
                             icon = { 
                                 Icon(
-                                    Icons.Default.Explore, 
-                                    contentDescription = "استكشاف", 
+                                    Icons.Default.Settings, 
+                                    contentDescription = "الإعدادات", 
                                     modifier = Modifier.size(24.dp),
                                     tint = if (selectedTab == 2) Color(0xFFBD4CFF) else Color(0xFFE0E0FF).copy(alpha = 0.5f)
                                 ) 
                             },
-                            label = { Text("استكشاف", fontSize = 11.sp, color = if (selectedTab == 2) Color(0xFFBD4CFF) else Color(0xFFE0E0FF).copy(alpha = 0.5f)) },
+                            label = { Text("الإعدادات", fontSize = 11.sp, color = if (selectedTab == 2) Color(0xFFBD4CFF) else Color(0xFFE0E0FF).copy(alpha = 0.5f)) },
                             selected = selectedTab == 2,
-                            onClick = { selectedTab = 2 }
+                            onClick = { 
+                                selectedTab = 2
+                                onOpenSettings()
+                            }
                         )
+                        // ✅ 4. محادثة جديدة
                         NavigationBarItem(
                             icon = { 
                                 Icon(
-                                    Icons.Default.Person, 
-                                    contentDescription = "الملف", 
+                                    Icons.Default.Add, 
+                                    contentDescription = "محادثة جديدة", 
                                     modifier = Modifier.size(24.dp),
                                     tint = if (selectedTab == 3) Color(0xFFBD4CFF) else Color(0xFFE0E0FF).copy(alpha = 0.5f)
                                 ) 
                             },
-                            label = { Text("الملف", fontSize = 11.sp, color = if (selectedTab == 3) Color(0xFFBD4CFF) else Color(0xFFE0E0FF).copy(alpha = 0.5f)) },
+                            label = { Text("جديدة", fontSize = 11.sp, color = if (selectedTab == 3) Color(0xFFBD4CFF) else Color(0xFFE0E0FF).copy(alpha = 0.5f)) },
                             selected = selectedTab == 3,
-                            onClick = { selectedTab = 3 }
+                            onClick = { 
+                                selectedTab = 3
+                                viewModel.startNewChat()
+                            }
                         )
                     }
                 }
