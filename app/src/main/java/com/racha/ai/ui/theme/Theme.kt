@@ -11,12 +11,13 @@ import androidx.compose.material3.lightColorScheme
 import androidx.compose.material3.Typography
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.SideEffect
+import androidx.compose.ui.graphics.Color // ✅ هذا هو الإصلاح الحاسم
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
 import androidx.core.view.WindowCompat
 
-//  ثيم النهار (ألوان الورود)
+// 🌸 ثيم النهار (ألوان الورود)
 private val DayColorScheme = lightColorScheme(
     primary = RosePurplePrimary,
     onPrimary = Color.White,
@@ -28,7 +29,7 @@ private val DayColorScheme = lightColorScheme(
     onSecondaryContainer = Color.Black,
     tertiary = RosePurpleDark,
     onTertiary = Color.White,
-    background = Color(0xFFFFFBFF),  // أبيض مائل للوردي قليلاً
+    background = Color(0xFFFFFBFF),
     onBackground = Color.Black,
     surface = Color(0xFFFFF9FF),
     onSurface = Color.Black,
@@ -50,7 +51,7 @@ private val NightColorScheme = darkColorScheme(
     onSecondaryContainer = Color.White,
     tertiary = Color(0xFF9B7FD9),
     onTertiary = Color.White,
-    background = Color(0xFF1A1230),  // داكن جداً
+    background = Color(0xFF1A1230),
     onBackground = Color.White,
     surface = Color(0xFF241840),
     onSurface = Color.White,
@@ -62,8 +63,8 @@ private val NightColorScheme = darkColorScheme(
 
 @Composable
 fun RachaTheme(
-    darkTheme: Boolean = isSystemInDarkTheme(), // ✅ يتبع إعدادات النظام تلقائياً
-    dynamicColor: Boolean = false, // ❌ نعطل الألوان الديناميكية لنستخدم ألواننا الخاصة
+    darkTheme: Boolean = isSystemInDarkTheme(),
+    dynamicColor: Boolean = false,
     content: @Composable () -> Unit
 ) {
     val colorScheme = when {
