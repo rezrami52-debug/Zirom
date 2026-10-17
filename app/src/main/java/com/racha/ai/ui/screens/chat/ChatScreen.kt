@@ -16,7 +16,6 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -70,8 +69,6 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.blur
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
@@ -109,7 +106,6 @@ fun ChatScreen(
     val micPermission = rememberPermissionState(Manifest.permission.RECORD_AUDIO)
     val scope = rememberCoroutineScope()
     val drawerState = rememberDrawerState(DrawerValue.Closed)
-    
     var selectedTab by remember { mutableIntStateOf(0) }
     var isListening by remember { mutableStateOf(false) }
     var voiceError by remember { mutableStateOf<String?>(null) }
@@ -140,14 +136,14 @@ fun ChatScreen(
                 Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
                     Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
                         Text("المحادثات السابقة", fontSize = 20.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
-                        IconButton(onClick = { scope.launch { drawerState.close() } }) { Icon(Icons.Default.Close, contentDescription = "إغلاق", tint = MaterialTheme.colorScheme.onSurface) }
+                        IconButton(onClick = { scope.launch { drawerState.close() } }) { Icon(Icons.Default.Close, contentDescription = "إغلاق") }
                     }
                     Spacer(modifier = Modifier.height(16.dp))
                     Divider()
                     Spacer(modifier = Modifier.height(8.dp))
 
                     if (state.conversations.isEmpty()) {
-                        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { Text("لا توجد محادثات سابقة", color = MaterialTheme.colorScheme.onSurfaceVariant) }
+                        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { Text("لا توجد محادثات سابقة") }
                     } else {
                         LazyColumn(modifier = Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                             items(state.conversations) { conv ->
@@ -159,9 +155,9 @@ fun ChatScreen(
                                     shape = RoundedCornerShape(12.dp)
                                 ) {
                                     Column(modifier = Modifier.padding(12.dp)) {
-                                        Text(text = conv.title, fontWeight = FontWeight.Bold, maxLines = 2, color = if (isSelected) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurfaceVariant)
+                                        Text(text = conv.title, fontWeight = FontWeight.Bold, maxLines = 2)
                                         Spacer(modifier = Modifier.height(4.dp))
-                                        Text(text = dateStr, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f))
+                                        Text(text = dateStr, fontSize = 12.sp)
                                         if (isSelected) { Spacer(modifier = Modifier.height(4.dp)); Text(text = "✓ حالي", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary) }
                                     }
                                 }
@@ -184,58 +180,69 @@ fun ChatScreen(
                 topBar = {
                     TopAppBar(
                         title = {
-                            Text(text = "Racha AI", fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface)
+                            Text(text = "Racha AI", fontWeight = FontWeight.Bold, fontSize = 22.sp, color = MaterialTheme.colorScheme.onSurface)
                         },
                         navigationIcon = {
                             IconButton(onClick = { scope.launch { drawerState.open() } }) {
-                                Icon(Icons.Default.Menu, contentDescription = "المحادثات", tint = MaterialTheme.colorScheme.primary)
+                                Icon(Icons.Default.Menu, contentDescription = "القائمة", tint = MaterialTheme.colorScheme.primary)
                             }
                         },
                         actions = {
                             IconButton(onClick = onOpenNotifications) {
                                 Box {
-                                    Icon(Icons.Default.Notifications, contentDescription = "الإشعارات", tint = Color(0xFFFF9800))
+                                    Icon(Icons.Default.Notifications, contentDescription = "الإشعارات", tint = Color(0xFFFF9800), modifier = Modifier.size(28.dp))
                                     if (unreadCount > 0) {
-                                        Text(text = if (unreadCount > 99) "99+" else unreadCount.toString(), modifier = Modifier.align(Alignment.TopEnd).background(MaterialTheme.colorScheme.error, RoundedCornerShape(50)).padding(horizontal = 4.dp, vertical = 2.dp), color = Color.White, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                                        Text(text = unreadCount.toString(), modifier = Modifier.align(Alignment.TopEnd).background(Color.Red, RoundedCornerShape(50)).padding(horizontal = 4.dp), color = Color.White, fontSize = 10.sp)
                                     }
                                 }
                             }
-                            IconButton(onClick = onOpenPrayer) { Icon(Icons.Default.Mosque, contentDescription = "مواقيت الصلاة", tint = Color(0xFF4CAF50)) }
+                            IconButton(onClick = onOpenPrayer) { 
+                                Icon(Icons.Default.Mosque, contentDescription = "الصلاة", tint = Color(0xFF4CAF50), modifier = Modifier.size(28.dp)) 
+                            }
+                            // أيقونة الروبوت على اليمين
+                            Icon(
+                                imageVector = Icons.Default.Person,
+                                contentDescription = "رسلة",
+                                tint = Color(0xFFBD4CFF),
+                                modifier = Modifier.size(32.dp).padding(end = 8.dp)
+                            )
+                            Text("رسلة", fontSize = 16.sp, fontWeight = FontWeight.Bold, color = Color(0xFFBD4CFF), modifier = Modifier.padding(end = 8.dp))
                         },
-                        colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.background)
+                        colors = TopAppBarDefaults.topAppBarColors(
+                            containerColor = MaterialTheme.colorScheme.background.copy(alpha = 0.9f),
+                            titleContentColor = MaterialTheme.colorScheme.onSurface
+                        )
                     )
                 },
                 bottomBar = {
                     BottomAppBar(
                         containerColor = MaterialTheme.colorScheme.surface,
-                        contentColor = MaterialTheme.colorScheme.primary
+                        contentColor = MaterialTheme.colorScheme.primary,
+                        tonalElevation = 8.dp
                     ) {
                         NavigationBarItem(
-                            icon = { Icon(Icons.Default.Home, contentDescription = "الرئيسية") },
-                            label = { Text("الرئيسية") },
+                            icon = { Icon(Icons.Default.Home, contentDescription = "الرئيسية", modifier = Modifier.size(24.dp)) },
+                            label = { Text("الرئيسية", fontSize = 11.sp) },
                             selected = selectedTab == 0,
                             onClick = { selectedTab = 0 }
                         )
                         NavigationBarItem(
-                            icon = { Icon(Icons.Default.Chat, contentDescription = "المحادثات") },
-                            label = { Text("المحادثات") },
+                            icon = { Icon(Icons.Default.Chat, contentDescription = "المحادثات", modifier = Modifier.size(24.dp)) },
+                            label = { Text("المحادثات", fontSize = 11.sp) },
                             selected = selectedTab == 1,
                             onClick = { selectedTab = 1 }
                         )
                         NavigationBarItem(
-                            icon = { Icon(Icons.Default.Person, contentDescription = "الملف") },
-                            label = { Text("الملف") },
+                            icon = { Icon(Icons.Default.Person, contentDescription = "الملف", modifier = Modifier.size(24.dp)) },
+                            label = { Text("الملف", fontSize = 11.sp) },
                             selected = selectedTab == 2,
                             onClick = { selectedTab = 2 }
                         )
                         NavigationBarItem(
-                            icon = { Icon(Icons.Default.Settings, contentDescription = "الإعدادات") },
-                            label = { Text("الإعدادات") },
+                            icon = { Icon(Icons.Default.Settings, contentDescription = "الإعدادات", modifier = Modifier.size(24.dp)) },
+                            label = { Text("الإعدادات", fontSize = 11.sp) },
                             selected = selectedTab == 3,
-                            onClick = { 
-                                selectedTab = 3
-                                onOpenSettings()
-                            }
+                            onClick = { selectedTab = 3; onOpenSettings() }
                         )
                     }
                 }
@@ -243,18 +250,18 @@ fun ChatScreen(
                 Column(modifier = Modifier.fillMaxSize().padding(paddingValues)) {
                     when {
                         weatherState.isLoading -> {
-                            Row(modifier = Modifier.fillMaxWidth().padding(16.dp), horizontalArrangement = Arrangement.Center, verticalAlignment = Alignment.CenterVertically) {
-                                CircularProgressIndicator(modifier = Modifier.size(24.dp))
+                            Row(modifier = Modifier.fillMaxWidth().padding(16.dp), horizontalArrangement = Arrangement.Center) {
+                                CircularProgressIndicator()
                                 Spacer(modifier = Modifier.width(8.dp))
                                 Text("جاري تحديث الطقس...")
                             }
                         }
                         weatherState.error != null -> {
-                            Card(modifier = Modifier.fillMaxWidth().padding(16.dp), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer)) {
+                            Card(modifier = Modifier.fillMaxWidth().padding(16.dp)) {
                                 Row(modifier = Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
-                                    Icon(Icons.Default.LocationOff, contentDescription = null, tint = MaterialTheme.colorScheme.onErrorContainer)
+                                    Icon(Icons.Default.LocationOff, contentDescription = null)
                                     Spacer(modifier = Modifier.width(8.dp))
-                                    Text(weatherState.error ?: "خطأ في الطقس", color = MaterialTheme.colorScheme.onErrorContainer)
+                                    Text(weatherState.error ?: "خطأ في الطقس")
                                 }
                             }
                         }
@@ -268,7 +275,7 @@ fun ChatScreen(
                     }
 
                     if (state.isSearching || state.qwenLoading) {
-                        Row(modifier = Modifier.fillMaxWidth().padding(16.dp), horizontalArrangement = Arrangement.Center) { CircularProgressIndicator(modifier = Modifier.size(24.dp)) }
+                        Row(modifier = Modifier.fillMaxWidth().padding(16.dp), horizontalArrangement = Arrangement.Center) { CircularProgressIndicator() }
                     }
 
                     Row(modifier = Modifier.fillMaxWidth().padding(16.dp), verticalAlignment = Alignment.Bottom) {
@@ -309,7 +316,7 @@ fun MessageBubble(message: Message, modifier: Modifier = Modifier) {
             modifier = Modifier.widthIn(max = 280.dp).padding(vertical = 4.dp)
         ) {
             Column(modifier = Modifier.padding(12.dp)) {
-                Text(text = message.text, color = if (isUser) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(text = message.text)
                 if (message.isError) { Spacer(modifier = Modifier.padding(top = 4.dp)); Text(text = "⚠️ حدث خطأ", color = MaterialTheme.colorScheme.error, fontSize = 12.sp) }
             }
         }
