@@ -14,23 +14,19 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.offset
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Checklist
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.Schedule
-import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Send
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.AlertDialog
@@ -58,16 +54,13 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.google.accompanist.permissions.ExperimentalPermissionsApi
-import com.google.accompanist.permissions.isGranted
 import com.google.accompanist.permissions.rememberPermissionState
-import com.racha.ai.R
 import com.racha.ai.core.apps.AppChooserDialog
 import com.racha.ai.core.tools.PhotoCaptureActivity
 import com.racha.ai.core.voice.VoiceInputHelper
@@ -108,370 +101,123 @@ fun ChatScreen(
         }
     }
 
-    // ✅ SAF Picker للنموذج
     val modelPickerLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.OpenDocument()
     ) { uri: Uri? ->
-        if (uri != null) {
-            viewModel.copyQwenModel(uri)
-        }
+        if (uri != null) viewModel.copyQwenModel(uri)
     }
 
     LaunchedEffect(state.pendingSpecialTool) {
-        when (state.pendingSpecialTool) {
-            "open_camera" -> {
-                val intent = Intent(context, PhotoCaptureActivity::class.java)
-                cameraLauncher.launch(intent)
-            }
+        if (state.pendingSpecialTool == "open_camera") {
+            cameraLauncher.launch(Intent(context, PhotoCaptureActivity::class.java))
         }
     }
 
-    DisposableEffect(Unit) {
-        onDispose { voiceHelper.destroy() }
-    }
+    DisposableEffect(Unit) { onDispose { voiceHelper.destroy() } }
 
     LaunchedEffect(state.messages.size) {
-        if (state.messages.isNotEmpty()) {
-            listState.animateScrollToItem(state.messages.size - 1)
-        }
+        if (state.messages.isNotEmpty()) listState.animateScrollToItem(state.messages.size - 1)
     }
 
     LaunchedEffect(voiceError) {
-        if (voiceError != null) {
-            kotlinx.coroutines.delay(3000)
-            voiceError = null
-        }
+        if (voiceError != null) { kotlinx.coroutines.delay(3000); voiceError = null }
     }
 
     Scaffold(
         topBar = {
             TopAppBar(
                 title = {
-                    Column(
-                        modifier = Modifier.clickable {
-                            val newLLM = if (state.activeLLM == "qwen") "gemini" else "qwen"
-                            viewModel.switchLLM(newLLM)
-                        }
-                    ) {
-                        Text(
-                            stringResource(id = R.string.app_name),
-                            fontWeight = FontWeight.Bold
-                        )
-                        Text(
-                            text = if (state.activeLLM == "qwen")
-                                "🟢 Qwen محلي — اضغط للتبديل"
-                            else
-                                "🔵 Gemini سحابي — اضغط للتبديل",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.75f)
-                        )
+                    Column(modifier = Modifier.clickable {
+                        viewModel.switchLLM(if (state.activeLLM == "qwen") "gemini" else "qwen")
+                    }) {
+                        Text(text = "Racha AI", fontWeight = FontWeight.Bold)
+                        Text(text = if (state.activeLLM == "qwen") "محلي" else "سحابي", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                 },
                 actions = {
-                    IconButton(onClick = onOpenRoutine) {
-                        Icon(Icons.Filled.Checklist, "روتيني")
+                    IconButton(onClick = { viewModel.startNewChat() }) {
+                        Icon(Icons.Default.Add, contentDescription = "محادثة جديدة")
                     }
-                    IconButton(onClick = onOpenPrayer) {
-                        Icon(Icons.Filled.Schedule, stringResource(id = R.string.prayer_title))
-                    }
-                    IconButton(onClick = onOpenNotifications) {
+                    IconButton(onClick = { onOpenNotifications() }) {
                         Box {
-                            Icon(Icons.Filled.Notifications, stringResource(id = R.string.notifications_title))
+                            Icon(Icons.Default.Notifications, contentDescription = "الإشعارات")
                             if (unreadCount > 0) {
-                                Box(
-                                    modifier = Modifier
-                                        .align(Alignment.TopEnd)
-                                        .offset(x = 4.dp, y = (-4).dp)
-                                        .size(10.dp)
-                                        .background(Color(0xFF4CAF50), CircleShape)
-                                )
+                                Text(text = unreadCount.toString(), modifier = Modifier.align(Alignment.TopEnd).background(MaterialTheme.colorScheme.error, RoundedCornerShape(50)).padding(horizontal = 4.dp), color = MaterialTheme.colorScheme.onError, fontSize = 10.sp)
                             }
                         }
                     }
-                    IconButton(onClick = viewModel::clearHistory) {
-                        Icon(Icons.Filled.Delete, "مسح")
+                    IconButton(onClick = { showHistoryDialog = true }) {
+                        Icon(Icons.Default.Schedule, contentDescription = "المحادثات السابقة")
                     }
                     IconButton(onClick = onOpenSettings) {
-                        Icon(Icons.Filled.Settings, stringResource(id = R.string.open_settings))
+                        Icon(Icons.Default.Settings, contentDescription = "الإعدادات")
                     }
                 },
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.primary,
-                    titleContentColor = MaterialTheme.colorScheme.onPrimary,
-                    actionIconContentColor = MaterialTheme.colorScheme.onPrimary
-                )
+                colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.surface)
             )
         }
-    ) { padding ->
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(padding)
-        ) {
-            WeatherBanner(weather = weatherState.weather)
-
-            // ✅ بطاقة "اختر نموذج Qwen"
-            if (state.activeLLM == "qwen" && !state.qwenModelReady) {
-                Card(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 12.dp, vertical = 6.dp),
-                    colors = CardDefaults.cardColors(
-                        containerColor = MaterialTheme.colorScheme.tertiaryContainer
-                    )
-                ) {
-                    Column(
-                        modifier = Modifier.fillMaxWidth().padding(12.dp)
-                    ) {
-                        Text(
-                            text = "📦 نموذج Qwen غير موجود",
-                            style = MaterialTheme.typography.titleSmall,
-                            fontWeight = FontWeight.Bold
-                        )
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text(
-                            text = "اختر ملف qwen2.5-1.5b-instruct.task (1.5 GB) من الملفات",
-                            style = MaterialTheme.typography.bodySmall
-                        )
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Button(
-                            onClick = { modelPickerLauncher.launch(arrayOf("*/*")) },
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
-                            Text("📁 اختر ملف النموذج")
-                        }
-                    }
-                }
-            }
-
-            if (state.qwenLoading) {
-                Card(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 12.dp, vertical = 6.dp),
-                    colors = CardDefaults.cardColors(
-                        containerColor = MaterialTheme.colorScheme.tertiaryContainer
-                    )
-                ) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth().padding(12.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        CircularProgressIndicator(
-                            modifier = Modifier.size(20.dp),
-                            strokeWidth = 2.dp
-                        )
-                        Spacer(modifier = Modifier.width(12.dp))
-                        Text(
-                            text = "⏳ Qwen يحمّل النموذج...",
-                            style = MaterialTheme.typography.bodySmall,
-                            fontWeight = FontWeight.Bold
-                        )
-                    }
-                }
-            }
-
-            if (isListening) {
-                Card(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 12.dp, vertical = 6.dp),
-                    colors = CardDefaults.cardColors(
-                        containerColor = MaterialTheme.colorScheme.primaryContainer
-                    )
-                ) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth().padding(12.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        CircularProgressIndicator(
-                            modifier = Modifier.size(20.dp),
-                            strokeWidth = 2.dp
-                        )
-                        Spacer(modifier = Modifier.width(12.dp))
-                        Text(
-                            text = stringResource(id = R.string.voice_listening),
-                            style = MaterialTheme.typography.bodyMedium,
-                            fontWeight = FontWeight.Bold
-                        )
-                    }
-                }
-            }
-
-            voiceError?.let { error ->
-                Card(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 12.dp, vertical = 6.dp),
-                    colors = CardDefaults.cardColors(
-                        containerColor = MaterialTheme.colorScheme.errorContainer
-                    )
-                ) {
-                    Text(
-                        text = "⚠️ $error",
-                        modifier = Modifier.padding(12.dp),
-                        style = MaterialTheme.typography.bodySmall
-                    )
-                }
+    ) { paddingValues ->
+        Column(modifier = Modifier.fillMaxSize().padding(paddingValues)) {
+            if (weatherState.weather != null) {
+                WeatherBanner(weather = weatherState.weather, modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp))
             }
 
             LazyColumn(
                 state = listState,
-                modifier = Modifier
-                    .weight(1f)
-                    .fillMaxWidth()
-                    .padding(horizontal = 12.dp),
+                modifier = Modifier.weight(1f).fillMaxWidth().padding(horizontal = 16.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                item { Spacer(modifier = Modifier.size(8.dp)) }
-                items(state.messages, key = { it.id }) { message ->
-                    MessageBubble(message)
-                }
-                if (state.isSending) {
-                    item { TypingIndicator() }
-                }
-                item { Spacer(modifier = Modifier.size(8.dp)) }
-            }
-
-            Surface(
-                modifier = Modifier.fillMaxWidth(),
-                tonalElevation = 3.dp
-            ) {
-                Row(
-                    modifier = Modifier.fillMaxWidth().padding(8.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    OutlinedTextField(
-                        value = state.inputText,
-                        onValueChange = viewModel::onInputChange,
-                        modifier = Modifier.weight(1f),
-                        placeholder = { Text(stringResource(id = R.string.chat_input_hint)) },
-                        maxLines = 4
-                    )
-                    Spacer(modifier = Modifier.width(4.dp))
-
-                    IconButton(
-                        onClick = {
-                            if (isListening) {
-                                voiceHelper.stopListening()
-                                isListening = false
-                                return@IconButton
-                            }
-                            if (!micPermission.status.isGranted) {
-                                micPermission.launchPermissionRequest()
-                                return@IconButton
-                            }
-                            isListening = true
-                            voiceHelper.startListening(
-                                languageTag = "ar-TN",
-                                onReady = {},
-                                onResult = { text ->
-                                    isListening = false
-                                    viewModel.onInputChange(text)
-                                    android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
-                                        viewModel.sendMessage()
-                                    }, 300)
-                                },
-                                onError = { error ->
-                                    isListening = false
-                                    voiceError = error
-                                },
-                                onEnd = {}
-                            )
-                        }
-                    ) {
-                        Icon(
-                            imageVector = Icons.Filled.Mic,
-                            contentDescription = "صوت",
-                            tint = if (isListening) MaterialTheme.colorScheme.error
-                                   else MaterialTheme.colorScheme.primary
-                        )
-                    }
-
-                    IconButton(
-                        onClick = viewModel::sendMessage,
-                        enabled = state.inputText.isNotBlank() && !state.isSending
-                    ) {
-                        Icon(
-                            imageVector = Icons.Filled.Send,
-                            contentDescription = stringResource(id = R.string.chat_send),
-                            tint = MaterialTheme.colorScheme.primary
-                        )
-                    }
+                items(state.messages) { msg ->
+                    MessageBubble(message = msg)
                 }
             }
-        }
-    }
 
-    // ✅ حوار اختيار التطبيق
-    AppChooserDialog(
-        state = state.appChooser,
-        onAppSelected = { app -> viewModel.onAppSelected(app) },
-        onDismiss = { viewModel.onAppChooserDismiss() }
-    )
-}
+            if (state.isSearching || state.qwenLoading) {
+                Row(modifier = Modifier.fillMaxWidth().padding(16.dp), horizontalArrangement = Arrangement.Center) {
+                    CircularProgressIndicator(modifier = Modifier.size(24.dp))
+                }
+            }
 
-@Composable
-fun MessageBubble(message: Message) {
-    val bubbleColor = when {
-        message.isFromUser -> MaterialTheme.colorScheme.primary
-        message.isError -> MaterialTheme.colorScheme.errorContainer
-        else -> MaterialTheme.colorScheme.surfaceVariant
-    }
-    val textColor = when {
-        message.isFromUser -> MaterialTheme.colorScheme.onPrimary
-        message.isError -> MaterialTheme.colorScheme.onErrorContainer
-        else -> MaterialTheme.colorScheme.onSurfaceVariant
-    }
-    val alignment = if (message.isFromUser) Alignment.CenterEnd else Alignment.CenterStart
-
-    Box(
-        modifier = Modifier.fillMaxWidth().padding(horizontal = 4.dp),
-        contentAlignment = alignment
-    ) {
-        Surface(
-            modifier = Modifier.widthIn(max = 300.dp),
-            shape = RoundedCornerShape(16.dp),
-            color = bubbleColor
-        ) {
-            Text(
-                text = message.text,
-                modifier = Modifier.padding(12.dp),
-                color = textColor,
-                style = MaterialTheme.typography.bodyLarge
-            )
-        }
-    }
-}
-
-@Composable
-fun TypingIndicator() {
-    Row(
-        modifier = Modifier.fillMaxWidth().padding(horizontal = 4.dp),
-        horizontalArrangement = Arrangement.Start
-    ) {
-        Surface(
-            shape = RoundedCornerShape(16.dp),
-            color = MaterialTheme.colorScheme.surfaceVariant
-        ) {
             Row(
-                modifier = Modifier.padding(12.dp),
-                verticalAlignment = Alignment.CenterVertically
+                modifier = Modifier.fillMaxWidth().padding(16.dp),
+                verticalAlignment = Alignment.Bottom
             ) {
-                CircularProgressIndicator(
-                    modifier = Modifier.size(16.dp),
-                    strokeWidth = 2.dp
+                OutlinedTextField(
+                    value = state.inputText,
+                    onValueChange = viewModel::onInputChange,
+                    modifier = Modifier.weight(1f),
+                    placeholder = { Text("اكتب رسالتك هنا...") },
+                    shape = RoundedCornerShape(24.dp),
+                    maxLines = 4
                 )
                 Spacer(modifier = Modifier.width(8.dp))
-                Text(
-                    text = stringResource(id = R.string.chat_thinking),
-                    style = MaterialTheme.typography.bodyMedium
-                )
+                IconButton(
+                    onClick = {
+                        if (state.inputText.isNotBlank()) viewModel.sendMessage()
+                        else if (micPermission.status.isGranted) {
+                            isListening = true
+                            voiceHelper.startListening(
+                                onResult = { viewModel.onInputChange(it); isListening = false },
+                                onError = { voiceError = it; isListening = false }
+                            )
+                        } else {
+                            micPermission.launchPermissionRequest()
+                        }
+                    },
+                    modifier = Modifier.background(MaterialTheme.colorScheme.primary, RoundedCornerShape(50)).size(48.dp)
+                ) {
+                    if (isListening) CircularProgressIndicator(color = MaterialTheme.colorScheme.onPrimary, modifier = Modifier.size(24.dp))
+                    else Icon(Icons.Default.Mic, contentDescription = "صوت", tint = MaterialTheme.colorScheme.onPrimary)
+                }
+            }
+            
+            if (voiceError != null) {
+                Text(text = "⚠️ $voiceError", color = MaterialTheme.colorScheme.error, modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp), fontSize = 12.sp)
             }
         }
     }
 
-    // نافذة المحادثات السابقة
+    // ✅ نافذة المحادثات السابقة (داخل الدالة Composable بشكل صحيح)
     if (showHistoryDialog) {
         AlertDialog(
             onDismissRequest = { showHistoryDialog = false },
@@ -481,13 +227,10 @@ fun TypingIndicator() {
                     items(state.conversations) { conv ->
                         val isSelected = conv.id == state.currentConversationId
                         Card(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(vertical = 4.dp)
-                                .clickable {
-                                    viewModel.loadConversation(conv.id)
-                                    showHistoryDialog = false
-                                },
+                            modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp).clickable {
+                                viewModel.loadConversation(conv.id)
+                                showHistoryDialog = false
+                            },
                             colors = CardDefaults.cardColors(
                                 containerColor = if (isSelected) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surface
                             )
@@ -495,9 +238,9 @@ fun TypingIndicator() {
                             Row(
                                 modifier = Modifier.padding(12.dp).fillMaxWidth(),
                                 horizontalArrangement = Arrangement.SpaceBetween,
-                                verticalAlignment = androidx.compose.ui.Alignment.CenterVertically
+                                verticalAlignment = Alignment.CenterVertically
                             ) {
-                                Text(conv.title, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold)
+                                Text(conv.title, fontWeight = FontWeight.Bold)
                                 if (isSelected) Text("حالي", fontSize = 12.sp, color = MaterialTheme.colorScheme.primary)
                             }
                         }
@@ -505,11 +248,46 @@ fun TypingIndicator() {
                 }
             },
             confirmButton = {
-                Button(onClick = { showHistoryDialog = false }) {
-                    Text("إغلاق")
-                }
+                Button(onClick = { showHistoryDialog = false }) { Text("إغلاق") }
             }
         )
     }
 
+    if (state.appChooser.isVisible) {
+        AppChooserDialog(
+            state = state.appChooser,
+            onDismiss = viewModel::onAppChooserDismiss,
+            onAppSelected = viewModel::onAppSelected
+        )
+    }
+}
+
+@Composable
+fun MessageBubble(message: Message, modifier: Modifier = Modifier) {
+    val isUser = message.isFromUser
+    Row(
+        modifier = modifier.fillMaxWidth(),
+        horizontalArrangement = if (isUser) Arrangement.End else Arrangement.Start
+    ) {
+        Surface(
+            shape = RoundedCornerShape(
+                topStart = 16.dp, topEnd = 16.dp,
+                bottomStart = if (isUser) 16.dp else 4.dp,
+                bottomEnd = if (isUser) 4.dp else 16.dp
+            ),
+            color = if (isUser) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant,
+            modifier = Modifier.widthIn(max = 280.dp).padding(vertical = 4.dp)
+        ) {
+            Column(modifier = Modifier.padding(12.dp)) {
+                Text(
+                    text = message.text,
+                    color = if (isUser) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                if (message.isError) {
+                    Spacer(modifier = Modifier.padding(top = 4.dp))
+                    Text(text = "⚠️ حدث خطأ", color = MaterialTheme.colorScheme.error, fontSize = 12.sp)
+                }
+            }
+        }
+    }
 }
