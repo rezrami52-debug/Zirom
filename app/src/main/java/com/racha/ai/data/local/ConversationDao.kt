@@ -10,6 +10,9 @@ interface ConversationDao {
     @Insert
     suspend fun insertConversation(conversation: ConversationEntity)
 
+    @Query("UPDATE conversations SET title = :title WHERE id = :id")
+    suspend fun updateConversationTitle(id: String, title: String)
+
     @Query("SELECT * FROM conversations ORDER BY timestamp DESC")
     fun getAllConversations(): Flow<List<ConversationEntity>>
 

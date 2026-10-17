@@ -12,9 +12,10 @@ class ChatMemoryRepository(context: Context) {
     private val conversationDao = db.conversationDao()
     private val messageDao = db.chatMessageDao()
 
-    suspend fun createNewConversation(): String {
+    suspend fun createNewConversation(title: String = "محادثة جديدة"): String {
         val newId = UUID.randomUUID().toString()
-        conversationDao.insertConversation(ConversationEntity(id = newId))
+        val conv = ConversationEntity(id = newId, title = title, timestamp = System.currentTimeMillis())
+        conversationDao.insertConversation(conv)
         return newId
     }
 
@@ -28,6 +29,12 @@ class ChatMemoryRepository(context: Context) {
 
     suspend fun saveMessage(conversationId: String, message: ChatMessageEntity) {
         messageDao.insertMessage(message.copy(conversationId = conversationId))
+        
+        // ✅ التحسين الذكي: تحديث عنوان المحادثة بناءً على أول رسالة من المستخدم
+        if (message.isFromUser) {
+            val firstWords = message.text.take(30) + (if (message.text.length > 30) "..." else "")
+            conversationDao.updateConversationTitle(conversationId, firstWords)
+        }
     }
 
     suspend fun deleteConversation(conversationId: String) {
@@ -39,10 +46,8 @@ class ChatMemoryRepository(context: Context) {
         messageDao.deleteAllMessages()
     }
 
-    // ✅ دالة ضرورية للذكاء الاصطناعي لفهم السياق
     suspend fun getRecentForContext(conversationId: String): List<ChatMessageEntity> {
         return try {
-            // نأخذ آخر 10 رسائل للسياق لتجنب استهلاك الذاكرة
             messageDao.getRecentMessages(conversationId, 10)
         } catch (e: Exception) {
             emptyList()
