@@ -6,11 +6,10 @@ import java.util.UUID
 
 @Entity(tableName = "chat_messages")
 data class ChatMessageEntity(
-    @PrimaryKey
-    val id: String = UUID.randomUUID().toString(),
+    @PrimaryKey val id: String = UUID.randomUUID().toString(),
+    val conversationId: String, // ✅ ربط الرسالة بالمحادثة
     val text: String,
     val isFromUser: Boolean,
     val isError: Boolean = false,
-    val timestamp: Long = System.currentTimeMillis(),
-    val conversationId: String = "default"
+    val timestamp: Long = System.currentTimeMillis()
 )

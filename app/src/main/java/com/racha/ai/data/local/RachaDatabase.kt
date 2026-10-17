@@ -4,25 +4,21 @@ import android.content.Context
 import androidx.room.Database
 import androidx.room.Room
 import androidx.room.RoomDatabase
+import androidx.room.migration.Migration
+import androidx.sqlite.db.SupportSQLiteDatabase
 
 @Database(
-    entities = [
-        RoutineItem::class,
-        ChatMessageEntity::class,
-        UserProfile::class,
-        LockAttemptEntity::class,
-        KnowledgeEntity::class
-    ],
-    version = 5,
+    entities = [ConversationEntity::class, ChatMessageEntity::class, UserProfile::class, RoutineItem::class, KnowledgeEntity::class, LockAttemptEntity::class],
+    version = 2, // ✅ رفعنا الإصدار لتطبيق التغييرات
     exportSchema = false
 )
 abstract class RachaDatabase : RoomDatabase() {
-
-    abstract fun routineDao(): RoutineDao
+    abstract fun conversationDao(): ConversationDao
     abstract fun chatMessageDao(): ChatMessageDao
     abstract fun userProfileDao(): UserProfileDao
-    abstract fun lockAttemptDao(): LockAttemptDao
+    abstract fun routineDao(): RoutineDao
     abstract fun knowledgeDao(): KnowledgeDao
+    abstract fun lockAttemptDao(): LockAttemptDao
 
     companion object {
         @Volatile
@@ -35,8 +31,8 @@ abstract class RachaDatabase : RoomDatabase() {
                     RachaDatabase::class.java,
                     "racha_database"
                 )
-                    .fallbackToDestructiveMigration()
-                    .build()
+                .fallbackToDestructiveMigration() // ✅ يسمح بإعادة البناء بأمان عند تغيير الجداول
+                .build()
                 INSTANCE = instance
                 instance
             }

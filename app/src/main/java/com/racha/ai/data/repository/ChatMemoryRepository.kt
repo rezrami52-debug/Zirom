@@ -2,41 +2,40 @@ package com.racha.ai.data.repository
 
 import android.content.Context
 import com.racha.ai.data.local.ChatMessageEntity
+import com.racha.ai.data.local.ConversationEntity
 import com.racha.ai.data.local.RachaDatabase
 import kotlinx.coroutines.flow.Flow
+import java.util.UUID
 
-/**
- * Repository لحفظ محادثات Racha.
- * يتيح "الذاكرة" — Racha يتذكر ما قلته سابقاً.
- */
 class ChatMemoryRepository(context: Context) {
+    private val db = RachaDatabase.getDatabase(context)
+    private val conversationDao = db.conversationDao()
+    private val messageDao = db.chatMessageDao()
 
-    private val dao = RachaDatabase.getDatabase(context).chatMessageDao()
-
-    companion object {
-        const val CONV_ID = "default"
-        private const val MAX_MESSAGES = 500
-        private const val CONTEXT_MESSAGES = 20  // عدد الرسائل المُرسَلة لـ Gemini كسياق
+    suspend fun createNewConversation(): String {
+        val newId = UUID.randomUUID().toString()
+        conversationDao.insertConversation(ConversationEntity(id = newId))
+        return newId
     }
 
-    fun getConversation(): Flow<List<ChatMessageEntity>> = dao.getByConversation(CONV_ID)
-
-    suspend fun getRecentForContext(): List<ChatMessageEntity> {
-        return dao.getRecentMessages(CONV_ID, CONTEXT_MESSAGES).reversed()
+    fun getAllConversations(): Flow<List<ConversationEntity>> {
+        return conversationDao.getAllConversations()
     }
 
-    suspend fun saveMessage(message: ChatMessageEntity) {
-        dao.insert(message)
-        // تنظيف: احتفظ بآخر 500 رسالة فقط
-        val count = dao.count()
-        if (count > MAX_MESSAGES) {
-            dao.deleteOldest(CONV_ID, count - MAX_MESSAGES)
-        }
+    fun getMessagesByConversation(conversationId: String): Flow<List<ChatMessageEntity>> {
+        return messageDao.getMessagesByConversation(conversationId)
     }
 
+    suspend fun saveMessage(conversationId: String, message: ChatMessageEntity) {
+        messageDao.insertMessage(message.copy(conversationId = conversationId))
+    }
+
+    suspend fun deleteConversation(conversationId: String) {
+        conversationDao.deleteConversation(conversationId)
+        messageDao.deleteMessagesByConversation(conversationId)
+    }
+    
     suspend fun clearAll() {
-        dao.clearConversation(CONV_ID)
+        messageDao.deleteAllMessages()
     }
-
-    fun contextSize(): Int = CONTEXT_MESSAGES
 }
