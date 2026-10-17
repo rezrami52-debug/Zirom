@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
@@ -25,8 +26,10 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.LocationOff
+import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.Schedule
@@ -38,16 +41,20 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.Divider
+import androidx.compose.material3.DrawerValue
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalNavigationDrawer
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
+import androidx.compose.material3.rememberDrawerState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -55,6 +62,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -71,6 +79,10 @@ import com.racha.ai.core.tools.PhotoCaptureActivity
 import com.racha.ai.core.voice.VoiceInputHelper
 import com.racha.ai.data.repository.NotificationRepository
 import com.racha.ai.domain.model.Message
+import kotlinx.coroutines.launch
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalPermissionsApi::class)
 @Composable
@@ -89,10 +101,13 @@ fun ChatScreen(
 
     val context = LocalContext.current
     val micPermission = rememberPermissionState(Manifest.permission.RECORD_AUDIO)
+    val scope = rememberCoroutineScope()
+    
+    // ✅ القائمة الجانبية
+    val drawerState = rememberDrawerState(DrawerValue.Closed)
 
     var isListening by remember { mutableStateOf(false) }
     var voiceError by remember { mutableStateOf<String?>(null) }
-    var showHistoryDialog by remember { mutableStateOf(false) }
 
     val voiceHelper = remember { VoiceInputHelper(context) }
 
@@ -128,189 +143,264 @@ fun ChatScreen(
         if (voiceError != null) { kotlinx.coroutines.delay(3000); voiceError = null }
     }
 
-    Scaffold(
-        topBar = {
-            TopAppBar(
-                title = {
-                    Column(modifier = Modifier.clickable {
-                        viewModel.switchLLM(if (state.activeLLM == "qwen") "gemini" else "qwen")
-                    }) {
-                        Text(text = "Racha AI", fontWeight = FontWeight.Bold)
-                        Text(text = if (state.activeLLM == "qwen") "محلي" else "سحابي", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    }
-                },
-                actions = {
-                    IconButton(onClick = { viewModel.startNewChat() }) {
-                        Icon(Icons.Default.Add, contentDescription = "محادثة جديدة")
-                    }
-                    IconButton(onClick = onOpenNotifications) {
-                        Box {
-                            Icon(Icons.Default.Notifications, contentDescription = "الإشعارات")
-                            if (unreadCount > 0) {
-                                Text(
-                                    text = if (unreadCount > 99) "99+" else unreadCount.toString(),
-                                    modifier = Modifier.align(Alignment.TopEnd).background(MaterialTheme.colorScheme.error, RoundedCornerShape(50)).padding(horizontal = 4.dp, vertical = 2.dp),
-                                    color = MaterialTheme.colorScheme.onError, fontSize = 10.sp, fontWeight = FontWeight.Bold
-                                )
-                            }
-                        }
-                    }
-                    IconButton(onClick = onOpenPrayer) {
-                        Icon(Icons.Default.Mosque, contentDescription = "مواقيت الصلاة")
-                    }
-                    IconButton(onClick = { showHistoryDialog = true }) {
-                        Icon(Icons.Default.Schedule, contentDescription = "المحادثات السابقة")
-                    }
-                    IconButton(onClick = onOpenSettings) {
-                        Icon(Icons.Default.Settings, contentDescription = "الإعدادات")
-                    }
-                },
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.surface)
-            )
-        }
-    ) { paddingValues ->
-        Column(modifier = Modifier.fillMaxSize().padding(paddingValues)) {
-            
-            // ✅ العرض الذكي لحالة الطقس (تحميل، خطأ، أو نجاح)
-            when {
-                weatherState.isLoading -> {
+    // ✅ القائمة الجانبية للمحادثات
+    ModalNavigationDrawer(
+        drawerState = drawerState,
+        drawerContent = {
+            Surface(
+                modifier = Modifier
+                    .fillMaxHeight()
+                    .width(300.dp),
+                color = MaterialTheme.colorScheme.surface,
+                shadowElevation = 16.dp
+            ) {
+                Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
+                    // رأس القائمة
                     Row(
-                        modifier = Modifier.fillMaxWidth().padding(16.dp), 
-                        horizontalArrangement = Arrangement.Center,
-                        verticalAlignment = Alignment.CenterVertically // ✅ تم نقلها هنا بشكل صحيح
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
-                        CircularProgressIndicator(modifier = Modifier.size(24.dp))
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text("جاري تحديث الطقس...")
-                    }
-                }
-                weatherState.error != null -> {
-                    Card(
-                        modifier = Modifier.fillMaxWidth().padding(16.dp), 
-                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer)
-                    ) {
-                        Row(
-                            modifier = Modifier.padding(12.dp), 
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Icon(Icons.Default.LocationOff, contentDescription = null, tint = MaterialTheme.colorScheme.onErrorContainer)
-                            Spacer(modifier = Modifier.width(8.dp))
-                            Text(weatherState.error ?: "خطأ في الطقس", color = MaterialTheme.colorScheme.onErrorContainer)
+                        Text(
+                            "المحادثات السابقة",
+                            fontSize = 20.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                        IconButton(onClick = { scope.launch { drawerState.close() } }) {
+                            Icon(Icons.Default.Close, contentDescription = "إغلاق")
                         }
                     }
-                }
-                weatherState.weather != null -> {
-                    WeatherBanner(weather = weatherState.weather, modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp))
-                }
-            }
+                    
+                    Spacer(modifier = Modifier.height(16.dp))
+                    Divider()
+                    Spacer(modifier = Modifier.height(8.dp))
 
-            LazyColumn(
-                state = listState,
-                modifier = Modifier.weight(1f).fillMaxWidth().padding(horizontal = 16.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                items(state.messages) { msg ->
-                    MessageBubble(message = msg)
-                }
-            }
-
-            if (state.isSearching || state.qwenLoading) {
-                Row(modifier = Modifier.fillMaxWidth().padding(16.dp), horizontalArrangement = Arrangement.Center) {
-                    CircularProgressIndicator(modifier = Modifier.size(24.dp))
-                }
-            }
-
-            Row(
-                modifier = Modifier.fillMaxWidth().padding(16.dp),
-                verticalAlignment = Alignment.Bottom
-            ) {
-                OutlinedTextField(
-                    value = state.inputText,
-                    onValueChange = viewModel::onInputChange,
-                    modifier = Modifier.weight(1f),
-                    placeholder = { Text("اكتب رسالتك هنا...") },
-                    shape = RoundedCornerShape(24.dp),
-                    maxLines = 4
-                )
-                Spacer(modifier = Modifier.width(8.dp))
-                IconButton(
-                    onClick = {
-                        if (state.inputText.isNotBlank()) {
-                            viewModel.sendMessage()
-                        } else if (micPermission.status.isGranted) {
-                            isListening = true
-                            voiceHelper.startListening(
-                                onResult = { viewModel.onInputChange(it); isListening = false },
-                                onError = { voiceError = it; isListening = false }
-                            )
-                        } else {
-                            micPermission.launchPermissionRequest()
+                    // قائمة المحادثات
+                    if (state.conversations.isEmpty()) {
+                        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                            Text("لا توجد محادثات سابقة", color = MaterialTheme.colorScheme.onSurfaceVariant)
                         }
-                    },
-                    modifier = Modifier.background(MaterialTheme.colorScheme.primary, RoundedCornerShape(50)).size(48.dp)
-                ) {
-                    if (isListening) {
-                        CircularProgressIndicator(color = MaterialTheme.colorScheme.onPrimary, modifier = Modifier.size(24.dp))
-                    } else if (state.inputText.isNotBlank()) {
-                        Icon(Icons.Default.Send, contentDescription = "إرسال", tint = MaterialTheme.colorScheme.onPrimary)
                     } else {
-                        Icon(Icons.Default.Mic, contentDescription = "صوت", tint = MaterialTheme.colorScheme.onPrimary)
-                    }
-                }
-            }
-            
-            if (voiceError != null) {
-                Text(text = "⚠️ $voiceError", color = MaterialTheme.colorScheme.error, modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp), fontSize = 12.sp)
-            }
-        }
-    }
-
-    if (showHistoryDialog) {
-        AlertDialog(
-            onDismissRequest = { showHistoryDialog = false },
-            title = { Text("المحادثات السابقة") },
-            text = {
-                if (state.conversations.isEmpty()) {
-                    Text("لا توجد محادثات سابقة", modifier = Modifier.padding(16.dp))
-                } else {
-                    LazyColumn(modifier = Modifier.heightIn(max = 400.dp)) {
-                        items(state.conversations) { conv ->
-                            val isSelected = conv.id == state.currentConversationId
-                            Card(
-                                modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp).clickable {
-                                    viewModel.loadConversation(conv.id)
-                                    showHistoryDialog = false
-                                },
-                                colors = CardDefaults.cardColors(
-                                    containerColor = if (isSelected) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surface
-                                )
-                            ) {
-                                Row(
-                                    modifier = Modifier.padding(12.dp).fillMaxWidth(),
-                                    horizontalArrangement = Arrangement.SpaceBetween,
-                                    verticalAlignment = Alignment.CenterVertically
+                        LazyColumn(
+                            modifier = Modifier.fillMaxSize(),
+                            verticalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            items(state.conversations) { conv ->
+                                val isSelected = conv.id == state.currentConversationId
+                                val dateStr = SimpleDateFormat("dd/MM/yyyy HH:mm", Locale("ar")).format(Date(conv.timestamp))
+                                
+                                Card(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .clickable {
+                                            viewModel.loadConversation(conv.id)
+                                            scope.launch { drawerState.close() }
+                                        },
+                                    colors = CardDefaults.cardColors(
+                                        containerColor = if (isSelected) 
+                                            MaterialTheme.colorScheme.primaryContainer 
+                                        else 
+                                            MaterialTheme.colorScheme.surfaceVariant
+                                    ),
+                                    shape = RoundedCornerShape(12.dp)
                                 ) {
-                                    Text(conv.title, fontWeight = FontWeight.Bold, maxLines = 1)
-                                    if (isSelected) Text("حالي", fontSize = 12.sp, color = MaterialTheme.colorScheme.primary)
+                                    Column(modifier = Modifier.padding(12.dp)) {
+                                        Text(
+                                            text = conv.title,
+                                            fontWeight = FontWeight.Bold,
+                                            maxLines = 2,
+                                            color = if (isSelected) 
+                                                MaterialTheme.colorScheme.onPrimaryContainer 
+                                            else 
+                                                MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
+                                        Spacer(modifier = Modifier.height(4.dp))
+                                        Text(
+                                            text = dateStr,
+                                            fontSize = 12.sp,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
+                                        )
+                                        if (isSelected) {
+                                            Spacer(modifier = Modifier.height(4.dp))
+                                            Text(
+                                                text = "✓ حالي",
+                                                fontSize = 11.sp,
+                                                fontWeight = FontWeight.Bold,
+                                                color = MaterialTheme.colorScheme.primary
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+                            
+                            // زر محادثة جديدة في الأسفل
+                            item {
+                                Spacer(modifier = Modifier.height(8.dp))
+                                Button(
+                                    onClick = {
+                                        viewModel.startNewChat()
+                                        scope.launch { drawerState.close() }
+                                    },
+                                    modifier = Modifier.fillMaxWidth()
+                                ) {
+                                    Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(20.dp))
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Text("محادثة جديدة")
                                 }
                             }
                         }
                     }
                 }
-            },
-            confirmButton = {
-                Button(onClick = { showHistoryDialog = false }) { Text("إغلاق") }
             }
-        )
-    }
+        },
+        content = {
+            // ✅ المحتوى الرئيسي (الذي كان موجوداً سابقاً)
+            Scaffold(
+                topBar = {
+                    TopAppBar(
+                        title = {
+                            Column(modifier = Modifier.clickable {
+                                viewModel.switchLLM(if (state.activeLLM == "qwen") "gemini" else "qwen")
+                            }) {
+                                Text(text = "Racha AI", fontWeight = FontWeight.Bold)
+                                Text(text = if (state.activeLLM == "qwen") "محلي" else "سحابي", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            }
+                        },
+                        navigationIcon = {
+                            // ✅ زر القائمة الجانبية
+                            IconButton(onClick = { scope.launch { drawerState.open() } }) {
+                                Icon(Icons.Default.Menu, contentDescription = "المحادثات")
+                            }
+                        },
+                        actions = {
+                            IconButton(onClick = { viewModel.startNewChat() }) {
+                                Icon(Icons.Default.Add, contentDescription = "محادثة جديدة")
+                            }
+                            IconButton(onClick = onOpenNotifications) {
+                                Box {
+                                    Icon(Icons.Default.Notifications, contentDescription = "الإشعارات")
+                                    if (unreadCount > 0) {
+                                        Text(
+                                            text = if (unreadCount > 99) "99+" else unreadCount.toString(),
+                                            modifier = Modifier.align(Alignment.TopEnd).background(MaterialTheme.colorScheme.error, RoundedCornerShape(50)).padding(horizontal = 4.dp, vertical = 2.dp),
+                                            color = MaterialTheme.colorScheme.onError, fontSize = 10.sp, fontWeight = FontWeight.Bold
+                                        )
+                                    }
+                                }
+                            }
+                            IconButton(onClick = onOpenPrayer) {
+                                Icon(Icons.Default.Mosque, contentDescription = "مواقيت الصلاة")
+                            }
+                            IconButton(onClick = onOpenSettings) {
+                                Icon(Icons.Default.Settings, contentDescription = "الإعدادات")
+                            }
+                        },
+                        colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.surface)
+                    )
+                }
+            ) { paddingValues ->
+                Column(modifier = Modifier.fillMaxSize().padding(paddingValues)) {
+                    
+                    // ✅ بانر الطقس المحدث مع مواقيت الصلاة
+                    when {
+                        weatherState.isLoading -> {
+                            Row(
+                                modifier = Modifier.fillMaxWidth().padding(16.dp), 
+                                horizontalArrangement = Arrangement.Center,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                CircularProgressIndicator(modifier = Modifier.size(24.dp))
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text("جاري تحديث الطقس...")
+                            }
+                        }
+                        weatherState.error != null -> {
+                            Card(
+                                modifier = Modifier.fillMaxWidth().padding(16.dp), 
+                                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer)
+                            ) {
+                                Row(
+                                    modifier = Modifier.padding(12.dp), 
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Icon(Icons.Default.LocationOff, contentDescription = null, tint = MaterialTheme.colorScheme.onErrorContainer)
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Text(weatherState.error ?: "خطأ في الطقس", color = MaterialTheme.colorScheme.onErrorContainer)
+                                }
+                            }
+                        }
+                        weatherState.weather != null -> {
+                            // ✅ بانر الطقس الممتد مع مواقيت الصلاة
+                            WeatherBannerWithPrayerTimes(
+                                weather = weatherState.weather, 
+                                modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
+                            )
+                        }
+                    }
 
-    if (state.appChooser.isVisible) {
-        AppChooserDialog(
-            state = state.appChooser,
-            onDismiss = viewModel::onAppChooserDismiss,
-            onAppSelected = viewModel::onAppSelected
-        )
-    }
+                    LazyColumn(
+                        state = listState,
+                        modifier = Modifier.weight(1f).fillMaxWidth().padding(horizontal = 16.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        items(state.messages) { msg ->
+                            MessageBubble(message = msg)
+                        }
+                    }
+
+                    if (state.isSearching || state.qwenLoading) {
+                        Row(modifier = Modifier.fillMaxWidth().padding(16.dp), horizontalArrangement = Arrangement.Center) {
+                            CircularProgressIndicator(modifier = Modifier.size(24.dp))
+                        }
+                    }
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth().padding(16.dp),
+                        verticalAlignment = Alignment.Bottom
+                    ) {
+                        OutlinedTextField(
+                            value = state.inputText,
+                            onValueChange = viewModel::onInputChange,
+                            modifier = Modifier.weight(1f),
+                            placeholder = { Text("اكتب رسالتك هنا...") },
+                            shape = RoundedCornerShape(24.dp),
+                            maxLines = 4
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        IconButton(
+                            onClick = {
+                                if (state.inputText.isNotBlank()) {
+                                    viewModel.sendMessage()
+                                } else if (micPermission.status.isGranted) {
+                                    isListening = true
+                                    voiceHelper.startListening(
+                                        onResult = { viewModel.onInputChange(it); isListening = false },
+                                        onError = { voiceError = it; isListening = false }
+                                    )
+                                } else {
+                                    micPermission.launchPermissionRequest()
+                                }
+                            },
+                            modifier = Modifier.background(MaterialTheme.colorScheme.primary, RoundedCornerShape(50)).size(48.dp)
+                        ) {
+                            if (isListening) {
+                                CircularProgressIndicator(color = MaterialTheme.colorScheme.onPrimary, modifier = Modifier.size(24.dp))
+                            } else if (state.inputText.isNotBlank()) {
+                                Icon(Icons.Default.Send, contentDescription = "إرسال", tint = MaterialTheme.colorScheme.onPrimary)
+                            } else {
+                                Icon(Icons.Default.Mic, contentDescription = "صوت", tint = MaterialTheme.colorScheme.onPrimary)
+                            }
+                        }
+                    }
+                    
+                    if (voiceError != null) {
+                        Text(text = "⚠️ $voiceError", color = MaterialTheme.colorScheme.error, modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp), fontSize = 12.sp)
+                    }
+                }
+            }
+        }
+    )
 }
 
 @Composable
