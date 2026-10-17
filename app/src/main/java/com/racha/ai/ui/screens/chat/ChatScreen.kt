@@ -27,14 +27,18 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Chat
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.LocationOff
 import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.Mosque
 import androidx.compose.material.icons.filled.Notifications
+import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Send
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material3.BottomAppBar
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -46,6 +50,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalNavigationDrawer
+import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
@@ -58,12 +63,15 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.blur
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
@@ -101,7 +109,8 @@ fun ChatScreen(
     val micPermission = rememberPermissionState(Manifest.permission.RECORD_AUDIO)
     val scope = rememberCoroutineScope()
     val drawerState = rememberDrawerState(DrawerValue.Closed)
-
+    
+    var selectedTab by remember { mutableIntStateOf(0) }
     var isListening by remember { mutableStateOf(false) }
     var voiceError by remember { mutableStateOf<String?>(null) }
     val voiceHelper = remember { VoiceInputHelper(context) }
@@ -175,10 +184,7 @@ fun ChatScreen(
                 topBar = {
                     TopAppBar(
                         title = {
-                            Column(modifier = Modifier.clickable { viewModel.switchLLM(if (state.activeLLM == "qwen") "gemini" else "qwen") }) {
-                                Text(text = "Racha AI", fontWeight = FontWeight.Bold, color = Color(0xFF2E1A47))
-                                Text(text = if (state.activeLLM == "qwen") "محلي" else "سحابي", fontSize = 12.sp, color = Color(0xFF6B4E9A))
-                            }
+                            Text(text = "Racha AI", fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface)
                         },
                         navigationIcon = {
                             IconButton(onClick = { scope.launch { drawerState.open() } }) {
@@ -186,24 +192,52 @@ fun ChatScreen(
                             }
                         },
                         actions = {
-                            IconButton(onClick = { viewModel.startNewChat() }) { Icon(Icons.Default.Add, contentDescription = "محادثة جديدة", tint = MaterialTheme.colorScheme.primary) }
                             IconButton(onClick = onOpenNotifications) {
                                 Box {
-                                    // 🔔 برتقالي
                                     Icon(Icons.Default.Notifications, contentDescription = "الإشعارات", tint = Color(0xFFFF9800))
                                     if (unreadCount > 0) {
                                         Text(text = if (unreadCount > 99) "99+" else unreadCount.toString(), modifier = Modifier.align(Alignment.TopEnd).background(MaterialTheme.colorScheme.error, RoundedCornerShape(50)).padding(horizontal = 4.dp, vertical = 2.dp), color = Color.White, fontSize = 10.sp, fontWeight = FontWeight.Bold)
                                     }
                                 }
                             }
-                            // 🕌 أخضر
                             IconButton(onClick = onOpenPrayer) { Icon(Icons.Default.Mosque, contentDescription = "مواقيت الصلاة", tint = Color(0xFF4CAF50)) }
-                            // ⚙️ أزرق
-                            IconButton(onClick = onOpenSettings) { Icon(Icons.Default.Settings, contentDescription = "الإعدادات", tint = Color(0xFF2196F3)) }
                         },
-                        // ✅ خلفية فاتحة لتبرز الألوان
-                        colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.surface)
+                        colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.background)
                     )
+                },
+                bottomBar = {
+                    BottomAppBar(
+                        containerColor = MaterialTheme.colorScheme.surface,
+                        contentColor = MaterialTheme.colorScheme.primary
+                    ) {
+                        NavigationBarItem(
+                            icon = { Icon(Icons.Default.Home, contentDescription = "الرئيسية") },
+                            label = { Text("الرئيسية") },
+                            selected = selectedTab == 0,
+                            onClick = { selectedTab = 0 }
+                        )
+                        NavigationBarItem(
+                            icon = { Icon(Icons.Default.Chat, contentDescription = "المحادثات") },
+                            label = { Text("المحادثات") },
+                            selected = selectedTab == 1,
+                            onClick = { selectedTab = 1 }
+                        )
+                        NavigationBarItem(
+                            icon = { Icon(Icons.Default.Person, contentDescription = "الملف") },
+                            label = { Text("الملف") },
+                            selected = selectedTab == 2,
+                            onClick = { selectedTab = 2 }
+                        )
+                        NavigationBarItem(
+                            icon = { Icon(Icons.Default.Settings, contentDescription = "الإعدادات") },
+                            label = { Text("الإعدادات") },
+                            selected = selectedTab == 3,
+                            onClick = { 
+                                selectedTab = 3
+                                onOpenSettings()
+                            }
+                        )
+                    }
                 }
             ) { paddingValues ->
                 Column(modifier = Modifier.fillMaxSize().padding(paddingValues)) {

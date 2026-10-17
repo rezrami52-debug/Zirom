@@ -11,54 +11,40 @@ import androidx.compose.material3.lightColorScheme
 import androidx.compose.material3.Typography
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.SideEffect
-import androidx.compose.ui.graphics.Color // ✅ هذا هو الإصلاح الحاسم
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
 import androidx.core.view.WindowCompat
 
-// 🌸 ثيم النهار (ألوان الورود)
 private val DayColorScheme = lightColorScheme(
-    primary = RosePurplePrimary,
+    primary = DayPrimary,
     onPrimary = Color.White,
-    primaryContainer = LavenderLight,
-    onPrimaryContainer = Color.Black,
-    secondary = LavenderPrimary,
+    primaryContainer = DaySecondary,
+    onPrimaryContainer = DayOnSurface,
+    secondary = DaySecondary,
     onSecondary = Color.White,
-    secondaryContainer = LavenderLight,
-    onSecondaryContainer = Color.Black,
-    tertiary = RosePurpleDark,
-    onTertiary = Color.White,
-    background = Color(0xFFFFFBFF),
-    onBackground = Color.Black,
-    surface = Color(0xFFFFF9FF),
-    onSurface = Color.Black,
-    surfaceVariant = LavenderLight,
-    onSurfaceVariant = Color.Black,
-    error = Color(0xFFBA1A1A),
-    onError = Color.White
+    background = DayBackground,
+    onBackground = DayOnSurface,
+    surface = DaySurface,
+    onSurface = DayOnSurface,
+    surfaceVariant = DaySurface,
+    onSurfaceVariant = DayOnSurface
 )
 
-// 🌳 ثيم الليل (ألوان الأشجار)
 private val NightColorScheme = darkColorScheme(
     primary = NightPrimary,
     onPrimary = Color.White,
-    primaryContainer = DeepPurpleNight,
-    onPrimaryContainer = Color.White,
+    primaryContainer = NightSecondary,
+    onPrimaryContainer = NightOnSurface,
     secondary = NightSecondary,
     onSecondary = Color.White,
-    secondaryContainer = MidnightPurple,
-    onSecondaryContainer = Color.White,
-    tertiary = Color(0xFF9B7FD9),
-    onTertiary = Color.White,
-    background = Color(0xFF1A1230),
-    onBackground = Color.White,
-    surface = Color(0xFF241840),
-    onSurface = Color.White,
+    background = NightBackground,
+    onBackground = NightOnSurface,
+    surface = NightSurface,
+    onSurface = NightOnSurface,
     surfaceVariant = NightSurface,
-    onSurfaceVariant = Color.White,
-    error = Color(0xFFCF6679),
-    onError = Color.Black
+    onSurfaceVariant = NightOnSurface
 )
 
 @Composable
@@ -80,7 +66,7 @@ fun RachaTheme(
     if (!view.isInEditMode) {
         SideEffect {
             val window = (view.context as Activity).window
-            window.statusBarColor = colorScheme.primary.toArgb()
+            window.statusBarColor = colorScheme.background.toArgb()
             WindowCompat.getInsetsController(window, view).isAppearanceLightStatusBars = !darkTheme
         }
     }
