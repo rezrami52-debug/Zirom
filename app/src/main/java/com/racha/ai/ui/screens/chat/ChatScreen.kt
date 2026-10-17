@@ -15,7 +15,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height // ✅ تم إضافة هذا الاستيراد
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -35,6 +35,7 @@ import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.Send
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Mosque
+import androidx.compose.material3.Button // ✅ تم إضافة هذا الاستيراد المفقود
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
@@ -185,7 +186,10 @@ fun ChatScreen(
                             }
                             item {
                                 Spacer(modifier = Modifier.height(8.dp))
-                                Button(onClick = { viewModel.startNewChat(); scope.launch { drawerState.close() } }, modifier = Modifier.fillMaxWidth()) {
+                                Button(
+                                    onClick = { viewModel.startNewChat(); scope.launch { drawerState.close() } }, 
+                                    modifier = Modifier.fillMaxWidth()
+                                ) {
                                     Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(20.dp))
                                     Spacer(modifier = Modifier.width(8.dp))
                                     Text("محادثة جديدة")
