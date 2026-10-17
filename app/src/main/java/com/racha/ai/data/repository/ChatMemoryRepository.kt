@@ -38,4 +38,14 @@ class ChatMemoryRepository(context: Context) {
     suspend fun clearAll() {
         messageDao.deleteAllMessages()
     }
+
+    // ✅ دالة ضرورية للذكاء الاصطناعي لفهم السياق
+    suspend fun getRecentForContext(conversationId: String): List<ChatMessageEntity> {
+        return try {
+            // نأخذ آخر 10 رسائل للسياق لتجنب استهلاك الذاكرة
+            messageDao.getRecentMessages(conversationId, 10)
+        } catch (e: Exception) {
+            emptyList()
+        }
+    }
 }

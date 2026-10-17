@@ -105,7 +105,8 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                 currentConversationId = newId,
                 messages = emptyList(),
                 inputText = "",
-                isSending = false
+                isSending = false,
+                isLoadingHistory = false
             )
             saveMessageEntity(Message(text = "أهلاً بك! أنا Racha، كيف يمكنني مساعدتك اليوم؟", isFromUser = false))
         }
@@ -113,7 +114,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
 
     fun loadConversation(conversationId: String) {
         viewModelScope.launch {
-            _uiState.value = _uiState.value.copy(currentConversationId = conversationId, isLoadingHistory = true)
+            _uiState.value = _uiState.value.copy(currentConversationId = conversationId, isLoadingHistory = true, messages = emptyList())
             memory.getMessagesByConversation(conversationId).collectLatest { entities ->
                 val messages = entities.map { entity ->
                     Message(id = entity.id, text = entity.text, isFromUser = entity.isFromUser, timestamp = entity.timestamp, isError = entity.isError)
@@ -125,6 +126,28 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
 
     fun onInputChange(newText: String) {
         _uiState.value = _uiState.value.copy(inputText = newText)
+    }
+
+    fun switchLLM(provider: String) {
+        appPrefs.setLLMProvider(provider)
+        _uiState.value = _uiState.value.copy(activeLLM = provider)
+    }
+
+    fun copyQwenModel(uri: Uri) {
+        viewModelScope.launch {
+            _uiState.value = _uiState.value.copy(qwenCopying = true)
+            val result = qwenService?.copyModelFromUri(uri)
+            result?.fold(
+                onSuccess = {
+                    saveMessageEntity(Message(text = "✅ تم نسخ نموذج Qwen بنجاح.", isFromUser = false))
+                    _uiState.value = _uiState.value.copy(qwenCopying = false, qwenModelReady = true)
+                },
+                onFailure = { error ->
+                    saveMessageEntity(Message(text = "⚠️ فشل نسخ النموذج: ${error.message ?: "غير معروف"}", isFromUser = false, isError = true))
+                    _uiState.value = _uiState.value.copy(qwenCopying = false)
+                }
+            )
+        }
     }
 
     fun sendMessage() {
@@ -179,51 +202,91 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                 is IntentHandler.HandlerResult.NeedsCorrection, is IntentHandler.HandlerResult.Unknown -> { /* نكمل للذكاء الاصطناعي */ }
             }
 
-            // 3. الذكاء الاصطناعي (LLM)
-            val recent = memory.getMessagesByConversation(_uiState.value.currentConversationId) // ملاحظة: قد تحتاج لدالة getRecent في Repository
-            // للتبسيط والأمان، سنستخدم ردود SmartReplies أو نرسل لـ LLM مباشرة
-            val profileContext = profileRepo.getPromptContext()
+            // 3. بناء السياق والذكاء الاصطناعي
+            val currentConvId = _uiState.value.currentConversationId
+            val recent = memory.getRecentForContext(currentConvId)
+            val history = recent.dropLast(1).reversed() // لعكس الترتيب ليتوافق مع توقعات LLM
+            val context = contextBuilder.build(history, text)
             
+            val smartReply = SmartReplies.tryReply(text, context)
+            if (smartReply != null) {
+                saveMessageEntity(Message(text = smartReply, isFromUser = false))
+                _uiState.value = _uiState.value.copy(isSending = false)
+                return@launch
+            }
+
+            val profileContext = profileRepo.getPromptContext()
+            val contextPrompt = context.toPrompt()
             val provider = _uiState.value.activeLLM
-            if (provider == "qwen" && augmenter != null && qwenService?.isModelPresent() == true) {
-                sendWithAugmenter(text, profileContext)
+
+            if (provider == "qwen" && augmenter != null) {
+                sendWithAugmenter(text, history, contextPrompt, profileContext)
             } else {
-                sendToGemini(text, profileContext)
+                sendToGemini(text, history, contextPrompt, profileContext)
             }
         }
     }
 
-    private suspend fun sendWithAugmenter(text: String, profileContext: String) {
-        val aug = augmenter ?: run { sendToGemini(text, profileContext); return }
+    private suspend fun sendWithAugmenter(text: String, history: List<ChatMessageEntity>, contextPrompt: String, profileContext: String) {
+        val aug = augmenter ?: run { sendToGemini(text, history, contextPrompt, profileContext); return }
+        if (qwenService?.isModelPresent() != true) {
+            saveMessageEntity(Message(text = "⚠️ نموذج Qwen غير موجود.", isFromUser = false, isError = true))
+            _uiState.value = _uiState.value.copy(isSending = false)
+            return
+        }
         if (qwenService?.isReady() != true) _uiState.value = _uiState.value.copy(qwenLoading = true)
-        
-        val result = aug.smartAnswer(text, profileContext, emptyList()) // مبسط للسلامة
+
+        val fullContext = "$profileContext\n\n$contextPrompt"
+        val result = aug.smartAnswer(text, fullContext, history)
         saveMessageEntity(Message(text = result.answer, isFromUser = false, isError = false))
         _uiState.value = _uiState.value.copy(isSending = false, qwenLoading = false)
     }
 
-    private suspend fun sendToGemini(text: String, profileContext: String) {
+    private suspend fun sendToGemini(text: String, history: List<ChatMessageEntity>, contextPrompt: String, profileContext: String) {
         val service = geminiService ?: run {
             saveMessageEntity(Message(text = "⚠️ مفتاح Gemini غير موجود.", isFromUser = false, isError = true))
             _uiState.value = _uiState.value.copy(isSending = false)
             return
         }
-        val result = service.sendMessageWithContext(emptyList(), text, profileContext)
+        val fullContext = "$profileContext\n\n$contextPrompt"
+        val result = service.sendMessageWithContext(history, text, fullContext)
         result.fold(
             onSuccess = { reply ->
                 saveMessageEntity(Message(text = reply, isFromUser = false))
                 _uiState.value = _uiState.value.copy(isSending = false)
             },
             onFailure = { error ->
-                saveMessageEntity(Message(text = "⚠️ خطأ: ${error.message ?: "غير معروف"}", isFromUser = false, isError = true))
+                val errorMessage = error.message ?: ""
+                val userFriendly = when {
+                    errorMessage.contains("503") || errorMessage.contains("UNAVAILABLE") -> "⚠️ Gemini مزدحم حالياً."
+                    errorMessage.contains("API key") -> "⚠️ المفتاح غير صالح."
+                    errorMessage.contains("quota") -> "⚠️ استُهلكت الحصة."
+                    else -> "⚠️ خطأ: ${error.message ?: "غير معروف"}"
+                }
+                saveMessageEntity(Message(text = userFriendly, isFromUser = false, isError = true))
                 _uiState.value = _uiState.value.copy(isSending = false)
             }
         )
     }
 
+    fun onSpecialToolCompleted(success: Boolean, message: String) {
+        viewModelScope.launch {
+            saveMessageEntity(Message(text = message, isFromUser = false, isError = !success))
+        }
+        _uiState.value = _uiState.value.copy(pendingSpecialTool = null)
+    }
+
+    fun onSpecialToolCancelled() {
+        viewModelScope.launch {
+            saveMessageEntity(Message(text = "❌ تم إلغاء العملية", isFromUser = false))
+        }
+        _uiState.value = _uiState.value.copy(pendingSpecialTool = null)
+    }
+
     private suspend fun saveMessageEntity(message: Message) {
+        val convId = _uiState.value.currentConversationId
         memory.saveMessage(
-            _uiState.value.currentConversationId,
+            convId,
             ChatMessageEntity(
                 id = message.id,
                 text = message.text,
@@ -232,7 +295,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                 timestamp = message.timestamp
             )
         )
-        // تحديث القائمة المحلية فوراً
+        // تحديث فوري للواجهة
         val currentMessages = _uiState.value.messages.toMutableList()
         currentMessages.add(message)
         _uiState.value = _uiState.value.copy(messages = currentMessages)
@@ -251,5 +314,25 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
 
     fun onAppChooserDismiss() {
         _uiState.value = _uiState.value.copy(appChooser = AppChooserState())
+    }
+
+    fun clearHistory() {
+        viewModelScope.launch {
+            memory.clearAll()
+            // نبدأ محادثة جديدة بعد المسح
+            startNewChat()
+        }
+    }
+
+    fun refreshProfileStatus() {
+        viewModelScope.launch {
+            val isFilled = profileRepo.isFilled()
+            _uiState.value = _uiState.value.copy(hasProfile = isFilled)
+        }
+    }
+
+    override fun onCleared() {
+        super.onCleared()
+        qwenService?.close()
     }
 }
