@@ -31,6 +31,7 @@ import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material.icons.filled.Send
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.Mosque // ✅ أيقونة الصلاة
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
@@ -138,20 +139,37 @@ fun ChatScreen(
                     }
                 },
                 actions = {
+                    // ✅ 1. زر محادثة جديدة
                     IconButton(onClick = { viewModel.startNewChat() }) {
                         Icon(Icons.Default.Add, contentDescription = "محادثة جديدة")
                     }
+                    // ✅ 2. زر الإشعارات (مع إصلاح العداد)
                     IconButton(onClick = onOpenNotifications) {
                         Box {
                             Icon(Icons.Default.Notifications, contentDescription = "الإشعارات")
                             if (unreadCount > 0) {
-                                Text(text = unreadCount.toString(), modifier = Modifier.align(Alignment.TopEnd).background(MaterialTheme.colorScheme.error, RoundedCornerShape(50)).padding(horizontal = 4.dp), color = MaterialTheme.colorScheme.onError, fontSize = 10.sp)
+                                Text(
+                                    text = if (unreadCount > 99) "99+" else unreadCount.toString(),
+                                    modifier = Modifier
+                                        .align(Alignment.TopEnd)
+                                        .background(MaterialTheme.colorScheme.error, RoundedCornerShape(50))
+                                        .padding(horizontal = 4.dp, vertical = 2.dp),
+                                    color = MaterialTheme.colorScheme.onError,
+                                    fontSize = 10.sp,
+                                    fontWeight = FontWeight.Bold
+                                )
                             }
                         }
                     }
+                    // ✅ 3. زر مواقيت الصلاة (تمت إعادته)
+                    IconButton(onClick = onOpenPrayer) {
+                        Icon(Icons.Default.Mosque, contentDescription = "مواقيت الصلاة")
+                    }
+                    // ✅ 4. زر سجل المحادثات
                     IconButton(onClick = { showHistoryDialog = true }) {
                         Icon(Icons.Default.Schedule, contentDescription = "المحادثات السابقة")
                     }
+                    // ✅ 5. زر الإعدادات
                     IconButton(onClick = onOpenSettings) {
                         Icon(Icons.Default.Settings, contentDescription = "الإعدادات")
                     }
@@ -197,10 +215,8 @@ fun ChatScreen(
                 IconButton(
                     onClick = {
                         if (state.inputText.isNotBlank()) {
-                            // ✅ إرسال الرسالة
                             viewModel.sendMessage()
                         } else if (micPermission.status.isGranted) {
-                            // ✅ تسجيل الصوت
                             isListening = true
                             voiceHelper.startListening(
                                 onResult = { viewModel.onInputChange(it); isListening = false },
@@ -215,17 +231,15 @@ fun ChatScreen(
                     if (isListening) {
                         CircularProgressIndicator(color = MaterialTheme.colorScheme.onPrimary, modifier = Modifier.size(24.dp))
                     } else if (state.inputText.isNotBlank()) {
-                        // ✅ إظهار زر الإرسال عند وجود نص
                         Icon(Icons.Default.Send, contentDescription = "إرسال", tint = MaterialTheme.colorScheme.onPrimary)
                     } else {
-                        // ✅ إظهار الميكروفون عند عدم وجود نص
                         Icon(Icons.Default.Mic, contentDescription = "صوت", tint = MaterialTheme.colorScheme.onPrimary)
                     }
                 }
             }
             
             if (voiceError != null) {
-                Text(text = "️ $voiceError", color = MaterialTheme.colorScheme.error, modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp), fontSize = 12.sp)
+                Text(text = "⚠️ $voiceError", color = MaterialTheme.colorScheme.error, modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp), fontSize = 12.sp)
             }
         }
     }
@@ -256,7 +270,7 @@ fun ChatScreen(
                                     horizontalArrangement = Arrangement.SpaceBetween,
                                     verticalAlignment = Alignment.CenterVertically
                                 ) {
-                                    Text(conv.title, fontWeight = FontWeight.Bold)
+                                    Text(conv.title, fontWeight = FontWeight.Bold, maxLines = 1)
                                     if (isSelected) Text("حالي", fontSize = 12.sp, color = MaterialTheme.colorScheme.primary)
                                 }
                             }
