@@ -64,16 +64,15 @@ fun ChatScreen(
     var voiceError by remember { mutableStateOf<String?>(null) }
     val voiceHelper = remember { VoiceInputHelper(context) }
 
-    // ألوان التدرج الزجاجي الفاتح المتناسق
     val backgroundGradient = Brush.verticalGradient(
         colors = listOf(
-            Color(0xFF1E3A8A), // أزرق ملكي ناصع
-            Color(0xFF0F172A), // أزرق ليلي غامق
-            Color(0xFF2A085C)  // بنفسجي قاني متناسق
+            Color(0xFF1E3A8A),
+            Color(0xFF0F172A),
+            Color(0xFF2A085C)
         )
     )
-    val glassSurface = Color(0x35FFFFFF) // خلفية زجاجية شفافة
-    val glassBorder = Color(0x6660A5FA)  // حدود مضيئة وواضحة
+    val glassSurface = Color(0x35FFFFFF)
+    val glassBorder = Color(0x6660A5FA)
 
     val cameraLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.StartActivityForResult()
@@ -231,7 +230,6 @@ fun ChatScreen(
                             items(state.messages) { msg -> MessageBubble(message = msg) }
                         }
 
-                        // شريط الإدخال المتناسق
                         Row(modifier = Modifier.fillMaxWidth().padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
                             OutlinedTextField(
                                 value = state.inputText,
