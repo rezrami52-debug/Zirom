@@ -9,8 +9,8 @@ import androidx.compose.material3.Surface
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import com.racha.ai.core.util.TimeHelper
+import com.racha.ai.ui.navigation.RachaApp
 import com.racha.ai.ui.theme.RachaTheme
-import com.racha.ai.ui.screens.chat.ChatScreen
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -23,20 +23,7 @@ class MainActivity : ComponentActivity() {
                     modifier = Modifier.fillMaxSize(),
                     color = MaterialTheme.colorScheme.background
                 ) {
-                    ChatScreen(
-                        onOpenSettings = {
-                            // ربط زر الإعدادات
-                        },
-                        onOpenNotifications = {
-                            // ربط زر الإشعارات
-                        },
-                        onOpenPrayer = {
-                            // ربط زر أوقات الصلاة
-                        },
-                        onOpenRoutine = {
-                            // ربط زر الروتين
-                        }
-                    )
+                    RachaApp()
                 }
             }
         }
