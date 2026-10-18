@@ -48,6 +48,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalNavigationDrawer
 import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -75,8 +76,6 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.google.accompanist.permissions.ExperimentalPermissionsApi
 import com.google.accompanist.permissions.isGranted
 import com.google.accompanist.permissions.rememberPermissionState
-import com.racha.ai.core.apps.AppChooserDialog
-import com.racha.ai.core.tools.PhotoCaptureActivity
 import com.racha.ai.core.voice.VoiceInputHelper
 import com.racha.ai.data.repository.NotificationRepository
 import com.racha.ai.domain.model.Message
@@ -108,42 +107,54 @@ fun ChatScreen(
     var voiceError by remember { mutableStateOf<String?>(null) }
     val voiceHelper = remember { VoiceInputHelper(context) }
 
+    val colors = MaterialTheme.colorScheme
+
     val cameraLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.StartActivityForResult()
     ) { result ->
-        if (result.resultCode == android.app.Activity.RESULT_OK) viewModel.onSpecialToolCompleted(true, "📸 تم حفظ الصورة")
+        if (result.resultCode == android.app.Activity.RESULT_OK)
+            viewModel.onSpecialToolCompleted(true, "📸 تم حفظ الصورة")
         else viewModel.onSpecialToolCancelled()
     }
 
-    val modelPickerLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.OpenDocument()
-    ) { uri: Uri? -> if (uri != null) viewModel.copyQwenModel(uri) }
-
     LaunchedEffect(state.pendingSpecialTool) {
-        if (state.pendingSpecialTool == "open_camera") cameraLauncher.launch(Intent(context, PhotoCaptureActivity::class.java))
+        if (state.pendingSpecialTool == "open_camera")
+            cameraLauncher.launch(Intent(context, com.racha.ai.core.tools.PhotoCaptureActivity::class.java))
     }
     DisposableEffect(Unit) { onDispose { voiceHelper.destroy() } }
-    LaunchedEffect(state.messages.size) { if (state.messages.isNotEmpty()) listState.animateScrollToItem(state.messages.size - 1) }
-    LaunchedEffect(voiceError) { if (voiceError != null) { kotlinx.coroutines.delay(3000); voiceError = null } }
+    LaunchedEffect(state.messages.size) {
+        if (state.messages.isNotEmpty()) listState.animateScrollToItem(state.messages.size - 1)
+    }
+    LaunchedEffect(voiceError) {
+        if (voiceError != null) { kotlinx.coroutines.delay(3000); voiceError = null }
+    }
 
     ModalNavigationDrawer(
         drawerState = drawerState,
         drawerContent = {
-            Surface(modifier = Modifier.fillMaxHeight().width(300.dp), color = MaterialTheme.colorScheme.surface, shadowElevation = 16.dp) {
+            Surface(
+                modifier = Modifier.fillMaxHeight().width(300.dp),
+                color = colors.surface,
+                shadowElevation = 16.dp
+            ) {
                 Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
-                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                        Text("المحادثات السابقة", fontSize = 20.sp, fontWeight = FontWeight.Bold, color = Color(0xFFBD4CFF))
-                        IconButton(onClick = { scope.launch { drawerState.close() } }) { 
-                            Icon(Icons.Default.Close, contentDescription = "إغلاق", tint = Color(0xFFBD4CFF)) 
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text("المحادثات السابقة", fontSize = 20.sp, fontWeight = FontWeight.Bold, color = colors.primary)
+                        IconButton(onClick = { scope.launch { drawerState.close() } }) {
+                            Icon(Icons.Default.Close, contentDescription = "إغلاق", tint = colors.primary)
                         }
                     }
                     Spacer(modifier = Modifier.height(16.dp))
-                    Divider(color = Color(0xFFBD4CFF).copy(alpha = 0.3f))
+                    Divider(color = colors.primary.copy(alpha = 0.3f))
                     Spacer(modifier = Modifier.height(8.dp))
 
                     if (state.conversations.isEmpty()) {
-                        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { 
-                            Text("لا توجد محادثات سابقة", color = Color(0xFFE0E0FF)) 
+                        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                            Text("لا توجد محادثات سابقة", color = colors.onSurface)
                         }
                     } else {
                         LazyColumn(modifier = Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -151,31 +162,20 @@ fun ChatScreen(
                                 val isSelected = conv.id == state.currentConversationId
                                 val dateStr = SimpleDateFormat("dd/MM/yyyy HH:mm", Locale("ar")).format(Date(conv.timestamp))
                                 Card(
-                                    modifier = Modifier.fillMaxWidth().clickable { viewModel.loadConversation(conv.id); scope.launch { drawerState.close() } },
-                                    colors = CardDefaults.cardColors(containerColor = if (isSelected) Color(0x33BD4CFF) else Color(0xFF2D2D44)),
+                                    modifier = Modifier.fillMaxWidth().clickable {
+                                        viewModel.loadConversation(conv.id)
+                                        scope.launch { drawerState.close() }
+                                    },
+                                    colors = CardDefaults.cardColors(
+                                        containerColor = if (isSelected) colors.primary.copy(alpha = 0.2f) else colors.surfaceVariant
+                                    ),
                                     shape = RoundedCornerShape(12.dp)
                                 ) {
                                     Column(modifier = Modifier.padding(12.dp)) {
-                                        Text(text = conv.title, fontWeight = FontWeight.Bold, maxLines = 2, color = Color(0xFFE0E0FF))
+                                        Text(conv.title, fontWeight = FontWeight.Bold, maxLines = 2, color = colors.onSurface)
                                         Spacer(modifier = Modifier.height(4.dp))
-                                        Text(text = dateStr, fontSize = 12.sp, color = Color(0xFFE0E0FF).copy(alpha = 0.7f))
-                                        if (isSelected) { 
-                                            Spacer(modifier = Modifier.height(4.dp))
-                                            Text(text = "✓ حالي", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = Color(0xFFBD4CFF)) 
-                                        }
+                                        Text(dateStr, fontSize = 12.sp, color = colors.onSurface.copy(alpha = 0.7f))
                                     }
-                                }
-                            }
-                            item {
-                                Spacer(modifier = Modifier.height(8.dp))
-                                Button(
-                                    onClick = { viewModel.startNewChat(); scope.launch { drawerState.close() } }, 
-                                    modifier = Modifier.fillMaxWidth(),
-                                    colors = androidx.compose.material3.ButtonDefaults.buttonColors(containerColor = Color(0xFFBD4CFF))
-                                ) {
-                                    Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(20.dp))
-                                    Spacer(modifier = Modifier.width(8.dp))
-                                    Text("محادثة جديدة", color = Color.White)
                                 }
                             }
                         }
@@ -187,114 +187,54 @@ fun ChatScreen(
             Scaffold(
                 topBar = {
                     TopAppBar(
-                        title = {
-                            Text(text = "Racha AI", fontWeight = FontWeight.Bold, fontSize = 22.sp, color = Color(0xFFBD4CFF))
-                        },
+                        title = { Text("Racha AI", fontWeight = FontWeight.Bold, fontSize = 22.sp, color = colors.primary) },
                         navigationIcon = {
                             IconButton(onClick = { scope.launch { drawerState.open() } }) {
-                                Icon(Icons.Default.Menu, contentDescription = "القائمة", tint = Color(0xFFBD4CFF))
+                                Icon(Icons.Default.Menu, contentDescription = "القائمة", tint = colors.primary)
                             }
                         },
                         actions = {
-                            // ✅ أيقونة الروبوت فقط (بدون كلمة "رسلة")
-                            Text(
-                                text = "🤖",
-                                fontSize = 28.sp,
-                                modifier = Modifier.padding(end = 12.dp)
-                            )
+                            Text("🤖", fontSize = 28.sp, modifier = Modifier.padding(end = 12.dp))
                         },
                         colors = TopAppBarDefaults.topAppBarColors(
-                            containerColor = Color(0xFF1A1A2E),
-                            titleContentColor = Color(0xFFBD4CFF)
+                            containerColor = colors.surface,
+                            titleContentColor = colors.primary
                         )
                     )
                 },
                 bottomBar = {
                     BottomAppBar(
-                        containerColor = Color(0xFF1A1A2E),
-                        contentColor = Color(0xFFBD4CFF),
+                        containerColor = colors.surface,
+                        contentColor = colors.primary,
                         tonalElevation = 8.dp
                     ) {
-                        // ✅ 1. الصلاة
                         NavigationBarItem(
-                            icon = { 
-                                Icon(
-                                    Icons.Default.Mosque, 
-                                    contentDescription = "الصلاة", 
-                                    modifier = Modifier.size(24.dp),
-                                    tint = if (selectedTab == 0) Color(0xFFBD4CFF) else Color(0xFFE0E0FF).copy(alpha = 0.5f)
-                                ) 
-                            },
-                            label = { Text("الصلاة", fontSize = 11.sp, color = if (selectedTab == 0) Color(0xFFBD4CFF) else Color(0xFFE0E0FF).copy(alpha = 0.5f)) },
+                            icon = { Icon(Icons.Default.Mosque, "الصلاة", modifier = Modifier.size(24.dp), tint = if (selectedTab == 0) colors.primary else colors.onSurface.copy(alpha = 0.5f)) },
+                            label = { Text("الصلاة", fontSize = 11.sp, color = if (selectedTab == 0) colors.primary else colors.onSurface.copy(alpha = 0.5f)) },
                             selected = selectedTab == 0,
-                            onClick = { 
-                                selectedTab = 0
-                                onOpenPrayer()
-                            }
+                            onClick = { selectedTab = 0; onOpenPrayer() }
                         )
-                        // ✅ 2. الإشعارات
                         NavigationBarItem(
-                            icon = { 
-                                Icon(
-                                    Icons.Default.Notifications, 
-                                    contentDescription = "الإشعارات", 
-                                    modifier = Modifier.size(24.dp),
-                                    tint = if (selectedTab == 1) Color(0xFFBD4CFF) else Color(0xFFE0E0FF).copy(alpha = 0.5f)
-                                ) 
-                            },
-                            label = { 
+                            icon = { Icon(Icons.Default.Notifications, "الإشعارات", modifier = Modifier.size(24.dp), tint = if (selectedTab == 1) colors.primary else colors.onSurface.copy(alpha = 0.5f)) },
+                            label = {
                                 Box {
-                                    Text("الإشعارات", fontSize = 11.sp, color = if (selectedTab == 1) Color(0xFFBD4CFF) else Color(0xFFE0E0FF).copy(alpha = 0.5f))
-                                    if (unreadCount > 0) {
-                                        Text(
-                                            text = if (unreadCount > 99) "99+" else unreadCount.toString(),
-                                            modifier = Modifier.align(Alignment.TopEnd).background(Color.Red, RoundedCornerShape(50)).padding(horizontal = 3.dp),
-                                            color = Color.White,
-                                            fontSize = 8.sp,
-                                            fontWeight = FontWeight.Bold
-                                        )
-                                    }
+                                    Text("الإشعارات", fontSize = 11.sp, color = if (selectedTab == 1) colors.primary else colors.onSurface.copy(alpha = 0.5f))
                                 }
                             },
                             selected = selectedTab == 1,
-                            onClick = { 
-                                selectedTab = 1
-                                onOpenNotifications()
-                            }
+                            onClick = { selectedTab = 1; onOpenNotifications() }
                         )
-                        // ✅ 3. الإعدادات
                         NavigationBarItem(
-                            icon = { 
-                                Icon(
-                                    Icons.Default.Settings, 
-                                    contentDescription = "الإعدادات", 
-                                    modifier = Modifier.size(24.dp),
-                                    tint = if (selectedTab == 2) Color(0xFFBD4CFF) else Color(0xFFE0E0FF).copy(alpha = 0.5f)
-                                ) 
-                            },
-                            label = { Text("الإعدادات", fontSize = 11.sp, color = if (selectedTab == 2) Color(0xFFBD4CFF) else Color(0xFFE0E0FF).copy(alpha = 0.5f)) },
+                            icon = { Icon(Icons.Default.Settings, "الإعدادات", modifier = Modifier.size(24.dp), tint = if (selectedTab == 2) colors.primary else colors.onSurface.copy(alpha = 0.5f)) },
+                            label = { Text("الإعدادات", fontSize = 11.sp, color = if (selectedTab == 2) colors.primary else colors.onSurface.copy(alpha = 0.5f)) },
                             selected = selectedTab == 2,
-                            onClick = { 
-                                selectedTab = 2
-                                onOpenSettings()
-                            }
+                            onClick = { selectedTab = 2; onOpenSettings() }
                         )
-                        // ✅ 4. محادثة جديدة
                         NavigationBarItem(
-                            icon = { 
-                                Icon(
-                                    Icons.Default.Add, 
-                                    contentDescription = "محادثة جديدة", 
-                                    modifier = Modifier.size(24.dp),
-                                    tint = if (selectedTab == 3) Color(0xFFBD4CFF) else Color(0xFFE0E0FF).copy(alpha = 0.5f)
-                                ) 
-                            },
-                            label = { Text("جديدة", fontSize = 11.sp, color = if (selectedTab == 3) Color(0xFFBD4CFF) else Color(0xFFE0E0FF).copy(alpha = 0.5f)) },
+                            icon = { Icon(Icons.Default.Add, "محادثة جديدة", modifier = Modifier.size(24.dp), tint = if (selectedTab == 3) colors.primary else colors.onSurface.copy(alpha = 0.5f)) },
+                            label = { Text("جديدة", fontSize = 11.sp, color = if (selectedTab == 3) colors.primary else colors.onSurface.copy(alpha = 0.5f)) },
                             selected = selectedTab == 3,
-                            onClick = { 
-                                selectedTab = 3
-                                viewModel.startNewChat()
-                            }
+                            onClick = { selectedTab = 3; viewModel.startNewChat() }
                         )
                     }
                 }
@@ -303,17 +243,17 @@ fun ChatScreen(
                     when {
                         weatherState.isLoading -> {
                             Row(modifier = Modifier.fillMaxWidth().padding(16.dp), horizontalArrangement = Arrangement.Center) {
-                                CircularProgressIndicator(color = Color(0xFFBD4CFF))
+                                CircularProgressIndicator(color = colors.primary)
                                 Spacer(modifier = Modifier.width(8.dp))
-                                Text("جاري تحديث الطقس...", color = Color(0xFFE0E0FF))
+                                Text("جاري تحديث الطقس...", color = colors.onSurface)
                             }
                         }
                         weatherState.error != null -> {
-                            Card(modifier = Modifier.fillMaxWidth().padding(16.dp), colors = CardDefaults.cardColors(containerColor = Color(0xFF2D2D44))) {
+                            Card(modifier = Modifier.fillMaxWidth().padding(16.dp), colors = CardDefaults.cardColors(containerColor = colors.surfaceVariant)) {
                                 Row(modifier = Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
-                                    Icon(Icons.Default.LocationOff, contentDescription = null, tint = Color(0xFFBD4CFF))
+                                    Icon(Icons.Default.LocationOff, null, tint = colors.primary)
                                     Spacer(modifier = Modifier.width(8.dp))
-                                    Text(weatherState.error ?: "خطأ في الطقس", color = Color(0xFFE0E0FF))
+                                    Text(weatherState.error ?: "خطأ في الطقس", color = colors.onSurface)
                                 }
                             }
                         }
@@ -326,23 +266,20 @@ fun ChatScreen(
                         items(state.messages) { msg -> MessageBubble(message = msg) }
                     }
 
-                    if (state.isSearching || state.qwenLoading) {
-                        Row(modifier = Modifier.fillMaxWidth().padding(16.dp), horizontalArrangement = Arrangement.Center) { 
-                            CircularProgressIndicator(color = Color(0xFFBD4CFF)) 
-                        }
-                    }
-
                     Row(modifier = Modifier.fillMaxWidth().padding(16.dp), verticalAlignment = Alignment.Bottom) {
                         OutlinedTextField(
-                            value = state.inputText, onValueChange = viewModel::onInputChange, modifier = Modifier.weight(1f),
-                            placeholder = { Text("اكتب رسالتك هنا...", color = Color(0xFFE0E0FF).copy(alpha = 0.5f)) }, 
-                            shape = RoundedCornerShape(24.dp), 
+                            value = state.inputText,
+                            onValueChange = viewModel::onInputChange,
+                            modifier = Modifier.weight(1f),
+                            placeholder = { Text("اكتب رسالتك هنا...", color = colors.onSurface.copy(alpha = 0.5f)) },
+                            shape = RoundedCornerShape(24.dp),
                             maxLines = 4,
-                            colors = androidx.compose.material3.OutlinedTextFieldDefaults.colors(
-                                focusedBorderColor = Color(0xFFBD4CFF),
-                                unfocusedBorderColor = Color(0xFF2D2D44),
-                                focusedTextColor = Color(0xFFE0E0FF),
-                                unfocusedTextColor = Color(0xFFE0E0FF)
+                            colors = OutlinedTextFieldDefaults.colors(
+                                focusedBorderColor = colors.primary,
+                                unfocusedBorderColor = colors.surfaceVariant,
+                                focusedTextColor = colors.onSurface,
+                                unfocusedTextColor = colors.onSurface,
+                                cursorColor = colors.primary
                             )
                         )
                         Spacer(modifier = Modifier.width(8.dp))
@@ -351,17 +288,22 @@ fun ChatScreen(
                                 if (state.inputText.isNotBlank()) viewModel.sendMessage()
                                 else if (micPermission.status.isGranted) {
                                     isListening = true
-                                    voiceHelper.startListening(onResult = { viewModel.onInputChange(it); isListening = false }, onError = { voiceError = it; isListening = false })
+                                    voiceHelper.startListening(
+                                        onResult = { viewModel.onInputChange(it); isListening = false },
+                                        onError = { voiceError = it; isListening = false }
+                                    )
                                 } else { micPermission.launchPermissionRequest() }
                             },
-                            modifier = Modifier.background(Color(0xFFBD4CFF), RoundedCornerShape(50)).size(48.dp)
+                            modifier = Modifier.background(colors.primary, RoundedCornerShape(50)).size(48.dp)
                         ) {
-                            if (isListening) CircularProgressIndicator(color = Color.White, modifier = Modifier.size(24.dp))
-                            else if (state.inputText.isNotBlank()) Icon(Icons.Default.Send, contentDescription = "إرسال", tint = Color.White)
-                            else Icon(Icons.Default.Mic, contentDescription = "صوت", tint = Color.White)
+                            if (isListening) CircularProgressIndicator(color = colors.onPrimary, modifier = Modifier.size(24.dp))
+                            else if (state.inputText.isNotBlank()) Icon(Icons.Default.Send, "إرسال", tint = colors.onPrimary)
+                            else Icon(Icons.Default.Mic, "صوت", tint = colors.onPrimary)
                         }
                     }
-                    if (voiceError != null) { Text(text = "⚠️ $voiceError", color = Color(0xFFE94560), modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp), fontSize = 12.sp) }
+                    if (voiceError != null) {
+                        Text("⚠️ $voiceError", color = colors.error, modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp), fontSize = 12.sp)
+                    }
                 }
             }
         }
@@ -370,18 +312,27 @@ fun ChatScreen(
 
 @Composable
 fun MessageBubble(message: Message, modifier: Modifier = Modifier) {
+    val colors = MaterialTheme.colorScheme
     val isUser = message.isFromUser
-    Row(modifier = modifier.fillMaxWidth(), horizontalArrangement = if (isUser) Arrangement.End else Arrangement.Start) {
+
+    Row(
+        modifier = modifier.fillMaxWidth(),
+        horizontalArrangement = if (isUser) Arrangement.End else Arrangement.Start
+    ) {
         Surface(
-            shape = RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp, bottomStart = if (isUser) 16.dp else 4.dp, bottomEnd = if (isUser) 4.dp else 16.dp),
-            color = if (isUser) Color(0xFF2D2D44) else Color(0xFFBD4CFF).copy(alpha = 0.3f),
+            shape = RoundedCornerShape(
+                topStart = 16.dp, topEnd = 16.dp,
+                bottomStart = if (isUser) 16.dp else 4.dp,
+                bottomEnd = if (isUser) 4.dp else 16.dp
+            ),
+            color = if (isUser) colors.surfaceVariant else colors.primary.copy(alpha = 0.25f),
             modifier = Modifier.widthIn(max = 280.dp).padding(vertical = 4.dp)
         ) {
             Column(modifier = Modifier.padding(12.dp)) {
-                Text(text = message.text, color = Color(0xFFE0E0FF))
-                if (message.isError) { 
+                Text(message.text, color = colors.onSurface)
+                if (message.isError) {
                     Spacer(modifier = Modifier.padding(top = 4.dp))
-                    Text(text = "️ حدث خطأ", color = Color(0xFFE94560), fontSize = 12.sp) 
+                    Text("⚠️ حدث خطأ", color = colors.error, fontSize = 12.sp)
                 }
             }
         }
