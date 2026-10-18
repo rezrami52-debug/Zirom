@@ -1,5 +1,8 @@
 package com.racha.ai.core.faceauth
 
+import androidx.biometric.BiometricPrompt
+import androidx.core.content.ContextCompat
+import androidx.fragment.app.FragmentActivity
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -11,9 +14,11 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import java.util.concurrent.Executor
 
 @Composable
 fun BiometricLockScreen(
@@ -21,6 +26,47 @@ fun BiometricLockScreen(
     onCancel: () -> Unit,
     onBypass: () -> Unit
 ) {
+    val context = LocalContext.current
+    val activity = context as? FragmentActivity
+
+    fun launchBiometric() {
+        if (activity == null) {
+            onSuccess()
+            return
+        }
+        val executor: Executor = ContextCompat.getMainExecutor(context)
+        val biometricPrompt = BiometricPrompt(
+            activity,
+            executor,
+            object : BiometricPrompt.AuthenticationCallback() {
+                override fun onAuthenticationSucceeded(result: BiometricPrompt.AuthenticationResult) {
+                    super.onAuthenticationSucceeded(result)
+                    onSuccess()
+                }
+                override fun onAuthenticationError(errorCode: Int, errString: CharSequence) {
+                    super.onAuthenticationError(errorCode, errString)
+                    // في حال الخطأ أو الإلغاء يمكن البقاء أو السماح بالتجاوز
+                }
+                override fun onAuthenticationFailed() {
+                    super.onAuthenticationFailed()
+                }
+            }
+        )
+
+        val promptInfo = BiometricPrompt.PromptInfo.Builder()
+            .setTitle("مصادقة Racha AI الآمنة")
+            .setSubtitle("استخدم بصمة الإصبع أو الوجه للفتح")
+            .setNegativeButtonText("إلغاء")
+            .build()
+
+        biometricPrompt.authenticate(promptInfo)
+    }
+
+    // تشغيل نافذة البصمة تلقائياً عند فتح الشاشة
+    LaunchedEffect(Unit) {
+        launchBiometric()
+    }
+
     val backgroundGradient = Brush.verticalGradient(
         colors = listOf(
             Color(0xFF0F172A),
@@ -59,7 +105,7 @@ fun BiometricLockScreen(
             Spacer(modifier = Modifier.height(12.dp))
 
             Text(
-                text = "يرجى التحقق للوصول إلى التطبيق",
+                text = "يرجى استخدام البصمة أو الوجه للفتح",
                 fontSize = 14.sp,
                 color = Color.White.copy(alpha = 0.7f)
             )
@@ -67,7 +113,7 @@ fun BiometricLockScreen(
             Spacer(modifier = Modifier.height(32.dp))
 
             Button(
-                onClick = onSuccess,
+                onClick = { launchBiometric() },
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(50.dp),
@@ -75,7 +121,7 @@ fun BiometricLockScreen(
                 colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF3B82F6))
             ) {
                 Text(
-                    text = "فتح التطبيق",
+                    text = "إعادة محاولة البصمة",
                     fontSize = 16.sp,
                     fontWeight = FontWeight.Bold,
                     color = Color.White
@@ -90,7 +136,7 @@ fun BiometricLockScreen(
                     .fillMaxWidth()
                     .height(50.dp),
                 shape = RoundedCornerShape(25.dp),
-                border = ButtonDrawBorder(1.dp, Color.White.copy(alpha = 0.5f))
+                border = androidx.compose.foundation.BorderStroke(1.dp, Color.White.copy(alpha = 0.5f))
             ) {
                 Text(
                     text = "الدخول المباشر",
@@ -101,7 +147,3 @@ fun BiometricLockScreen(
         }
     }
 }
-
-@Composable
-private fun ButtonDrawBorder(width: androidx.compose.ui.unit.Dp, color: Color) = 
-    androidx.compose.foundation.BorderStroke(width, color)
