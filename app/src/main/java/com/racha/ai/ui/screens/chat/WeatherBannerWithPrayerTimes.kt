@@ -3,6 +3,7 @@ package com.racha.ai.ui.screens.chat
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -16,6 +17,7 @@ import androidx.compose.ui.unit.sp
 import com.racha.ai.core.util.TimeHelper
 import com.racha.ai.domain.model.WeatherInfo
 import com.racha.ai.services.prayer.PrayerTimesCalculator
+import java.text.SimpleDateFormat
 import java.util.*
 import java.util.concurrent.TimeUnit
 
@@ -35,132 +37,109 @@ fun WeatherBannerWithPrayerTimes(weather: WeatherInfo?, modifier: Modifier = Mod
         calculatePrayerStatus(times)
     }
 
-    // خلفية زجاجية شفافة زرقاء ناصعة بدلاً من الألوان الداكنة
-    val glassBackground = listOf(
-        Color(0x33FFFFFF), // أبيض شفاف خفيف جداً
-        Color(0x2260A5FA)  // أزرق ناصع شفاف
-    )
-    val glassBorder = Color(0x55FFFFFF) // حد أبيض شفاف مضيء
-    val accentGold = Color(0xFFFFC107)
+    var currentTime by remember { mutableStateOf("") }
+    LaunchedEffect(Unit) {
+        while (true) {
+            currentTime = SimpleDateFormat("hh:mm a", Locale.getDefault()).format(Date())
+            kotlinx.coroutines.delay(1000)
+        }
+    }
+
+    // خلفية زجاجية مضيئة ومدمجة بحجم صغير
+    val glassBg = listOf(Color(0x33FFFFFF), Color(0x1160A5FA))
+    val glassBorder = Color(0x44FFFFFF)
 
     Card(
-        modifier = modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(24.dp),
+        modifier = modifier
+            .fillMaxWidth()
+            .padding(vertical = 4.dp),
+        shape = RoundedCornerShape(18.dp),
         colors = CardDefaults.cardColors(containerColor = Color.Transparent),
         elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
     ) {
-        Column(
+        Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .background(Brush.verticalGradient(glassBackground))
-                .border(1.dp, glassBorder, RoundedCornerShape(24.dp))
-                .padding(16.dp)
+                .background(Brush.linearGradient(glassBg))
+                .border(1.dp, glassBorder, RoundedCornerShape(18.dp))
+                .padding(horizontal = 12.dp, vertical = 8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween
         ) {
-            // --- الجزء العلوي: الطقس ---
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
+            // --- القسم الأول: البوصلة والساعة الحالية مع القبلة ---
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Box(
+                    modifier = Modifier
+                        .size(42.dp)
+                        .background(Color(0x33000000), CircleShape)
+                        .border(1.dp, Color(0xFF60A5FA), CircleShape),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Text(text = "🧭", fontSize = 14.sp)
+                        Text(text = "🕋 132°", fontSize = 8.sp, color = Color.White, fontWeight = FontWeight.Bold)
+                    }
+                }
+                Spacer(modifier = Modifier.width(8.dp))
                 Column {
                     Text(
-                        text = "مساء الخير",
-                        fontSize = 15.sp,
-                        color = Color.White
-                    )
-                    Text(
-                        text = "${weather.cityName ?: "Sousse"}, Sousse Governorate",
-                        fontSize = 11.sp,
-                        color = Color.White.copy(alpha = 0.7f)
-                    )
-                    Spacer(modifier = Modifier.height(4.dp))
-                    Text(
-                        text = "${weather.temperature}°C",
-                        fontSize = 32.sp,
+                        text = if (currentTime.isNotEmpty()) currentTime else "08:20 PM",
+                        fontSize = 13.sp,
                         fontWeight = FontWeight.Bold,
                         color = Color.White
                     )
-                }
-
-                Column(horizontalAlignment = Alignment.End) {
                     Text(
-                        text = "💧 86%",
-                        fontSize = 12.sp,
-                        color = Color.White.copy(alpha = 0.9f)
-                    )
-                    Spacer(modifier = Modifier.height(4.dp))
-                    Text(
-                        text = "💨 5.0 km/h",
-                        fontSize = 12.sp,
-                        color = Color.White.copy(alpha = 0.9f)
+                        text = "اتجاه القبلة",
+                        fontSize = 9.sp,
+                        color = Color.White.copy(alpha = 0.7f)
                     )
                 }
             }
 
-            Spacer(modifier = Modifier.height(14.dp))
-            HorizontalDivider(color = Color.White.copy(alpha = 0.2f), thickness = 1.dp)
-            Spacer(modifier = Modifier.height(14.dp))
+            // فاصل عمودي شفاف
+            Box(
+                modifier = Modifier
+                    .width(1.dp)
+                    .height(30.dp)
+                    .background(Color.White.copy(alpha = 0.2f))
+            )
 
-            // --- الجزء السفلي: المربعان الزجاجيان للصلاة ---
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                // المربع الأول: العشاء / الأخيرة
-                Box(
-                    modifier = Modifier
-                        .weight(1f)
-                        .background(Color(0x25FFFFFF), RoundedCornerShape(16.dp))
-                        .border(1.dp, Color(0x44FFFFFF), RoundedCornerShape(16.dp))
-                        .padding(12.dp)
-                ) {
-                    Column {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Text(text = "⏳ القادمة", fontSize = 10.sp, color = Color.White.copy(alpha = 0.8f))
-                        }
-                        Spacer(modifier = Modifier.height(4.dp))
-                        Text(
-                            text = "العشاء 🌙",
-                            fontSize = 15.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = Color.White
-                        )
-                        Spacer(modifier = Modifier.height(2.dp))
-                        Text(
-                            text = "الآن\n08:20 PM",
-                            fontSize = 10.sp,
-                            color = Color.White.copy(alpha = 0.7f)
-                        )
-                    }
-                }
+            // --- القسم الثاني: الطقس المدمج ---
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                Text(
+                    text = "${weather.temperature}°C  💧86%",
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = Color.White
+                )
+                Text(
+                    text = weather.cityName ?: "سوسة",
+                    fontSize = 9.sp,
+                    color = Color.White.copy(alpha = 0.7f)
+                )
+            }
 
-                // المربع الثاني: الفجر / القادمة
-                Box(
-                    modifier = Modifier
-                        .weight(1f)
-                        .background(Color(0x35FFD700), RoundedCornerShape(16.dp))
-                        .border(1.dp, Color(0x66FFD700), RoundedCornerShape(16.dp))
-                        .padding(12.dp)
-                ) {
-                    Column {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Text(text = "🌅 الفجر", fontSize = 10.sp, color = Color.White.copy(alpha = 0.9f))
-                        }
-                        Spacer(modifier = Modifier.height(4.dp))
-                        Text(
-                            text = "صلاة الفجر",
-                            fontSize = 15.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = Color.White
-                        )
-                        Spacer(modifier = Modifier.height(2.dp))
-                        Text(
-                            text = "بعد 8 ساعات",
-                            fontSize = 10.sp,
-                            color = Color.White.copy(alpha = 0.8f)
-                        )
-                    }
-                }
+            // فاصل عمودي شفاف
+            Box(
+                modifier = Modifier
+                    .width(1.dp)
+                    .height(30.dp)
+                    .background(Color.White.copy(alpha = 0.2f))
+            )
+
+            // --- القسم الثالث: الصلاة القادمة ---
+            Column(horizontalAlignment = Alignment.End) {
+                Text(
+                    text = "🕌 ${prayerStatus.next.name}",
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = Color(0xFFFFC107)
+                )
+                Text(
+                    text = prayerStatus.next.timeStr,
+                    fontSize = 9.sp,
+                    color = Color.White.copy(alpha = 0.8f)
+                )
             }
         }
     }
