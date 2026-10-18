@@ -4,6 +4,8 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -16,10 +18,13 @@ import androidx.compose.ui.unit.sp
 import com.racha.ai.domain.model.WeatherInfo
 
 @Composable
-fun WeatherBanner(weather: WeatherInfo?, modifier: Modifier = Modifier) {
-    if (weather == null) return
-
+fun WeatherBanner(
+    weather: WeatherInfo?,
+    onRefresh: () -> Unit = {},
+    modifier: Modifier = Modifier
+) {
     val conditionEmoji = when {
+        weather == null -> "⚠️ لا يوجد اتصال"
         weather.temperature > 30 -> "☀️ مشمس وحار"
         weather.temperature > 20 -> "🌤️ طقس لطيف"
         weather.temperature > 10 -> "⛅ غائم جزئياً"
@@ -42,37 +47,31 @@ fun WeatherBanner(weather: WeatherInfo?, modifier: Modifier = Modifier) {
                 .fillMaxWidth()
                 .background(Brush.linearGradient(glassBg))
                 .border(1.dp, glassBorder, RoundedCornerShape(18.dp))
-                .padding(horizontal = 16.dp, vertical = 10.dp),
+                .padding(horizontal = 14.dp, vertical = 8.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.SpaceBetween
         ) {
             Column {
                 Text(
-                    text = "${weather.temperature}°C  |  $conditionEmoji",
-                    fontSize = 14.sp,
+                    text = if (weather != null) "${weather.temperature}°C  |  $conditionEmoji" else "حالة الطقس غير متوفرة",
+                    fontSize = 13.sp,
                     fontWeight = FontWeight.Bold,
                     color = Color.White
                 )
                 Spacer(modifier = Modifier.height(2.dp))
                 Text(
-                    text = "📍 ${weather.cityName ?: "سوسة"}  •  💧 الرطوبة: 86%",
+                    text = "📍 ${weather?.cityName ?: "سوسة"}  •  💨 رياح 5 كم/س",
                     fontSize = 10.sp,
                     color = Color.White.copy(alpha = 0.8f)
                 )
             }
 
-            Column(horizontalAlignment = Alignment.End) {
-                Text(
-                    text = "💨 رياح نشطة",
-                    fontSize = 12.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = Color(0xFFFFD700)
-                )
-                Spacer(modifier = Modifier.height(2.dp))
-                Text(
-                    text = "5.0 كم/س",
-                    fontSize = 10.sp,
-                    color = Color.White.copy(alpha = 0.8f)
+            IconButton(onClick = onRefresh) {
+                Icon(
+                    imageVector = Icons.Default.Refresh,
+                    contentDescription = "تحديث الطقس",
+                    tint = Color(0xFFFFD700),
+                    modifier = Modifier.size(22.dp)
                 )
             }
         }
