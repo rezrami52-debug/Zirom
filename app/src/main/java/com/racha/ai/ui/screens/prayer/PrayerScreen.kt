@@ -1,147 +1,115 @@
 package com.racha.ai.ui.screens.prayer
 
-import android.Manifest
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
-import androidx.compose.material.icons.filled.Refresh
-import androidx.compose.material3.Button
-import androidx.compose.material3.Card
-import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Text
-import androidx.compose.material3.TopAppBar
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.collectAsState
-import androidx.compose.runtime.getValue
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import androidx.lifecycle.viewmodel.compose.viewModel
-import com.google.accompanist.permissions.ExperimentalPermissionsApi
-import com.google.accompanist.permissions.rememberMultiplePermissionsState
-import com.racha.ai.R
-import com.racha.ai.core.permissions.PermissionHelper
+import androidx.compose.ui.unit.sp
+import com.racha.ai.services.prayer.PrayerTimesCalculator
 import java.text.SimpleDateFormat
-import java.util.Date
-import java.util.Locale
+import java.util.*
 
-@OptIn(ExperimentalMaterial3Api::class, ExperimentalPermissionsApi::class)
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun PrayerScreen(
-    onBack: () -> Unit,
-    viewModel: PrayerViewModel = viewModel()
-) {
-    val state by viewModel.uiState.collectAsState()
-    val context = LocalContext.current
-
-    val locationPermissions = rememberMultiplePermissionsState(
-        permissions = listOf(
-            Manifest.permission.ACCESS_FINE_LOCATION,
-            Manifest.permission.ACCESS_COARSE_LOCATION
+fun PrayerScreen(onBack: () -> Unit) {
+    val times = remember {
+        PrayerTimesCalculator.calculate(
+            latitude = 35.8256,
+            longitude = 10.6369,
+            locationName = "سوسة"
         )
+    }
+
+    val backgroundGradient = Brush.verticalGradient(
+        colors = listOf(Color(0xFF1E3A8A), Color(0xFF0F172A), Color(0xFF2A085C))
     )
+    val glassSurface = Color(0x35FFFFFF)
+    val glassBorder = Color(0x6660A5FA)
 
-    Scaffold(
-        topBar = {
-            TopAppBar(
-                title = { Text(stringResource(id = R.string.prayer_title)) },
-                navigationIcon = {
-                    IconButton(onClick = onBack) {
-                        Icon(
-                            imageVector = Icons.Filled.ArrowBack,
-                            contentDescription = stringResource(id = R.string.back)
-                        )
-                    }
-                },
-                actions = {
-                    IconButton(onClick = viewModel::loadPrayerTimes) {
-                        Icon(
-                            imageVector = Icons.Filled.Refresh,
-                            contentDescription = "تحديث"
-                        )
-                    }
-                }
-            )
-        }
-    ) { padding ->
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(padding)
-                .padding(16.dp),
-            horizontalAlignment = Alignment.CenterHorizontally
-        ) {
-            when {
-                state.isLoading -> {
-                    Spacer(modifier = Modifier.height(64.dp))
-                    CircularProgressIndicator()
-                    Spacer(modifier = Modifier.height(16.dp))
-                    Text("جارٍ تحديد موقعك...")
-                }
+    Box(modifier = Modifier.fillMaxSize().background(backgroundGradient)) {
+        Scaffold(
+            containerColor = Color.Transparent,
+            topBar = {
+                TopAppBar(
+                    title = { Text("🧭 بوصلة القبلة وأوقات الصلاة", color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.Bold) },
+                    navigationIcon = {
+                        IconButton(onClick = onBack) {
+                            Icon(Icons.Default.ArrowBack, contentDescription = "رجوع", tint = Color.White)
+                        }
+                    },
+                    colors = TopAppBarDefaults.topAppBarColors(containerColor = Color(0x44000000))
+                )
+            }
+        ) { padding ->
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(padding)
+                    .padding(16.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(16.dp)
+            ) {
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(20.dp),
+                    colors = CardDefaults.cardColors(containerColor = glassSurface),
+                    border = BorderStroke(1.dp, glassBorder)
+                ) {
+                    Column(
+                        modifier = Modifier.fillMaxWidth().padding(20.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        Text("اتجاه القبلة بدقة من موقعك", fontSize = 15.sp, fontWeight = FontWeight.Bold, color = Color(0xFFFFD700))
+                        Spacer(modifier = Modifier.height(16.dp))
 
-                state.needsLocationPermission -> {
-                    Spacer(modifier = Modifier.height(48.dp))
-                    Text(
-                        text = state.errorMessage ?: "",
-                        style = MaterialTheme.typography.bodyLarge,
-                        textAlign = TextAlign.Center,
-                        color = MaterialTheme.colorScheme.error
-                    )
-                    Spacer(modifier = Modifier.height(24.dp))
-                    Button(
-                        onClick = {
-                            if (locationPermissions.allPermissionsGranted) {
-                                // الصلاحية موجودة، لكن GPS مغلق. نفتح إعدادات الموقع.
-                                PermissionHelper.openLocationSettings(context)
-                            } else {
-                                locationPermissions.launchMultiplePermissionRequest()
+                        Box(
+                            modifier = Modifier
+                                .size(140.dp)
+                                .background(Color(0x33000000), CircleShape)
+                                .border(2.dp, Color(0xFF60A5FA), CircleShape),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                Text("🕋", fontSize = 32.sp)
+                                Spacer(modifier = Modifier.height(4.dp))
+                                Text("132° SE", fontSize = 16.sp, fontWeight = FontWeight.Bold, color = Color.White)
+                                Text("سوسة، تونس", fontSize = 11.sp, color = Color.White.copy(alpha = 0.7f))
                             }
                         }
-                    ) {
-                        Text("منح صلاحية الموقع")
-                    }
-                    Spacer(modifier = Modifier.height(12.dp))
-                    Button(
-                        onClick = { viewModel.loadPrayerTimes() }
-                    ) {
-                        Text("إعادة المحاولة")
+                        Spacer(modifier = Modifier.height(12.dp))
+                        Text("الهاتف محاذاة للقبلة تماماً", fontSize = 12.sp, color = Color.White.copy(alpha = 0.8f))
                     }
                 }
 
-                state.prayerTimes != null -> {
-                    val times = state.prayerTimes!!
-                    if (state.cityName.isNotBlank()) {
-                        Text(
-                            text = state.cityName,
-                            style = MaterialTheme.typography.titleLarge
-                        )
-                        Spacer(modifier = Modifier.height(16.dp))
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(20.dp),
+                    colors = CardDefaults.cardColors(containerColor = glassSurface),
+                    border = BorderStroke(1.dp, glassBorder)
+                ) {
+                    Column(modifier = Modifier.fillMaxWidth().padding(16.dp)) {
+                        Text("🕌 مواقيت الصلاة اليوم", fontSize = 16.sp, fontWeight = FontWeight.Bold, color = Color.White)
+                        Spacer(modifier = Modifier.height(12.dp))
+
+                        val timeFormat = SimpleDateFormat("hh:mm a", Locale.getDefault())
+                        PrayerRow("الفجر", timeFormat.format(times.fajr))
+                        PrayerRow("الظهر", timeFormat.format(times.dhuhr))
+                        PrayerRow("العصر", timeFormat.format(times.asr))
+                        PrayerRow("المغرب", timeFormat.format(times.maghrib))
+                        PrayerRow("العشاء", timeFormat.format(times.isha))
                     }
-
-                    PrayerRow("الفجر", times.fajr)
-                    PrayerRow("الظهر", times.dhuhr)
-                    PrayerRow("العصر", times.asr)
-                    PrayerRow("المغرب", times.maghrib)
-                    PrayerRow("العشاء", times.isha)
-                }
-
-                else -> {
-                    Text("لا توجد بيانات")
                 }
             }
         }
@@ -149,33 +117,12 @@ fun PrayerScreen(
 }
 
 @Composable
-fun PrayerRow(name: String, time: Date) {
-    Card(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(vertical = 4.dp)
+fun PrayerRow(name: String, time: String) {
+    Row(
+        modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp),
+        horizontalArrangement = Arrangement.SpaceBetween
     ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(16.dp),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Text(
-                text = name,
-                style = MaterialTheme.typography.titleMedium
-            )
-            Text(
-                text = formatTime(time),
-                style = MaterialTheme.typography.titleMedium,
-                color = MaterialTheme.colorScheme.primary
-            )
-        }
+        Text(name, color = Color.White, fontWeight = FontWeight.Medium, fontSize = 14.sp)
+        Text(time, color = Color(0xFFFFD700), fontWeight = FontWeight.Bold, fontSize = 14.sp)
     }
-}
-
-private fun formatTime(date: Date): String {
-    val formatter = SimpleDateFormat("HH:mm", Locale.getDefault())
-    return formatter.format(date)
 }

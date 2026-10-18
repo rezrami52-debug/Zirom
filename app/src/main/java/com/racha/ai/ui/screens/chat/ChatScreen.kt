@@ -35,6 +35,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.google.accompanist.permissions.ExperimentalPermissionsApi
 import com.google.accompanist.permissions.isGranted
 import com.google.accompanist.permissions.rememberPermissionState
+import com.racha.ai.core.util.TimeHelper
 import com.racha.ai.core.voice.VoiceInputHelper
 import com.racha.ai.domain.model.Message
 import kotlinx.coroutines.launch
@@ -64,13 +65,18 @@ fun ChatScreen(
     var voiceError by remember { mutableStateOf<String?>(null) }
     val voiceHelper = remember { VoiceInputHelper(context) }
 
-    val backgroundGradient = Brush.verticalGradient(
-        colors = listOf(
-            Color(0xFF1E3A8A),
-            Color(0xFF0F172A),
-            Color(0xFF2A085C)
+    // التحقق التلقائي من الوقت (نهاراً أو ليلاً) لتغيير الخلفية بذكاء
+    val isNight = TimeHelper.isNightTime()
+    val backgroundGradient = if (isNight) {
+        Brush.verticalGradient(
+            colors = listOf(Color(0xFF1E3A8A), Color(0xFF0F172A), Color(0xFF2A085C)) // ليلي
         )
-    )
+    } else {
+        Brush.verticalGradient(
+            colors = listOf(Color(0xFF38BDF8), Color(0xFF0284C7), Color(0xFF1D4ED8)) // نهاري مشرق
+        )
+    }
+
     val glassSurface = Color(0x35FFFFFF)
     val glassBorder = Color(0x6660A5FA)
 
@@ -173,8 +179,8 @@ fun ChatScreen(
                             tonalElevation = 0.dp
                         ) {
                             NavigationBarItem(
-                                icon = { Icon(Icons.Default.Mosque, "الصلاة", modifier = Modifier.size(24.dp), tint = if (selectedTab == 0) Color(0xFFFFC107) else Color.White.copy(alpha = 0.7f)) },
-                                label = { Text("الصلاة", fontSize = 11.sp, color = if (selectedTab == 0) Color(0xFFFFC107) else Color.White.copy(alpha = 0.7f)) },
+                                icon = { Icon(Icons.Default.Mosque, "القبلة", modifier = Modifier.size(24.dp), tint = if (selectedTab == 0) Color(0xFFFFC107) else Color.White.copy(alpha = 0.7f)) },
+                                label = { Text("القبلة", fontSize = 11.sp, color = if (selectedTab == 0) Color(0xFFFFC107) else Color.White.copy(alpha = 0.7f)) },
                                 selected = selectedTab == 0,
                                 onClick = { selectedTab = 0; onOpenPrayer() }
                             )
@@ -191,10 +197,10 @@ fun ChatScreen(
                                 onClick = { selectedTab = 2; onOpenSettings() }
                             )
                             NavigationBarItem(
-                                icon = { Icon(Icons.Default.Add, "محادثة جديدة", modifier = Modifier.size(24.dp), tint = if (selectedTab == 3) Color(0xFFFFC107) else Color.White.copy(alpha = 0.7f)) },
-                                label = { Text("جديدة", fontSize = 11.sp, color = if (selectedTab == 3) Color(0xFFFFC107) else Color.White.copy(alpha = 0.7f)) },
-                                selected = selectedTab == 3,
-                                onClick = { selectedTab = 3; viewModel.startNewChat() }
+                                icon = { Icon(Icons.Default.Add, "محادثة جديدة", modifier = Modifier.size(24.dp), tint = Color(0xFFFFC107)) },
+                                label = { Text("جديدة", fontSize = 11.sp, color = Color(0xFFFFC107)) },
+                                selected = false,
+                                onClick = { viewModel.startNewChat() } // ✅ بدء محادثة جديدة فوراً
                             )
                         }
                     }
@@ -218,9 +224,8 @@ fun ChatScreen(
                                 }
                             }
                             weatherState.weather != null -> {
-                                WeatherBannerWithPrayerTimes(
+                                WeatherBanner(
                                     weather = weatherState.weather,
-                                    onOpenPrayer = onOpenPrayer,
                                     modifier = Modifier.padding(horizontal = 14.dp, vertical = 6.dp)
                                 )
                             }
@@ -228,6 +233,31 @@ fun ChatScreen(
 
                         LazyColumn(state = listState, modifier = Modifier.weight(1f).fillMaxWidth().padding(horizontal = 14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                             items(state.messages) { msg -> MessageBubble(message = msg) }
+                            
+                            // ✅ مؤشر تفكير الذكاء الاصطناعي (عندما يكون آخر مرسل هو المستخدم ولم يرد البوت بعد)
+                            if (state.messages.isNotEmpty() && state.messages.last().isFromUser) {
+                                item {
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.Start
+                                    ) {
+                                        Surface(
+                                            shape = RoundedCornerShape(16.dp),
+                                            color = Color(0x45FFFFFF),
+                                            modifier = Modifier.padding(vertical = 2.dp)
+                                        ) {
+                                            Row(
+                                                modifier = Modifier.padding(12.dp),
+                                                verticalAlignment = Alignment.CenterVertically
+                                            ) {
+                                                CircularProgressIndicator(color = Color(0xFFFFD700), modifier = Modifier.size(16.dp))
+                                                Spacer(modifier = Modifier.width(8.dp))
+                                                Text("🤖 Racha تفكر...", color = Color.White, fontSize = 13.sp, fontWeight = FontWeight.Bold)
+                                            }
+                                        }
+                                    }
+                                }
+                            }
                         }
 
                         Row(modifier = Modifier.fillMaxWidth().padding(12.dp), verticalAlignment = Alignment.CenterVertically) {

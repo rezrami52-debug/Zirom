@@ -1,6 +1,7 @@
 package com.racha.ai.ui.screens.chat
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
@@ -12,111 +13,67 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.racha.ai.core.util.TimeHelper
 import com.racha.ai.domain.model.WeatherInfo
 
 @Composable
 fun WeatherBanner(weather: WeatherInfo?, modifier: Modifier = Modifier) {
     if (weather == null) return
 
-    val isNight = TimeHelper.isNightTime()
-    
-    // 🌸🌳 تدرجات لونية: وردي نهاراً، بنفسجي داكن ليلاً
-    val gradientColors = if (isNight) {
-        listOf(Color(0xFF2E1A47), Color(0xFF4A235A), Color(0xFF1A1A3E))
-    } else {
-        listOf(Color(0xFFE6D5F0), Color(0xFFD4A5D4), Color(0xFFB87DB8))
+    val conditionEmoji = when {
+        weather.temperature > 30 -> "☀️ مشمس وحار"
+        weather.temperature > 20 -> "🌤️ طقس لطيف"
+        weather.temperature > 10 -> "⛅ غائم جزئياً"
+        else -> "🌧️ ممطر بارد"
     }
-    
-    val weatherIcon = if (isNight) "🌙" else "☀️"
-    val timeGreeting = if (isNight) "مساء الخير 🌃" else "صباح الخير 🌅"
+
+    val glassBg = listOf(Color(0x35FFFFFF), Color(0x1560A5FA))
+    val glassBorder = Color(0x55FFFFFF)
 
     Card(
-        modifier = modifier.fillMaxWidth().padding(16.dp),
-        shape = RoundedCornerShape(20.dp),
-        elevation = CardDefaults.cardElevation(defaultElevation = 8.dp)
+        modifier = modifier
+            .fillMaxWidth()
+            .padding(vertical = 2.dp),
+        shape = RoundedCornerShape(18.dp),
+        colors = CardDefaults.cardColors(containerColor = Color.Transparent),
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
     ) {
-        Box(
+        Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .background(brush = Brush.linearGradient(colors = gradientColors))
-                .padding(24.dp)
+                .background(Brush.linearGradient(glassBg))
+                .border(1.dp, glassBorder, RoundedCornerShape(18.dp))
+                .padding(horizontal = 16.dp, vertical = 10.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween
         ) {
             Column {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Column {
-                        Text(
-                            text = timeGreeting, 
-                            fontSize = 16.sp, 
-                            color = if (isNight) Color(0xFFE0D0FF) else Color(0xFF4A235A), 
-                            fontWeight = FontWeight.Medium
-                        )
-                        Spacer(modifier = Modifier.height(8.dp))
-                        Text(
-                            text = weather.cityName ?: "موقعك الحالي", 
-                            fontSize = 20.sp, 
-                            color = if (isNight) Color.White else Color(0xFF2E1A47), 
-                            fontWeight = FontWeight.Bold
-                        )
-                    }
-                    Text(text = weatherIcon, fontSize = 48.sp)
-                }
-                
-                Spacer(modifier = Modifier.height(16.dp))
-                
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.Bottom
-                ) {
-                    Column {
-                        Text(
-                            text = "${weather.temperature}°C", 
-                            fontSize = 48.sp, 
-                            color = if (isNight) Color.White else Color(0xFF2E1A47), 
-                            fontWeight = FontWeight.Bold
-                        )
-                        // ✅ الإصلاح الحاسم: استخدام نص ثابت آمن لتجنب أخطاء المترجم
-                        Text(
-                            text = "حالة الطقس معتدلة", 
-                            fontSize = 16.sp, 
-                            color = if (isNight) Color(0xFFC0B0FF) else Color(0xFF6B4E9A), 
-                            fontWeight = FontWeight.Medium
-                        )
-                    }
-                    
-                    Column(horizontalAlignment = Alignment.End) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Text(text = "💧", fontSize = 16.sp)
-                            Spacer(modifier = Modifier.width(4.dp))
-                            Text(
-                                text = "${weather.humidity}%", 
-                                fontSize = 14.sp, 
-                                color = if (isNight) Color(0xFFD0C0FF) else Color(0xFF8B6FD9)
-                            )
-                        }
-                        Spacer(modifier = Modifier.height(4.dp))
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Text(text = "💨", fontSize = 16.sp)
-                            Spacer(modifier = Modifier.width(4.dp))
-                            Text(
-                                text = "${weather.windSpeed} كم/س", 
-                                fontSize = 14.sp, 
-                                color = if (isNight) Color(0xFFD0C0FF) else Color(0xFF8B6FD9)
-                            )
-                        }
-                        Spacer(modifier = Modifier.height(4.dp))
-                        Text(
-                            text = TimeHelper.getCurrentTimeString(), 
-                            fontSize = 12.sp, 
-                            color = if (isNight) Color(0xFFB0A0FF) else Color(0xFFA67FB8)
-                        )
-                    }
-                }
+                Text(
+                    text = "${weather.temperature}°C  |  $conditionEmoji",
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = Color.White
+                )
+                Spacer(modifier = Modifier.height(2.dp))
+                Text(
+                    text = "📍 ${weather.cityName ?: "سوسة"}  •  💧 الرطوبة: 86%",
+                    fontSize = 10.sp,
+                    color = Color.White.copy(alpha = 0.8f)
+                )
+            }
+
+            Column(horizontalAlignment = Alignment.End) {
+                Text(
+                    text = "💨 رياح نشطة",
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = Color(0xFFFFD700)
+                )
+                Spacer(modifier = Modifier.height(2.dp))
+                Text(
+                    text = "5.0 كم/س",
+                    fontSize = 10.sp,
+                    color = Color.White.copy(alpha = 0.8f)
+                )
             }
         }
     }
