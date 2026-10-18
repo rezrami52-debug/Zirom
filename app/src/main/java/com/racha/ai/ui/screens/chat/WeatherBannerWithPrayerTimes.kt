@@ -14,7 +14,6 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.racha.ai.core.util.TimeHelper
 import com.racha.ai.domain.model.WeatherInfo
 import com.racha.ai.services.prayer.PrayerTimesCalculator
 import java.text.SimpleDateFormat
@@ -45,7 +44,6 @@ fun WeatherBannerWithPrayerTimes(weather: WeatherInfo?, modifier: Modifier = Mod
         }
     }
 
-    // خلفية زجاجية مضيئة ومدمجة بحجم صغير
     val glassBg = listOf(Color(0x33FFFFFF), Color(0x1160A5FA))
     val glassBorder = Color(0x44FFFFFF)
 
@@ -66,18 +64,18 @@ fun WeatherBannerWithPrayerTimes(weather: WeatherInfo?, modifier: Modifier = Mod
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.SpaceBetween
         ) {
-            // --- القسم الأول: البوصلة والساعة الحالية مع القبلة ---
+            // القسم الأول: الساعة + القبلة
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Box(
                     modifier = Modifier
-                        .size(42.dp)
+                        .size(38.dp)
                         .background(Color(0x33000000), CircleShape)
                         .border(1.dp, Color(0xFF60A5FA), CircleShape),
                     contentAlignment = Alignment.Center
                 ) {
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Text(text = "🧭", fontSize = 14.sp)
-                        Text(text = "🕋 132°", fontSize = 8.sp, color = Color.White, fontWeight = FontWeight.Bold)
+                        Text(text = "🧭", fontSize = 12.sp)
+                        Text(text = "132°", fontSize = 8.sp, color = Color.White, fontWeight = FontWeight.Bold)
                     }
                 }
                 Spacer(modifier = Modifier.width(8.dp))
@@ -89,26 +87,25 @@ fun WeatherBannerWithPrayerTimes(weather: WeatherInfo?, modifier: Modifier = Mod
                         color = Color.White
                     )
                     Text(
-                        text = "اتجاه القبلة",
+                        text = "القبلة 🕋",
                         fontSize = 9.sp,
                         color = Color.White.copy(alpha = 0.7f)
                     )
                 }
             }
 
-            // فاصل عمودي شفاف
             Box(
                 modifier = Modifier
                     .width(1.dp)
-                    .height(30.dp)
+                    .height(28.dp)
                     .background(Color.White.copy(alpha = 0.2f))
             )
 
-            // --- القسم الثاني: الطقس المدمج ---
+            // القسم الثاني: الطقس
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
                 Text(
-                    text = "${weather.temperature}°C  💧86%",
-                    fontSize = 12.sp,
+                    text = "${weather.temperature}°C",
+                    fontSize = 13.sp,
                     fontWeight = FontWeight.Bold,
                     color = Color.White
                 )
@@ -119,15 +116,14 @@ fun WeatherBannerWithPrayerTimes(weather: WeatherInfo?, modifier: Modifier = Mod
                 )
             }
 
-            // فاصل عمودي شفاف
             Box(
                 modifier = Modifier
                     .width(1.dp)
-                    .height(30.dp)
+                    .height(28.dp)
                     .background(Color.White.copy(alpha = 0.2f))
             )
 
-            // --- القسم الثالث: الصلاة القادمة ---
+            // القسم الثالث: الصلاة الدقيقة (القادمة)
             Column(horizontalAlignment = Alignment.End) {
                 Text(
                     text = "🕌 ${prayerStatus.next.name}",
@@ -147,7 +143,7 @@ fun WeatherBannerWithPrayerTimes(weather: WeatherInfo?, modifier: Modifier = Mod
 
 private fun calculatePrayerStatus(times: com.racha.ai.domain.model.PrayerTimes): PrayerStatus {
     val now = Date()
-    val calendar = Calendar.getInstance()
+    val calNow = Calendar.getInstance().apply { time = now }
 
     val prayers = listOf(
         "الفجر" to times.fajr,
@@ -157,38 +153,30 @@ private fun calculatePrayerStatus(times: com.racha.ai.domain.model.PrayerTimes):
         "العشاء" to times.isha
     )
 
-    var nextPrayer = prayers.first()
-    var lastPrayer = prayers.last()
-    var isNextPrayerTomorrow = false
+    var nextPair = prayers.first()
+    var lastPair = prayers.last()
 
     for (i in prayers.indices) {
         if (prayers[i].second.after(now)) {
-            nextPrayer = prayers[i]
-            lastPrayer = if (i > 0) prayers[i - 1] else prayers.last()
+            nextPair = prayers[i]
+            lastPair = if (i > 0) prayers[i - 1] else prayers.last()
             break
         }
     }
 
-    if (nextPrayer.first == "الفجر") {
-        val ishaTime = times.isha
-        if (now.after(ishaTime)) {
-            isNextPrayerTomorrow = true
-            calendar.time = nextPrayer.second
-            calendar.add(Calendar.DAY_OF_MONTH, 1)
-        }
-    }
-
-    val nextTime = if (isNextPrayerTomorrow) calendar.time else nextPrayer.second
-    val diffNextMillis = nextTime.time - now.time
-    val diffLastMillis = now.time - lastPrayer.second.time
+    val diffNextMillis = Math.abs(nextPair.second.time - now.time)
+    val diffLastMillis = Math.abs(now.time - lastPair.second.time)
 
     val nextH = TimeUnit.MILLISECONDS.toHours(diffNextMillis)
     val nextM = TimeUnit.MILLISECONDS.toMinutes(diffNextMillis) % 60
     val lastH = TimeUnit.MILLISECONDS.toHours(diffLastMillis)
     val lastM = TimeUnit.MILLISECONDS.toMinutes(diffLastMillis) % 60
 
+    val nextStr = if (nextH > 0) "بعد ${nextH}س و ${nextM}د" else "بعد ${nextM}د"
+    val lastStr = if (lastH > 0) "منذ ${lastH}س و ${lastM}د" else "منذ ${lastM}د"
+
     return PrayerStatus(
-        next = PrayerInfo(nextPrayer.first, "بعد ${nextH}س ${nextM}د"),
-        last = PrayerInfo(lastPrayer.first, "منذ ${lastH}س ${lastM}د")
+        next = PrayerInfo(nextPair.first, nextStr),
+        last = PrayerInfo(lastPair.first, lastStr)
     )
 }

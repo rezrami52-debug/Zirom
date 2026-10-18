@@ -23,7 +23,32 @@ class MainActivity : ComponentActivity() {
                     modifier = Modifier.fillMaxSize(),
                     color = MaterialTheme.colorScheme.background
                 ) {
-                    ChatScreen()
+                    ChatScreen(
+                        onOpenSettings = {
+                            try {
+                                val intent = android.content.Intent(this, com.racha.ai.ui.screens.SettingsActivity::class.java)
+                                startActivity(intent)
+                            } catch (e: Exception) { e.printStackTrace() }
+                        },
+                        onOpenNotifications = {
+                            try {
+                                val intent = android.content.Intent(this, com.racha.ai.ui.screens.notifications.NotificationsActivity::class.java)
+                                startActivity(intent)
+                            } catch (e: Exception) { e.printStackTrace() }
+                        },
+                        onOpenPrayer = {
+                            try {
+                                val intent = android.content.Intent(this, com.racha.ai.ui.screens.prayer.PrayerActivity::class.java)
+                                startActivity(intent)
+                            } catch (e: Exception) { e.printStackTrace() }
+                        },
+                        onOpenRoutine = {
+                            try {
+                                val intent = android.content.Intent(this, com.racha.ai.ui.screens.routine.RoutineActivity::class.java)
+                                startActivity(intent)
+                            } catch (e: Exception) { e.printStackTrace() }
+                        }
+                    )
                 }
             }
         }
