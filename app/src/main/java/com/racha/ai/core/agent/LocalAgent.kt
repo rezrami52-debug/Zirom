@@ -12,23 +12,23 @@ class LocalAgent(private val context: Context) {
         return when {
             lower.contains("صامت") || lower.contains("كتم") -> {
                 val res = toolExecutor.execute("{\"tool\":\"set_silent\"}")
-                CommandResult.NeedsLLM(res.message)
+                CommandResult.Executed("🔇 لقد تم تحويل وضع الهاتف إلى الصامت بنجاح.")
             }
             lower.contains("عادي") || lower.contains("رنين") -> {
                 val res = toolExecutor.execute("{\"tool\":\"set_normal\"}")
-                CommandResult.NeedsLLM(res.message)
+                CommandResult.Executed("🔔 لقد تم تفعيل وضع الرنين العادي بنجاح.")
             }
             lower.contains("هزاز") || lower.contains("اهتزاز") -> {
                 val res = toolExecutor.execute("{\"tool\":\"set_vibrate\"}")
-                CommandResult.NeedsLLM(res.message)
+                CommandResult.Executed("📳 لقد تم تفعيل وضع الاهتزاز بنجاح.")
             }
             lower.contains("موقع") || lower.contains("خريطه") -> {
                 val res = toolExecutor.execute("{\"tool\":\"open_maps\"}")
-                CommandResult.NeedsLLM(res.message)
+                CommandResult.Executed("🗺️ تم فتح موقعك الحالي على الخريطة.")
             }
             lower.contains("مقهى") || lower.contains("مقاهي") || lower.contains("فندق") || lower.contains("مسجد") -> {
                 val res = toolExecutor.execute("{\"tool\":\"search_places\", \"query\":\"$text\"}")
-                CommandResult.NeedsLLM(res.message)
+                CommandResult.Executed("📍 جاري البحث عن الأماكن القريبة منك وعرضها...")
             }
             else -> CommandResult.NeedsLLM(text)
         }
