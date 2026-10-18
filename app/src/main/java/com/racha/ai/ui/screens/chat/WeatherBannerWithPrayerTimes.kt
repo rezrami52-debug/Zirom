@@ -26,41 +26,39 @@ data class PrayerStatus(val next: PrayerInfo, val last: PrayerInfo)
 fun WeatherBannerWithPrayerTimes(weather: WeatherInfo?, modifier: Modifier = Modifier) {
     if (weather == null) return
 
-    val colors = MaterialTheme.colorScheme
     val isNight = TimeHelper.isNightTime()
 
     val prayerStatus = remember(weather.cityName) {
         val times = PrayerTimesCalculator.calculate(
             latitude = 35.8256,
             longitude = 10.6369,
-            locationName = weather.cityName ?: "موقعك"
+            locationName = weather.cityName ?: "سوسة"
         )
         calculatePrayerStatus(times)
     }
 
-    // تدرج خلفية البانر الرئيسي حسب التوقيت (ليلي / نهاري)
-    val mainCardGradient = if (isNight) {
-        listOf(Color(0xFF2D2638).copy(alpha = 0.85f), Color(0xFF1E1B26).copy(alpha = 0.95f))
-    } else {
-        listOf(Color(0xFF1E3A8A).copy(alpha = 0.85f), Color(0xFF0F172A).copy(alpha = 0.95f))
-    }
+    // ألوان خلفية البطاقة الشفافة العصرية (Glassmorphism)
+    val cardGradient = listOf(
+        Color(0x991E3A8A), // أزرق ناصع شفاف
+        Color(0x990F172A), // أزرق ليلي غامق شفاف
+        Color(0x991A0B2E)  // بنفسجي/أرجواني قاني شفاف
+    )
 
-    // ألوان المربعات الداخلية والتفاصيل الشفافة (Glassmorphism)
-    val subCardBg = if (isNight) Color(0xFF383047).copy(alpha = 0.5f) else Color(0xFF2563EB).copy(alpha = 0.3f)
-    val subCardBorder = if (isNight) Color(0xFFBB86FC).copy(alpha = 0.3f) else Color(0xFF60A5FA).copy(alpha = 0.4f)
-    val accentColor = if (isNight) Color(0xFFE0B6FF) else Color(0xFFFFB74D)
+    val innerBoxBg = Color(0x402563EB) // خلفية المربعات الداخلية شفافة
+    val borderGlow = Color(0x6660A5FA)  // حدود مضيئة زرقاء خفيفة
+    val accentGold = Color(0xFFFFC107)  // ذهبي خفيف للتنبيهات
 
     Card(
         modifier = modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(20.dp),
+        shape = RoundedCornerShape(22.dp),
         colors = CardDefaults.cardColors(containerColor = Color.Transparent),
-        elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
     ) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .background(Brush.verticalGradient(mainCardGradient))
-                .border(1.dp, subCardBorder, RoundedCornerShape(20.dp))
+                .background(Brush.linearGradient(cardGradient))
+                .border(1.dp, borderGlow, RoundedCornerShape(22.dp))
                 .padding(16.dp)
         ) {
             // --- الجزء العلوي: الطقس ---
@@ -72,18 +70,18 @@ fun WeatherBannerWithPrayerTimes(weather: WeatherInfo?, modifier: Modifier = Mod
                 Column {
                     Text(
                         text = if (isNight) "مساء الخير" else "صباح الخير",
-                        fontSize = 14.sp,
-                        color = Color.White.copy(alpha = 0.8f)
+                        fontSize = 15.sp,
+                        color = Color.White.copy(alpha = 0.9f)
                     )
                     Text(
-                        text = weather.cityName ?: "موقعك",
+                        text = weather.cityName ?: "سوسة",
                         fontSize = 12.sp,
                         color = Color.White.copy(alpha = 0.6f)
                     )
                     Spacer(modifier = Modifier.height(4.dp))
                     Text(
                         text = "${weather.temperature}°C",
-                        fontSize = 28.sp,
+                        fontSize = 32.sp,
                         fontWeight = FontWeight.Bold,
                         color = Color.White
                     )
@@ -91,10 +89,11 @@ fun WeatherBannerWithPrayerTimes(weather: WeatherInfo?, modifier: Modifier = Mod
 
                 Column(horizontalAlignment = Alignment.End) {
                     Text(
-                        text = if (isNight) "🌙 86%" else "💧 86%",
+                        text = "💧 86%",
                         fontSize = 12.sp,
                         color = Color.White.copy(alpha = 0.8f)
                     )
+                    Spacer(modifier = Modifier.height(4.dp))
                     Text(
                         text = "💨 5.0 كم/س",
                         fontSize = 12.sp,
@@ -103,68 +102,70 @@ fun WeatherBannerWithPrayerTimes(weather: WeatherInfo?, modifier: Modifier = Mod
                 }
             }
 
-            Spacer(modifier = Modifier.height(12.dp))
-            Divider(color = Color.White.copy(alpha = 0.15f), thickness = 1.dp)
-            Spacer(modifier = Modifier.height(12.dp))
+            Spacer(modifier = Modifier.height(14.dp))
+            HorizontalDivider(color = Color.White.copy(alpha = 0.12f), thickness = 1.dp)
+            Spacer(modifier = Modifier.height(14.dp))
 
-            // --- الجزء السفلي: مربعا الصلاة (القادمة والأخيرة) ---
+            // --- الجزء السفلي: المربعين الشفافين (الأخيرة والقادمة) ---
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(10.dp)
+                horizontalArrangement = Arrangement.spacedBy(12.dp)
             ) {
-                // المربع الأول: الصلاة الأخيرة
+                // المربع الأول: الأخيرة
                 Box(
                     modifier = Modifier
                         .weight(1f)
-                        .background(subCardBg, RoundedCornerShape(14.dp))
-                        .border(1.dp, subCardBorder, RoundedCornerShape(14.dp))
-                        .padding(10.dp)
+                        .background(innerBoxBg, RoundedCornerShape(16.dp))
+                        .border(1.dp, borderGlow, RoundedCornerShape(16.dp))
+                        .padding(12.dp)
                 ) {
                     Column {
                         Text(
                             text = "الأخيرة  ✓",
-                            fontSize = 10.sp,
-                            color = accentColor
+                            fontSize = 11.sp,
+                            color = accentGold
                         )
-                        Spacer(modifier = Modifier.height(2.dp))
+                        Spacer(modifier = Modifier.height(4.dp))
                         Text(
                             text = prayerStatus.last.name,
-                            fontSize = 14.sp,
+                            fontSize = 16.sp,
                             fontWeight = FontWeight.Bold,
                             color = Color.White
                         )
+                        Spacer(modifier = Modifier.height(2.dp))
                         Text(
                             text = prayerStatus.last.timeStr,
-                            fontSize = 10.sp,
+                            fontSize = 11.sp,
                             color = Color.White.copy(alpha = 0.7f)
                         )
                     }
                 }
 
-                // المربع الثاني: الصلاة القادمة
+                // المربع الثاني: القادمة
                 Box(
                     modifier = Modifier
                         .weight(1f)
-                        .background(subCardBg, RoundedCornerShape(14.dp))
-                        .border(1.dp, subCardBorder, RoundedCornerShape(14.dp))
-                        .padding(10.dp)
+                        .background(innerBoxBg, RoundedCornerShape(16.dp))
+                        .border(1.dp, borderGlow, RoundedCornerShape(16.dp))
+                        .padding(12.dp)
                 ) {
                     Column {
                         Text(
                             text = "القادمة  ⏳",
-                            fontSize = 10.sp,
-                            color = accentColor
+                            fontSize = 11.sp,
+                            color = accentGold
                         )
-                        Spacer(modifier = Modifier.height(2.dp))
+                        Spacer(modifier = Modifier.height(4.dp))
                         Text(
                             text = prayerStatus.next.name,
-                            fontSize = 14.sp,
+                            fontSize = 16.sp,
                             fontWeight = FontWeight.Bold,
                             color = Color.White
                         )
+                        Spacer(modifier = Modifier.height(2.dp))
                         Text(
                             text = prayerStatus.next.timeStr,
-                            fontSize = 10.sp,
+                            fontSize = 11.sp,
                             color = Color.White.copy(alpha = 0.7f)
                         )
                     }
