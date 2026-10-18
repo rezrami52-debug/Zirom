@@ -11,7 +11,6 @@ import com.racha.ai.core.apps.AppResolver
 import com.racha.ai.core.apps.IntentHandler
 import com.racha.ai.core.contacts.ContactResolver
 import com.racha.ai.core.context.ContextBuilder
-import com.racha.ai.core.context.SmartReplies
 import com.racha.ai.core.preferences.AppPreferences
 import com.racha.ai.core.security.SecurePreferences
 import com.racha.ai.core.tools.SystemController
@@ -138,11 +137,10 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         if (text.isBlank() || _uiState.value.isSending) return
 
         viewModelScope.launch {
-            // إدراج الرسالة مرة واحدة وإفراغ خانة الإدخال
             saveMessageEntity(Message(text = text, isFromUser = true))
             _uiState.value = _uiState.value.copy(inputText = "", isSending = true)
 
-            // 1. الفحص والتنفيذ المحلي المباشر
+            // 1. التنفيذ المحلي المباشر بدون تكرار
             val localResult = localAgent.processCommand(text)
             when (localResult) {
                 is CommandResult.Executed -> {
@@ -159,10 +157,10 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                     _uiState.value = _uiState.value.copy(isSending = false)
                     return@launch
                 }
-                is CommandResult.NeedsLLM -> { /* ننتقل للخطوة التالية */ }
+                is CommandResult.NeedsLLM -> { /* ننتقل للذكاء الاصطناعي */ }
             }
 
-            // 2. فحص النوايا الخاصة بالتطبيقات
+            // 2. النوايا والتطبيقات
             val intentResult = intentHandler.handle(text)
             when (intentResult) {
                 is IntentHandler.HandlerResult.DirectReply -> {
@@ -179,10 +177,9 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                     _uiState.value = _uiState.value.copy(isSending = false)
                     return@launch
                 }
-                is IntentHandler.HandlerResult.NeedsCorrection, is IntentHandler.HandlerResult.Unknown -> { /* للذكاء الاصطناعي */ }
+                is IntentHandler.HandlerResult.NeedsCorrection, is IntentHandler.HandlerResult.Unknown -> { /* الذكاء الاصطناعي */ }
             }
 
-            // 3. الاتصال بالذكاء الاصطناعي الخارجي
             val currentConvId = _uiState.value.currentConversationId
             val recent = memory.getRecentForContext(currentConvId)
             val history = recent.dropLast(1).reversed()
@@ -217,8 +214,6 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
     private suspend fun saveMessageEntity(message: Message) {
         val convId = _uiState.value.currentConversationId
         memory.saveMessage(convId, ChatMessageEntity(id = message.id, conversationId = convId, text = message.text, isFromUser = message.isFromUser, isError = message.isError, timestamp = message.timestamp))
-        val currentMessages = _uiState.value.messages.toMutableList().apply { add(message) }
-        _uiState.value = _uiState.value.copy(messages = currentMessages)
     }
 
     fun onSpecialToolCompleted(success: Boolean, message: String) {
