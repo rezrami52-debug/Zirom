@@ -6,37 +6,24 @@ import androidx.activity.compose.setContent
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
+import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
-import com.racha.ai.ui.navigation.RachaApp
+import com.racha.ai.core.util.TimeHelper
 import com.racha.ai.ui.theme.RachaTheme
-import com.racha.ai.ui.theme.isNightTime
-import kotlinx.coroutines.delay
+import com.racha.ai.ui.screens.chat.ChatScreen
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-
         setContent {
-            var isNight by remember { mutableStateOf(isNightTime()) }
-
-            LaunchedEffect(Unit) {
-                while (true) {
-                    delay(60_000)
-                    isNight = isNightTime()
-                }
-            }
+            val isNight by remember { mutableStateOf(TimeHelper.isNightTime()) }
 
             RachaTheme(darkTheme = isNight) {
                 Surface(
                     modifier = Modifier.fillMaxSize(),
                     color = MaterialTheme.colorScheme.background
                 ) {
-                    RachaApp(enableBiometricLock = false)
+                    ChatScreen()
                 }
             }
         }
