@@ -25,28 +25,16 @@ class MainActivity : ComponentActivity() {
                 ) {
                     ChatScreen(
                         onOpenSettings = {
-                            try {
-                                val intent = android.content.Intent(this, com.racha.ai.ui.screens.SettingsActivity::class.java)
-                                startActivity(intent)
-                            } catch (e: Exception) { e.printStackTrace() }
+                            // ربط زر الإعدادات
                         },
                         onOpenNotifications = {
-                            try {
-                                val intent = android.content.Intent(this, com.racha.ai.ui.screens.notifications.NotificationsActivity::class.java)
-                                startActivity(intent)
-                            } catch (e: Exception) { e.printStackTrace() }
+                            // ربط زر الإشعارات
                         },
                         onOpenPrayer = {
-                            try {
-                                val intent = android.content.Intent(this, com.racha.ai.ui.screens.prayer.PrayerActivity::class.java)
-                                startActivity(intent)
-                            } catch (e: Exception) { e.printStackTrace() }
+                            // ربط زر أوقات الصلاة
                         },
                         onOpenRoutine = {
-                            try {
-                                val intent = android.content.Intent(this, com.racha.ai.ui.screens.routine.RoutineActivity::class.java)
-                                startActivity(intent)
-                            } catch (e: Exception) { e.printStackTrace() }
+                            // ربط زر الروتين
                         }
                     )
                 }
