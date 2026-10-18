@@ -5,7 +5,6 @@ import android.content.Intent
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -222,7 +221,7 @@ fun ChatScreen(
                             weatherState.weather != null -> {
                                 WeatherBannerWithPrayerTimes(
                                     weather = weatherState.weather,
-                                    onOpenPrayer = onOpenPrayer, // ✅ تفعيل فتح القبلة
+                                    onOpenPrayer = onOpenPrayer,
                                     modifier = Modifier.padding(horizontal = 14.dp, vertical = 6.dp)
                                 )
                             }
@@ -266,7 +265,7 @@ fun ChatScreen(
                                 },
                                 modifier = Modifier.background(Color(0xFF3B82F6), RoundedCornerShape(50)).size(48.dp)
                             ) {
-                                if (state.isLoading || isListening) {
+                                if (isListening) {
                                     CircularProgressIndicator(color = Color.White, modifier = Modifier.size(22.dp))
                                 } else if (state.inputText.isNotBlank()) {
                                     Icon(Icons.Default.Send, "إرسال", tint = Color.White)
