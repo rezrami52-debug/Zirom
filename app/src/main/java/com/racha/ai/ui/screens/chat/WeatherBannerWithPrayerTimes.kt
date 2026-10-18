@@ -2,6 +2,7 @@ package com.racha.ai.ui.screens.chat
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -24,7 +25,11 @@ data class PrayerInfo(val name: String, val timeStr: String)
 data class PrayerStatus(val next: PrayerInfo, val last: PrayerInfo)
 
 @Composable
-fun WeatherBannerWithPrayerTimes(weather: WeatherInfo?, modifier: Modifier = Modifier) {
+fun WeatherBannerWithPrayerTimes(
+    weather: WeatherInfo?,
+    onOpenPrayer: () -> Unit,
+    modifier: Modifier = Modifier
+) {
     if (weather == null) return
 
     val prayerStatus = remember(weather.cityName) {
@@ -44,13 +49,13 @@ fun WeatherBannerWithPrayerTimes(weather: WeatherInfo?, modifier: Modifier = Mod
         }
     }
 
-    val glassBg = listOf(Color(0x33FFFFFF), Color(0x1160A5FA))
-    val glassBorder = Color(0x44FFFFFF)
+    val glassBg = listOf(Color(0x35FFFFFF), Color(0x1560A5FA))
+    val glassBorder = Color(0x55FFFFFF)
 
     Card(
         modifier = modifier
             .fillMaxWidth()
-            .padding(vertical = 4.dp),
+            .padding(vertical = 2.dp),
         shape = RoundedCornerShape(18.dp),
         colors = CardDefaults.cardColors(containerColor = Color.Transparent),
         elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
@@ -64,12 +69,15 @@ fun WeatherBannerWithPrayerTimes(weather: WeatherInfo?, modifier: Modifier = Mod
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.SpaceBetween
         ) {
-            // القسم الأول: الساعة + القبلة
-            Row(verticalAlignment = Alignment.CenterVertically) {
+            // القسم الأول: البوصلة القابلة للنقر لتفتح القبلة والصلاة
+            Row(
+                modifier = Modifier.clickable { onOpenPrayer() },
+                verticalAlignment = Alignment.CenterVertically
+            ) {
                 Box(
                     modifier = Modifier
                         .size(38.dp)
-                        .background(Color(0x33000000), CircleShape)
+                        .background(Color(0x44000000), CircleShape)
                         .border(1.dp, Color(0xFF60A5FA), CircleShape),
                     contentAlignment = Alignment.Center
                 ) {
@@ -81,15 +89,16 @@ fun WeatherBannerWithPrayerTimes(weather: WeatherInfo?, modifier: Modifier = Mod
                 Spacer(modifier = Modifier.width(8.dp))
                 Column {
                     Text(
-                        text = if (currentTime.isNotEmpty()) currentTime else "08:20 PM",
+                        text = if (currentTime.isNotEmpty()) currentTime else "05:16 PM",
                         fontSize = 13.sp,
                         fontWeight = FontWeight.Bold,
                         color = Color.White
                     )
                     Text(
                         text = "القبلة 🕋",
-                        fontSize = 9.sp,
-                        color = Color.White.copy(alpha = 0.7f)
+                        fontSize = 10.sp,
+                        color = Color(0xFFFFD700),
+                        fontWeight = FontWeight.Bold
                     )
                 }
             }
@@ -98,7 +107,7 @@ fun WeatherBannerWithPrayerTimes(weather: WeatherInfo?, modifier: Modifier = Mod
                 modifier = Modifier
                     .width(1.dp)
                     .height(28.dp)
-                    .background(Color.White.copy(alpha = 0.2f))
+                    .background(Color.White.copy(alpha = 0.25f))
             )
 
             // القسم الثاني: الطقس
@@ -112,7 +121,7 @@ fun WeatherBannerWithPrayerTimes(weather: WeatherInfo?, modifier: Modifier = Mod
                 Text(
                     text = weather.cityName ?: "سوسة",
                     fontSize = 9.sp,
-                    color = Color.White.copy(alpha = 0.7f)
+                    color = Color.White.copy(alpha = 0.8f)
                 )
             }
 
@@ -120,11 +129,14 @@ fun WeatherBannerWithPrayerTimes(weather: WeatherInfo?, modifier: Modifier = Mod
                 modifier = Modifier
                     .width(1.dp)
                     .height(28.dp)
-                    .background(Color.White.copy(alpha = 0.2f))
+                    .background(Color.White.copy(alpha = 0.25f))
             )
 
             // القسم الثالث: الصلاة الدقيقة (القادمة)
-            Column(horizontalAlignment = Alignment.End) {
+            Column(
+                modifier = Modifier.clickable { onOpenPrayer() },
+                horizontalAlignment = Alignment.End
+            ) {
                 Text(
                     text = "🕌 ${prayerStatus.next.name}",
                     fontSize = 12.sp,
@@ -134,7 +146,7 @@ fun WeatherBannerWithPrayerTimes(weather: WeatherInfo?, modifier: Modifier = Mod
                 Text(
                     text = prayerStatus.next.timeStr,
                     fontSize = 9.sp,
-                    color = Color.White.copy(alpha = 0.8f)
+                    color = Color.White.copy(alpha = 0.9f)
                 )
             }
         }
@@ -143,7 +155,6 @@ fun WeatherBannerWithPrayerTimes(weather: WeatherInfo?, modifier: Modifier = Mod
 
 private fun calculatePrayerStatus(times: com.racha.ai.domain.model.PrayerTimes): PrayerStatus {
     val now = Date()
-    val calNow = Calendar.getInstance().apply { time = now }
 
     val prayers = listOf(
         "الفجر" to times.fajr,
