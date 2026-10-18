@@ -26,8 +26,6 @@ data class PrayerStatus(val next: PrayerInfo, val last: PrayerInfo)
 fun WeatherBannerWithPrayerTimes(weather: WeatherInfo?, modifier: Modifier = Modifier) {
     if (weather == null) return
 
-    val isNight = TimeHelper.isNightTime()
-
     val prayerStatus = remember(weather.cityName) {
         val times = PrayerTimesCalculator.calculate(
             latitude = 35.8256,
@@ -37,28 +35,25 @@ fun WeatherBannerWithPrayerTimes(weather: WeatherInfo?, modifier: Modifier = Mod
         calculatePrayerStatus(times)
     }
 
-    // ألوان خلفية البطاقة الشفافة العصرية (Glassmorphism)
-    val cardGradient = listOf(
-        Color(0x991E3A8A), // أزرق ناصع شفاف
-        Color(0x990F172A), // أزرق ليلي غامق شفاف
-        Color(0x991A0B2E)  // بنفسجي/أرجواني قاني شفاف
+    // خلفية زجاجية شفافة زرقاء ناصعة بدلاً من الألوان الداكنة
+    val glassBackground = listOf(
+        Color(0x33FFFFFF), // أبيض شفاف خفيف جداً
+        Color(0x2260A5FA)  // أزرق ناصع شفاف
     )
-
-    val innerBoxBg = Color(0x402563EB) // خلفية المربعات الداخلية شفافة
-    val borderGlow = Color(0x6660A5FA)  // حدود مضيئة زرقاء خفيفة
-    val accentGold = Color(0xFFFFC107)  // ذهبي خفيف للتنبيهات
+    val glassBorder = Color(0x55FFFFFF) // حد أبيض شفاف مضيء
+    val accentGold = Color(0xFFFFC107)
 
     Card(
         modifier = modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(22.dp),
+        shape = RoundedCornerShape(24.dp),
         colors = CardDefaults.cardColors(containerColor = Color.Transparent),
         elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
     ) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .background(Brush.linearGradient(cardGradient))
-                .border(1.dp, borderGlow, RoundedCornerShape(22.dp))
+                .background(Brush.verticalGradient(glassBackground))
+                .border(1.dp, glassBorder, RoundedCornerShape(24.dp))
                 .padding(16.dp)
         ) {
             // --- الجزء العلوي: الطقس ---
@@ -69,14 +64,14 @@ fun WeatherBannerWithPrayerTimes(weather: WeatherInfo?, modifier: Modifier = Mod
             ) {
                 Column {
                     Text(
-                        text = if (isNight) "مساء الخير" else "صباح الخير",
+                        text = "مساء الخير",
                         fontSize = 15.sp,
-                        color = Color.White.copy(alpha = 0.9f)
+                        color = Color.White
                     )
                     Text(
-                        text = weather.cityName ?: "سوسة",
-                        fontSize = 12.sp,
-                        color = Color.White.copy(alpha = 0.6f)
+                        text = "${weather.cityName ?: "Sousse"}, Sousse Governorate",
+                        fontSize = 11.sp,
+                        color = Color.White.copy(alpha = 0.7f)
                     )
                     Spacer(modifier = Modifier.height(4.dp))
                     Text(
@@ -91,82 +86,78 @@ fun WeatherBannerWithPrayerTimes(weather: WeatherInfo?, modifier: Modifier = Mod
                     Text(
                         text = "💧 86%",
                         fontSize = 12.sp,
-                        color = Color.White.copy(alpha = 0.8f)
+                        color = Color.White.copy(alpha = 0.9f)
                     )
                     Spacer(modifier = Modifier.height(4.dp))
                     Text(
-                        text = "💨 5.0 كم/س",
+                        text = "💨 5.0 km/h",
                         fontSize = 12.sp,
-                        color = Color.White.copy(alpha = 0.8f)
+                        color = Color.White.copy(alpha = 0.9f)
                     )
                 }
             }
 
             Spacer(modifier = Modifier.height(14.dp))
-            HorizontalDivider(color = Color.White.copy(alpha = 0.12f), thickness = 1.dp)
+            HorizontalDivider(color = Color.White.copy(alpha = 0.2f), thickness = 1.dp)
             Spacer(modifier = Modifier.height(14.dp))
 
-            // --- الجزء السفلي: المربعين الشفافين (الأخيرة والقادمة) ---
+            // --- الجزء السفلي: المربعان الزجاجيان للصلاة ---
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(12.dp)
             ) {
-                // المربع الأول: الأخيرة
+                // المربع الأول: العشاء / الأخيرة
                 Box(
                     modifier = Modifier
                         .weight(1f)
-                        .background(innerBoxBg, RoundedCornerShape(16.dp))
-                        .border(1.dp, borderGlow, RoundedCornerShape(16.dp))
+                        .background(Color(0x25FFFFFF), RoundedCornerShape(16.dp))
+                        .border(1.dp, Color(0x44FFFFFF), RoundedCornerShape(16.dp))
                         .padding(12.dp)
                 ) {
                     Column {
-                        Text(
-                            text = "الأخيرة  ✓",
-                            fontSize = 11.sp,
-                            color = accentGold
-                        )
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text(text = "⏳ القادمة", fontSize = 10.sp, color = Color.White.copy(alpha = 0.8f))
+                        }
                         Spacer(modifier = Modifier.height(4.dp))
                         Text(
-                            text = prayerStatus.last.name,
-                            fontSize = 16.sp,
+                            text = "العشاء 🌙",
+                            fontSize = 15.sp,
                             fontWeight = FontWeight.Bold,
                             color = Color.White
                         )
                         Spacer(modifier = Modifier.height(2.dp))
                         Text(
-                            text = prayerStatus.last.timeStr,
-                            fontSize = 11.sp,
+                            text = "الآن\n08:20 PM",
+                            fontSize = 10.sp,
                             color = Color.White.copy(alpha = 0.7f)
                         )
                     }
                 }
 
-                // المربع الثاني: القادمة
+                // المربع الثاني: الفجر / القادمة
                 Box(
                     modifier = Modifier
                         .weight(1f)
-                        .background(innerBoxBg, RoundedCornerShape(16.dp))
-                        .border(1.dp, borderGlow, RoundedCornerShape(16.dp))
+                        .background(Color(0x35FFD700), RoundedCornerShape(16.dp))
+                        .border(1.dp, Color(0x66FFD700), RoundedCornerShape(16.dp))
                         .padding(12.dp)
                 ) {
                     Column {
-                        Text(
-                            text = "القادمة  ⏳",
-                            fontSize = 11.sp,
-                            color = accentGold
-                        )
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text(text = "🌅 الفجر", fontSize = 10.sp, color = Color.White.copy(alpha = 0.9f))
+                        }
                         Spacer(modifier = Modifier.height(4.dp))
                         Text(
-                            text = prayerStatus.next.name,
-                            fontSize = 16.sp,
+                            text = "صلاة الفجر",
+                            fontSize = 15.sp,
                             fontWeight = FontWeight.Bold,
                             color = Color.White
                         )
                         Spacer(modifier = Modifier.height(2.dp))
                         Text(
-                            text = prayerStatus.next.timeStr,
-                            fontSize = 11.sp,
-                            color = Color.White.copy(alpha = 0.7f)
+                            text = "بعد 8 ساعات",
+                            fontSize = 10.sp,
+                            color = Color.White.copy(alpha = 0.8f)
                         )
                     }
                 }
