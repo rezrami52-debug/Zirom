@@ -36,6 +36,9 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.google.accompanist.permissions.ExperimentalPermissionsApi
+import com.google.accompanist.permissions.isGranted
+import com.google.accompanist.permissions.rememberPermissionState
 import com.racha.ai.R
 import com.racha.ai.core.tools.PhotoCaptureActivity
 import com.racha.ai.core.voice.VoiceInputHelper
@@ -45,20 +48,20 @@ import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.*
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalPermissionsApi::class)
 @Composable
 fun ChatScreen(
     onOpenSettings: () -> Unit = {},
     onOpenNotifications: () -> Unit = {},
     onOpenPrayer: () -> Unit = {},
-    onOpenRoutine: () -> Unit = {}, // ✅ تمت الإضافة لمنع فشل البناء
+    onOpenRoutine: () -> Unit = {},
     viewModel: ChatViewModel = viewModel(),
     weatherViewModel: WeatherViewModel = viewModel()
 ) {
     val isDarkTheme = isSystemInDarkTheme()
     val state by viewModel.uiState.collectAsState()
     val weatherState by weatherViewModel.uiState.collectAsState()
-    val unreadCount by com.racha.ai.data.repository.NotificationRepository.unreadCount.collectAsState()
+    val unreadCount by NotificationRepository.unreadCount.collectAsState()
     val listState = rememberLazyListState()
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
@@ -66,11 +69,10 @@ fun ChatScreen(
     var isListening by remember { mutableStateOf(false) }
     val voiceHelper = remember { VoiceInputHelper(context) }
 
-    // 🎨 تعريف الألوان (تم تصحيح الوضع النهاري ليكون فاتحاً كما في الصور)
     val bgGradient = if (isDarkTheme) {
         Brush.verticalGradient(listOf(Color(0xFF0F0F13), Color(0xFF1A1A24), Color(0xFF0F0F13)))
     } else {
-        Brush.verticalGradient(listOf(Color(0xFFE3F2FD), Color(0xFFBBDEFB), Color(0xFFE3F2FD))) // ✅ أزرق فاتح
+        Brush.verticalGradient(listOf(Color(0xFFE3F2FD), Color(0xFFBBDEFB), Color(0xFFE3F2FD)))
     }
     val glassColor = if (isDarkTheme) Color(0xFF2A2A35).copy(alpha = 0.6f) else Color.White.copy(alpha = 0.7f)
     val glassBorder = if (isDarkTheme) Color(0xFFBD4CFF).copy(alpha = 0.5f) else Color(0xFF0EA5E9).copy(alpha = 0.3f)
@@ -95,8 +97,10 @@ fun ChatScreen(
         Column(modifier = Modifier.fillMaxSize()) {
             TopBarRacha(isDarkTheme, primaryGlow, glassColor, glassBorder)
             
-            if (weatherState.weather != null) {
-                WeatherCardRacha(weatherState.weather, isDarkTheme, glassColor, glassBorder, primaryGlow)
+            // ✅ تخزين الطقس في متغير محلي لتجنب الخطأ
+            val currentWeather = weatherState.weather
+            if (currentWeather != null) {
+                WeatherCardRacha(currentWeather, isDarkTheme, glassColor, glassBorder, primaryGlow)
             }
 
             LazyColumn(
@@ -149,7 +153,6 @@ fun TopBarRacha(isDark: Boolean, glow: Color, glass: Color, border: Color) {
             verticalAlignment = Alignment.CenterVertically
         ) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                // ✅ استخدام صورة EVE الحقيقية بدلاً من الأيقونة
                 Box(
                     modifier = Modifier
                         .size(40.dp)
@@ -248,7 +251,7 @@ fun MessageBubbleRacha(message: Message, isDark: Boolean, userColor: Color, aiCo
         ) {
             Text(
                 text = message.text,
-                color = if (isUser) Color.White else (if (isDark) Color.White else Color.Black), // ✅ هذا هو الحل السحري لمشكلة النص الأبيض
+                color = if (isUser) Color.White else (if (isDark) Color.White else Color.Black),
                 fontSize = 15.sp,
                 lineHeight = 20.sp
             )
