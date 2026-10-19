@@ -93,8 +93,8 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
 
     private fun observeHistory() {
         viewModelScope.launch {
-            // استخدام getAllMessages بدلاً من getConversation إذا كانت هذه هي الدالة المتاحة
-            memory.getAllMessages().collectLatest { entities -> 
+            // استخدام getConversation() بدلاً من getAllMessages() لأنها الدالة الأصلية في مشروعك
+            memory.getConversation().collectLatest { entities -> 
                 val messages = entities.map { entity ->
                     Message(id = entity.id, text = entity.text, isFromUser = entity.isFromUser, timestamp = entity.timestamp, isError = entity.isError)
                 }
@@ -162,7 +162,8 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                 is IntentHandler.HandlerResult.ShowChooser -> { _uiState.value = _uiState.value.copy(isSending = false, appChooser = AppChooserState(isVisible = true, title = intentResult.title, apps = intentResult.apps, pendingAction = intentResult.pendingAction)); return@launch }
                 is IntentHandler.HandlerResult.Error -> { saveMessageEntity(Message(text = intentResult.message, isFromUser = false, isError = true)); _uiState.value = _uiState.value.copy(isSending = false); return@launch }
                 is IntentHandler.HandlerResult.NeedsCorrection -> {
-                    val recent = memory.getRecentForContext()
+                    // إصلاح: تمرير conversationId
+                    val recent = memory.getRecentForContext(conversationId = "default")
                     val history = recent.dropLast(1)
                     val profileContext = profileRepo.getPromptContext()
                     val contextPrompt = contextBuilder.build(history, text).toPrompt()
@@ -175,7 +176,8 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                 is IntentHandler.HandlerResult.Unknown -> { }
             }
 
-            val recent = memory.getRecentForContext()
+            // إصلاح: تمرير conversationId
+            val recent = memory.getRecentForContext(conversationId = "default")
             val history = recent.dropLast(1)
             val context = contextBuilder.build(history, text)
             val smartReply = SmartReplies.tryReply(text, context)
@@ -194,7 +196,6 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     private fun buildCorrectionContext(userText: String, history: List<ChatMessageEntity>): String {
-        // إصلاح الخطأ: استخراج النص (text) من الكائن
         val lastRachaReply = history.lastOrNull { !it.isFromUser }?.text ?: ""
         val lastUserMsg = history.lastOrNull { it.isFromUser }?.text ?: ""
         return """
@@ -251,8 +252,11 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     private suspend fun saveMessageEntity(message: Message) {
-        // إصلاح الخطأ: إضافة conversationId وتمرير النص الصحيح
-        memory.saveMessage(conversationId = "default", message = ChatMessageEntity(id = message.id, text = message.text, isFromUser = message.isFromUser, isError = message.isError, timestamp = message.timestamp))
+        // إصلاح: تمرير conversationId
+        memory.saveMessage(
+            conversationId = "default",
+            message = ChatMessageEntity(id = message.id, text = message.text, isFromUser = message.isFromUser, isError = message.isError, timestamp = message.timestamp)
+        )
     }
 
     fun clearHistory() { viewModelScope.launch { memory.clearAll() } }
