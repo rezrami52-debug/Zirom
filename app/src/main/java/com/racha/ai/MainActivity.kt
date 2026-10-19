@@ -8,12 +8,9 @@ import android.provider.Settings
 import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
-import androidx.work.*
 import com.racha.ai.core.bubble.RachaBubbleService
-import com.racha.ai.core.news.NewsWorker
-import com.racha.ai.ui.navigation.AppNavigation
+import com.racha.ai.ui.navigation.RachaApp
 import com.racha.ai.ui.theme.RachaTheme
-import java.util.concurrent.TimeUnit
 
 class MainActivity : ComponentActivity() {
 
@@ -21,31 +18,12 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         
         checkOverlayPermission()
-        setupNewsWorker()
 
         setContent {
             RachaTheme {
-                AppNavigation(
-                    onToggleBubble = { toggleBubbleService() }
-                )
+                RachaApp()
             }
         }
-    }
-
-    private fun setupNewsWorker() {
-        val constraints = Constraints.Builder()
-            .setRequiredNetworkType(NetworkType.CONNECTED)
-            .build()
-
-        val newsRequest = PeriodicWorkRequestBuilder<NewsWorker>(6, TimeUnit.HOURS)
-            .setConstraints(constraints)
-            .build()
-
-        WorkManager.getInstance(this).enqueueUniquePeriodicWork(
-            "RachaNewsWorker",
-            ExistingPeriodicWorkPolicy.KEEP,
-            newsRequest
-        )
     }
 
     private fun checkOverlayPermission() {
@@ -56,7 +34,7 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    private fun toggleBubbleService() {
+    fun toggleBubbleService() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M && !Settings.canDrawOverlays(this)) {
             val intent = Intent(
                 Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
