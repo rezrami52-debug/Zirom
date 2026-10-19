@@ -55,7 +55,6 @@ fun ChatScreen(
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(10.dp)
                     ) {
-                        // إطار صورة EVE المميز في الأعلى
                         Box(
                             modifier = Modifier
                                 .size(38.dp)
@@ -119,7 +118,6 @@ fun ChatScreen(
                                     isThinking = true
 
                                     scope.launch {
-                                        // محاكاة التفكير العميق (Racha Réfléchie)
                                         delay(800)
                                         val reply = processRachaCommand(userMsg)
                                         isThinking = false
@@ -137,7 +135,6 @@ fun ChatScreen(
                     }
                 }
 
-                // شريط التنقل السفلي
                 NavigationBar(
                     containerColor = Color(0xFF0F172A),
                     contentColor = Color.White
