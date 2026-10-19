@@ -8,7 +8,6 @@ import android.provider.Settings
 import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
-import com.racha.ai.core.bubble.RachaBubbleService
 import com.racha.ai.ui.navigation.RachaApp
 import com.racha.ai.ui.theme.RachaTheme
 
@@ -17,6 +16,7 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         
+        // التحقق من الإذن ولكن لن نشغل الخدمة هنا
         checkOverlayPermission()
 
         setContent {
@@ -26,32 +26,12 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    override fun onUserLeaveHint() {
-        super.onUserLeaveHint()
-        // تشغيل الفقاعة العائمة تلقائياً بمجرد الضغط على زر Home أو الخروج من التطبيق
-        startBubbleServiceIfAllowed()
-    }
+    // تم حذف دالة onUserLeaveHint لمنع تشغيل الفقاعة عند الخروج
 
     private fun checkOverlayPermission() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
             if (!Settings.canDrawOverlays(this)) {
-                val intent = Intent(
-                    Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
-                    Uri.parse("package:$packageName")
-                )
-                startActivity(intent)
-                Toast.makeText(this, "يرجى منح إذن العرض فوق التطبيقات لتفعيل فقاعة JARVIS", Toast.LENGTH_LONG).show()
-            }
-        }
-    }
-
-    private fun startBubbleServiceIfAllowed() {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M && Settings.canDrawOverlays(this)) {
-            val serviceIntent = Intent(this, RachaBubbleService::class.java)
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                startForegroundService(serviceIntent)
-            } else {
-                startService(serviceIntent)
+                // طلب الإذن عند الحاجة (للاستخدام المستقبلي)
             }
         }
     }
