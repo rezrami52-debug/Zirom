@@ -7,6 +7,7 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -30,7 +31,6 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.google.accompanist.permissions.ExperimentalPermissionsApi
 import com.google.accompanist.permissions.isGranted
 import com.google.accompanist.permissions.rememberPermissionState
-import com.racha.ai.core.apps.AppChooserDialog
 import com.racha.ai.core.tools.PhotoCaptureActivity
 import com.racha.ai.core.voice.VoiceInputHelper
 import com.racha.ai.data.repository.NotificationRepository
@@ -48,6 +48,7 @@ fun ChatScreen(
     onOpenSettings: () -> Unit = {},
     onOpenNotifications: () -> Unit = {},
     onOpenPrayer: () -> Unit = {},
+    onOpenRoutine: () -> Unit = {},
     viewModel: ChatViewModel = viewModel(),
     weatherViewModel: WeatherViewModel = viewModel()
 ) {
@@ -139,13 +140,29 @@ fun ChatScreen(
                 },
                 bottomBar = {
                     BottomAppBar(containerColor = MaterialTheme.colorScheme.surface, contentColor = MaterialTheme.colorScheme.primary, tonalElevation = 8.dp) {
-                        NavigationBarItem(icon = { Icon(Icons.Default.Mosque, contentDescription = "القبلة", modifier = Modifier.size(24.dp), tint = if (selectedTab == 0) (if (isDarkTheme) Color(0xFFBD4CFF) else PrayerGold) else Color.Gray) },
-                            label = { Text("القبلة", fontSize = 11.sp) }, selected = selectedTab == 0, onClick = { selectedTab = 0; onOpenPrayer() })
-                        NavigationBarItem(icon = { Icon(Icons.Default.Notifications, contentDescription = "الإشعارات", modifier = Modifier.size(24.dp), tint = if (selectedTab == 1) (if (isDarkTheme) Color(0xFFBD4CFF) else Color(0xFF0EA5E9)) else Color.Gray) },
-                            label = { Box { Text("الإشعارات", fontSize = 11.sp); if (unreadCount > 0) Text(text = if (unreadCount > 99) "99+" else unreadCount.toString(), modifier = Modifier.align(Alignment.TopEnd).background(Color.Red, RoundedCornerShape(50)).padding(horizontal = 3.dp), color = Color.White, fontSize = 8.sp, fontWeight = FontWeight.Bold) } },
-                            selected = selectedTab == 1, onClick = { selectedTab = 1; onOpenNotifications() })
-                        NavigationBarItem(icon = { Icon(Icons.Default.Settings, contentDescription = "الإعدادات", modifier = Modifier.size(24.dp), tint = if (selectedTab == 2) (if (isDarkTheme) Color(0xFFBD4CFF) else Color(0xFF0EA5E9)) else Color.Gray) },
-                            label = { Text("الإعدادات", fontSize = 11.sp) }, selected = selectedTab == 2, onClick = { selectedTab = 2; onOpenSettings() })
+                        NavigationBarItem(
+                            icon = { Icon(Icons.Default.Mosque, contentDescription = "القبلة", modifier = Modifier.size(24.dp), tint = if (selectedTab == 0) (if (isDarkTheme) Color(0xFFBD4CFF) else PrayerGold) else Color.Gray) },
+                            label = { Text("القبلة", fontSize = 11.sp) }, 
+                            selected = selectedTab == 0, 
+                            onClick = { selectedTab = 0; onOpenPrayer() }
+                        )
+                        NavigationBarItem(
+                            icon = { Icon(Icons.Default.Notifications, contentDescription = "الإشعارات", modifier = Modifier.size(24.dp), tint = if (selectedTab == 1) (if (isDarkTheme) Color(0xFFBD4CFF) else Color(0xFF0EA5E9)) else Color.Gray) },
+                            label = { 
+                                Box { 
+                                    Text("الإشعارات", fontSize = 11.sp)
+                                    if (unreadCount > 0) Text(text = if (unreadCount > 99) "99+" else unreadCount.toString(), modifier = Modifier.align(Alignment.TopEnd).background(Color.Red, RoundedCornerShape(50)).padding(horizontal = 3.dp), color = Color.White, fontSize = 8.sp, fontWeight = FontWeight.Bold) 
+                                } 
+                            },
+                            selected = selectedTab == 1, 
+                            onClick = { selectedTab = 1; onOpenNotifications() }
+                        )
+                        NavigationBarItem(
+                            icon = { Icon(Icons.Default.Settings, contentDescription = "الإعدادات", modifier = Modifier.size(24.dp), tint = if (selectedTab == 2) (if (isDarkTheme) Color(0xFFBD4CFF) else Color(0xFF0EA5E9)) else Color.Gray) },
+                            label = { Text("الإعدادات", fontSize = 11.sp) }, 
+                            selected = selectedTab == 2, 
+                            onClick = { selectedTab = 2; onOpenSettings() }
+                        )
                     }
                 }
             ) { paddingValues ->
