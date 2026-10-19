@@ -1,10 +1,7 @@
 package com.racha.ai.ui.screens.chat
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -15,9 +12,9 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.racha.ai.core.util.TimeHelper
 import com.racha.ai.domain.model.WeatherInfo
 import com.racha.ai.services.prayer.PrayerTimesCalculator
-import java.text.SimpleDateFormat
 import java.util.*
 import java.util.concurrent.TimeUnit
 
@@ -25,129 +22,114 @@ data class PrayerInfo(val name: String, val timeStr: String)
 data class PrayerStatus(val next: PrayerInfo, val last: PrayerInfo)
 
 @Composable
-fun WeatherBannerWithPrayerTimes(
-    weather: WeatherInfo?,
-    onOpenPrayer: () -> Unit,
-    modifier: Modifier = Modifier
-) {
+fun WeatherBannerWithPrayerTimes(weather: WeatherInfo?, modifier: Modifier = Modifier) {
     if (weather == null) return
 
+    val isDarkTheme = MaterialTheme.colorScheme.background == Color(0xFF0A0A0F)
+    
     val prayerStatus = remember(weather.cityName) {
         val times = PrayerTimesCalculator.calculate(
             latitude = 35.8256,
             longitude = 10.6369,
-            locationName = weather.cityName ?: "سوسة"
+            locationName = weather.cityName ?: "موقعك"
         )
         calculatePrayerStatus(times)
     }
-
-    var currentTime by remember { mutableStateOf("") }
-    LaunchedEffect(Unit) {
-        while (true) {
-            currentTime = SimpleDateFormat("hh:mm a", Locale.getDefault()).format(Date())
-            kotlinx.coroutines.delay(1000)
-        }
+    
+    val gradientColors = if (isDarkTheme) {
+        listOf(Color(0xFF1A1A2E), Color(0xFF2D2D44), Color(0xFF16213E))
+    } else {
+        listOf(Color(0xFF4A90E2), Color(0xFF7BB3E8), Color(0xFFA8D0E6))
     }
-
-    val glassBg = listOf(Color(0x35FFFFFF), Color(0x1560A5FA))
-    val glassBorder = Color(0x55FFFFFF)
+    
+    val weatherIcon = if (isDarkTheme) "🌙" else "☀️"
+    val timeGreeting = if (isDarkTheme) "مساء الخير 🌃" else "صباح الخير ☀️"
 
     Card(
-        modifier = modifier
-            .fillMaxWidth()
-            .padding(vertical = 2.dp),
-        shape = RoundedCornerShape(18.dp),
-        colors = CardDefaults.cardColors(containerColor = Color.Transparent),
-        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
+        modifier = modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(20.dp),
+        elevation = CardDefaults.cardElevation(defaultElevation = 8.dp)
     ) {
-        Row(
+        Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .background(Brush.linearGradient(glassBg))
-                .border(1.dp, glassBorder, RoundedCornerShape(18.dp))
-                .padding(horizontal = 12.dp, vertical = 8.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.SpaceBetween
+                .background(brush = Brush.linearGradient(colors = gradientColors))
+                .padding(16.dp)
         ) {
-            // القسم الأول: البوصلة القابلة للنقر لتفتح القبلة والصلاة
-            Row(
-                modifier = Modifier.clickable { onOpenPrayer() },
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Box(
-                    modifier = Modifier
-                        .size(38.dp)
-                        .background(Color(0x44000000), CircleShape)
-                        .border(1.dp, Color(0xFF60A5FA), CircleShape),
-                    contentAlignment = Alignment.Center
+            Column(modifier = Modifier.fillMaxWidth()) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Text(text = "🧭", fontSize = 12.sp)
-                        Text(text = "132°", fontSize = 8.sp, color = Color.White, fontWeight = FontWeight.Bold)
+                    Column {
+                        Text(text = timeGreeting, fontSize = 14.sp, color = if (isDarkTheme) Color(0xFFE0E0FF) else Color.White, fontWeight = FontWeight.Medium)
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Text(text = weather.cityName ?: "موقعك", fontSize = 18.sp, color = Color.White, fontWeight = FontWeight.Bold)
+                    }
+                    Text(text = weatherIcon, fontSize = 36.sp)
+                }
+                
+                Spacer(modifier = Modifier.height(12.dp))
+                
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(text = "${weather.temperature}°C", fontSize = 40.sp, color = Color.White, fontWeight = FontWeight.Bold)
+                    
+                    Column(horizontalAlignment = Alignment.End) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text(text = "💧", fontSize = 14.sp)
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text(text = "${weather.humidity}%", fontSize = 13.sp, color = Color(0xFFE0E0FF))
+                        }
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text(text = "💨", fontSize = 14.sp)
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text(text = "${weather.windSpeed} كم/س", fontSize = 13.sp, color = Color(0xFFE0E0FF))
+                        }
                     }
                 }
-                Spacer(modifier = Modifier.width(8.dp))
-                Column {
-                    Text(
-                        text = if (currentTime.isNotEmpty()) currentTime else "05:16 PM",
-                        fontSize = 13.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = Color.White
-                    )
-                    Text(
-                        text = "القبلة 🕋",
-                        fontSize = 10.sp,
-                        color = Color(0xFFFFD700),
-                        fontWeight = FontWeight.Bold
-                    )
+                
+                Spacer(modifier = Modifier.height(12.dp))
+                Divider(color = Color.White.copy(alpha = 0.3f), thickness = 1.dp)
+                Spacer(modifier = Modifier.height(12.dp))
+                
+                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Card(
+                        modifier = Modifier.weight(1f),
+                        shape = RoundedCornerShape(16.dp),
+                        colors = CardDefaults.cardColors(containerColor = Color(0x33FFFFFF)),
+                        elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
+                    ) {
+                        Column(modifier = Modifier.padding(12.dp)) {
+                            Text(text = "✓ الأخيرة", fontSize = 11.sp, color = Color(0xFFE0E0FF), fontWeight = FontWeight.SemiBold)
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Text(text = prayerStatus.last.name, fontSize = 16.sp, color = Color.White, fontWeight = FontWeight.Bold)
+                            Text(text = prayerStatus.last.timeStr, fontSize = 12.sp, color = Color(0xFFE0E0FF))
+                        }
+                    }
+                    
+                    Card(
+                        modifier = Modifier.weight(1f),
+                        shape = RoundedCornerShape(16.dp),
+                        colors = CardDefaults.cardColors(containerColor = Color(0x33FFFFFF)),
+                        elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
+                    ) {
+                        Column(modifier = Modifier.padding(12.dp)) {
+                            Text(text = "⏳ القادمة", fontSize = 11.sp, color = Color(0xFFE0E0FF), fontWeight = FontWeight.SemiBold)
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Text(text = prayerStatus.next.name, fontSize = 16.sp, color = Color.White, fontWeight = FontWeight.Bold)
+                            Text(text = prayerStatus.next.timeStr, fontSize = 12.sp, color = Color(0xFFE0E0FF))
+                        }
+                    }
                 }
-            }
-
-            Box(
-                modifier = Modifier
-                    .width(1.dp)
-                    .height(28.dp)
-                    .background(Color.White.copy(alpha = 0.25f))
-            )
-
-            // القسم الثاني: الطقس
-            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                Text(
-                    text = "${weather.temperature}°C",
-                    fontSize = 13.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = Color.White
-                )
-                Text(
-                    text = weather.cityName ?: "سوسة",
-                    fontSize = 9.sp,
-                    color = Color.White.copy(alpha = 0.8f)
-                )
-            }
-
-            Box(
-                modifier = Modifier
-                    .width(1.dp)
-                    .height(28.dp)
-                    .background(Color.White.copy(alpha = 0.25f))
-            )
-
-            // القسم الثالث: الصلاة الدقيقة (القادمة)
-            Column(
-                modifier = Modifier.clickable { onOpenPrayer() },
-                horizontalAlignment = Alignment.End
-            ) {
-                Text(
-                    text = "🕌 ${prayerStatus.next.name}",
-                    fontSize = 12.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = Color(0xFFFFC107)
-                )
-                Text(
-                    text = prayerStatus.next.timeStr,
-                    fontSize = 9.sp,
-                    color = Color.White.copy(alpha = 0.9f)
-                )
+                
+                Spacer(modifier = Modifier.height(8.dp))
+                Text(text = TimeHelper.getCurrentTimeString(), fontSize = 11.sp, color = Color(0xFFE0E0FF).copy(alpha = 0.7f), modifier = Modifier.align(Alignment.End))
             }
         }
     }
@@ -155,7 +137,8 @@ fun WeatherBannerWithPrayerTimes(
 
 private fun calculatePrayerStatus(times: com.racha.ai.domain.model.PrayerTimes): PrayerStatus {
     val now = Date()
-
+    val calendar = Calendar.getInstance()
+    
     val prayers = listOf(
         "الفجر" to times.fajr,
         "الظهر" to times.dhuhr,
@@ -163,31 +146,40 @@ private fun calculatePrayerStatus(times: com.racha.ai.domain.model.PrayerTimes):
         "المغرب" to times.maghrib,
         "العشاء" to times.isha
     )
-
-    var nextPair = prayers.first()
-    var lastPair = prayers.last()
-
+    
+    var nextPrayer = prayers.first()
+    var lastPrayer = prayers.last()
+    var isNextPrayerTomorrow = false
+    
     for (i in prayers.indices) {
         if (prayers[i].second.after(now)) {
-            nextPair = prayers[i]
-            lastPair = if (i > 0) prayers[i - 1] else prayers.last()
+            nextPrayer = prayers[i]
+            lastPrayer = if (i > 0) prayers[i - 1] else prayers.last()
             break
         }
     }
-
-    val diffNextMillis = Math.abs(nextPair.second.time - now.time)
-    val diffLastMillis = Math.abs(now.time - lastPair.second.time)
-
+    
+    if (nextPrayer.first == "الفجر") {
+        val ishaTime = times.isha
+        if (now.after(ishaTime)) {
+            isNextPrayerTomorrow = true
+            calendar.time = nextPrayer.second
+            calendar.add(Calendar.DAY_OF_MONTH, 1)
+        }
+    }
+    
+    val nextTime = if (isNextPrayerTomorrow) calendar.time else nextPrayer.second
+    
+    val diffNextMillis = nextTime.time - now.time
+    val diffLastMillis = now.time - lastPrayer.second.time
+    
     val nextH = TimeUnit.MILLISECONDS.toHours(diffNextMillis)
     val nextM = TimeUnit.MILLISECONDS.toMinutes(diffNextMillis) % 60
     val lastH = TimeUnit.MILLISECONDS.toHours(diffLastMillis)
     val lastM = TimeUnit.MILLISECONDS.toMinutes(diffLastMillis) % 60
-
-    val nextStr = if (nextH > 0) "بعد ${nextH}س و ${nextM}د" else "بعد ${nextM}د"
-    val lastStr = if (lastH > 0) "منذ ${lastH}س و ${lastM}د" else "منذ ${lastM}د"
-
+    
     return PrayerStatus(
-        next = PrayerInfo(nextPair.first, nextStr),
-        last = PrayerInfo(lastPair.first, lastStr)
+        next = PrayerInfo(nextPrayer.first, "بعد ${nextH}س و ${nextM}د"),
+        last = PrayerInfo(lastPrayer.first, "منذ ${lastH}س و ${lastM}د")
     )
 }
