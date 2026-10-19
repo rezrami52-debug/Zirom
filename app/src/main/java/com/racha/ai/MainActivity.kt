@@ -26,31 +26,33 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    override fun onUserLeaveHint() {
+        super.onUserLeaveHint()
+        // تشغيل الفقاعة العائمة تلقائياً بمجرد الضغط على زر Home أو الخروج من التطبيق
+        startBubbleServiceIfAllowed()
+    }
+
     private fun checkOverlayPermission() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
             if (!Settings.canDrawOverlays(this)) {
-                // طلب الإذن عند الحاجة
+                val intent = Intent(
+                    Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
+                    Uri.parse("package:$packageName")
+                )
+                startActivity(intent)
+                Toast.makeText(this, "يرجى منح إذن العرض فوق التطبيقات لتفعيل فقاعة JARVIS", Toast.LENGTH_LONG).show()
             }
         }
     }
 
-    fun toggleBubbleService() {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M && !Settings.canDrawOverlays(this)) {
-            val intent = Intent(
-                Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
-                Uri.parse("package:$packageName")
-            )
-            startActivity(intent)
-            Toast.makeText(this, "يرجى منح إذن العرض فوق التطبيقات لتفعيل الفقاعة", Toast.LENGTH_LONG).show()
-            return
+    private fun startBubbleServiceIfAllowed() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M && Settings.canDrawOverlays(this)) {
+            val serviceIntent = Intent(this, RachaBubbleService::class.java)
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                startForegroundService(serviceIntent)
+            } else {
+                startService(serviceIntent)
+            }
         }
-
-        val serviceIntent = Intent(this, RachaBubbleService::class.java)
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            startForegroundService(serviceIntent)
-        } else {
-            startService(serviceIntent)
-        }
-        Toast.makeText(this, "تم تفعيل الفقاعة العائمة بنجاح 🤖", Toast.LENGTH_SHORT).show()
     }
 }
