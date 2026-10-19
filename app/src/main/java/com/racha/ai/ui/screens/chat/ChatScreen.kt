@@ -79,16 +79,13 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.google.accompanist.permissions.ExperimentalPermissionsApi
 import com.google.accompanist.permissions.isGranted
 import com.google.accompanist.permissions.rememberPermissionState
-import com.racha.ai.R
 import com.racha.ai.core.apps.AppChooserDialog
 import com.racha.ai.core.tools.PhotoCaptureActivity
 import com.racha.ai.core.voice.VoiceInputHelper
 import com.racha.ai.data.repository.NotificationRepository
 import com.racha.ai.domain.model.Message
-import com.racha.ai.ui.theme.DayMessageAI
 import com.racha.ai.ui.theme.DayMessageUser
 import com.racha.ai.ui.theme.NightMessageAI
-import com.racha.ai.ui.theme.NightMessageUser
 import com.racha.ai.ui.theme.PrayerGold
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
@@ -98,10 +95,10 @@ import java.util.Locale
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalPermissionsApi::class)
 @Composable
 fun ChatScreen(
-    onOpenSettings: () -> Unit,
-    onOpenNotifications: () -> Unit,
-    onOpenPrayer: () -> Unit,
-    onOpenRoutine: () -> Unit,
+    onOpenSettings: () -> Unit = {},
+    onOpenNotifications: () -> Unit = {},
+    onOpenPrayer: () -> Unit = {},
+    onOpenRoutine: () -> Unit = {},
     viewModel: ChatViewModel = viewModel(),
     weatherViewModel: WeatherViewModel = viewModel()
 ) {
@@ -123,20 +120,36 @@ fun ChatScreen(
     val cameraLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.StartActivityForResult()
     ) { result ->
-        if (result.resultCode == android.app.Activity.RESULT_OK) viewModel.onSpecialToolCompleted(true, "📸 تم حفظ الصورة")
-        else viewModel.onSpecialToolCancelled()
+        if (result.resultCode == android.app.Activity.RESULT_OK) {
+            viewModel.onSpecialToolCompleted(true, "📸 تم حفظ الصورة")
+        } else {
+            viewModel.onSpecialToolCancelled()
+        }
     }
 
     val modelPickerLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.OpenDocument()
-    ) { uri: Uri? -> if (uri != null) viewModel.copyQwenModel(uri) }
+    ) { uri: Uri? -> 
+        if (uri != null) {
+            viewModel.copyQwenModel(uri)
+        }
+    }
 
     LaunchedEffect(state.pendingSpecialTool) {
-        if (state.pendingSpecialTool == "open_camera") cameraLauncher.launch(Intent(context, PhotoCaptureActivity::class.java))
+        if (state.pendingSpecialTool == "open_camera") {
+            cameraLauncher.launch(Intent(context, PhotoCaptureActivity::class.java))
+        }
     }
+    
     DisposableEffect(Unit) { onDispose { voiceHelper.destroy() } }
-    LaunchedEffect(state.messages.size) { if (state.messages.isNotEmpty()) listState.animateScrollToItem(state.messages.size - 1) }
-    LaunchedEffect(voiceError) { if (voiceError != null) { kotlinx.coroutines.delay(3000); voiceError = null } }
+    
+    LaunchedEffect(state.messages.size) { 
+        if (state.messages.isNotEmpty()) listState.animateScrollToItem(state.messages.size - 1) 
+    }
+    
+    LaunchedEffect(voiceError) { 
+        if (voiceError != null) { kotlinx.coroutines.delay(3000); voiceError = null } 
+    }
 
     ModalNavigationDrawer(
         drawerState = drawerState,
@@ -144,7 +157,7 @@ fun ChatScreen(
             Surface(modifier = Modifier.fillMaxHeight().width(300.dp), color = MaterialTheme.colorScheme.surface, shadowElevation = 16.dp) {
                 Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
                     Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                        Text("المحادثات السابقة", fontSize = 20.sp, fontWeight = FontWeight.Bold, color = if (isDarkTheme) Color(0xFFBD4CFF) else Color(0xFF0EA5E9))
+                        Text("المحادثات السابقة", fontSize = 20.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
                         IconButton(onClick = { scope.launch { drawerState.close() } }) { 
                             Icon(Icons.Default.Close, contentDescription = "إغلاق") 
                         }
@@ -163,7 +176,10 @@ fun ChatScreen(
                                 val isSelected = conv.id == state.currentConversationId
                                 val dateStr = SimpleDateFormat("dd/MM/yyyy HH:mm", Locale("ar")).format(Date(conv.timestamp))
                                 Card(
-                                    modifier = Modifier.fillMaxWidth().clickable { viewModel.loadConversation(conv.id); scope.launch { drawerState.close() } },
+                                    modifier = Modifier.fillMaxWidth().clickable { 
+                                        viewModel.loadConversation(conv.id)
+                                        scope.launch { drawerState.close() } 
+                                    },
                                     colors = CardDefaults.cardColors(containerColor = if (isSelected) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceVariant),
                                     shape = RoundedCornerShape(12.dp)
                                 ) {
@@ -181,7 +197,10 @@ fun ChatScreen(
                             item {
                                 Spacer(modifier = Modifier.height(8.dp))
                                 Button(
-                                    onClick = { viewModel.startNewChat(); scope.launch { drawerState.close() } }, 
+                                    onClick = { 
+                                        viewModel.startNewChat()
+                                        scope.launch { drawerState.close() } 
+                                    }, 
                                     modifier = Modifier.fillMaxWidth()
                                 ) {
                                     Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(20.dp))
@@ -203,7 +222,6 @@ fun ChatScreen(
                                 verticalAlignment = Alignment.CenterVertically,
                                 horizontalArrangement = Arrangement.spacedBy(12.dp)
                             ) {
-                                // ✅ صورة EVE الدائرية
                                 Box(
                                     modifier = Modifier
                                         .size(40.dp)
@@ -212,10 +230,7 @@ fun ChatScreen(
                                         .border(2.dp, if (isDarkTheme) Color(0xFFBD4CFF) else Color(0xFF0EA5E9), CircleShape),
                                     contentAlignment = Alignment.Center
                                 ) {
-                                    Text(
-                                        text = "🤖",
-                                        fontSize = 24.sp
-                                    )
+                                    Text(text = "🤖", fontSize = 24.sp)
                                 }
                                 Text(text = "Racha AI", fontWeight = FontWeight.Bold, fontSize = 22.sp)
                             }
@@ -237,7 +252,6 @@ fun ChatScreen(
                         contentColor = MaterialTheme.colorScheme.primary,
                         tonalElevation = 8.dp
                     ) {
-                        // ✅ 1. القبلة
                         NavigationBarItem(
                             icon = { 
                                 Icon(
@@ -251,10 +265,9 @@ fun ChatScreen(
                             selected = selectedTab == 0,
                             onClick = { 
                                 selectedTab = 0
-                                onOpenPrayer()
+                                onOpenPrayer.invoke()
                             }
                         )
-                        // ✅ 2. الإشعارات
                         NavigationBarItem(
                             icon = { 
                                 Icon(
@@ -281,10 +294,9 @@ fun ChatScreen(
                             selected = selectedTab == 1,
                             onClick = { 
                                 selectedTab = 1
-                                onOpenNotifications()
+                                onOpenNotifications.invoke()
                             }
                         )
-                        // ✅ 3. الإعدادات
                         NavigationBarItem(
                             icon = { 
                                 Icon(
@@ -298,7 +310,7 @@ fun ChatScreen(
                             selected = selectedTab == 2,
                             onClick = { 
                                 selectedTab = 2
-                                onOpenSettings()
+                                onOpenSettings.invoke()
                             }
                         )
                     }
@@ -351,7 +363,9 @@ fun ChatScreen(
 
                     Row(modifier = Modifier.fillMaxWidth().padding(16.dp), verticalAlignment = Alignment.Bottom) {
                         OutlinedTextField(
-                            value = state.inputText, onValueChange = viewModel::onInputChange, modifier = Modifier.weight(1f),
+                            value = state.inputText, 
+                            onValueChange = viewModel::onInputChange, 
+                            modifier = Modifier.weight(1f),
                             placeholder = { Text("اكتب رسالتك هنا...") }, 
                             shape = RoundedCornerShape(24.dp), 
                             maxLines = 4,
@@ -363,11 +377,17 @@ fun ChatScreen(
                         Spacer(modifier = Modifier.width(8.dp))
                         IconButton(
                             onClick = {
-                                if (state.inputText.isNotBlank()) viewModel.sendMessage()
-                                else if (micPermission.status.isGranted) {
+                                if (state.inputText.isNotBlank()) {
+                                    viewModel.sendMessage()
+                                } else if (micPermission.status.isGranted) {
                                     isListening = true
-                                    voiceHelper.startListening(onResult = { viewModel.onInputChange(it); isListening = false }, onError = { voiceError = it; isListening = false })
-                                } else { micPermission.launchPermissionRequest() }
+                                    voiceHelper.startListening(
+                                        onResult = { viewModel.onInputChange(it); isListening = false }, 
+                                        onError = { voiceError = it; isListening = false }
+                                    )
+                                } else { 
+                                    micPermission.launchPermissionRequest() 
+                                }
                             },
                             modifier = Modifier
                                 .background(if (isDarkTheme) Color(0xFFBD4CFF) else Color(0xFF0EA5E9), RoundedCornerShape(50))
@@ -378,7 +398,9 @@ fun ChatScreen(
                             else Icon(Icons.Default.Mic, contentDescription = "صوت", tint = Color.White)
                         }
                     }
-                    if (voiceError != null) { Text(text = "⚠️ $voiceError", color = Color.Red, modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp), fontSize = 12.sp) }
+                    if (voiceError != null) { 
+                        Text(text = "⚠️ $voiceError", color = Color.Red, modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp), fontSize = 12.sp) 
+                    }
                 }
             }
         }
@@ -388,8 +410,8 @@ fun ChatScreen(
 @Composable
 fun MessageBubble(message: Message, modifier: Modifier = Modifier, isDarkTheme: Boolean) {
     val isUser = message.isFromUser
-    val userColor = if (isDarkTheme) DayMessageUser else DayMessageUser
-    val aiColor = if (isDarkTheme) NightMessageAI else DayMessageAI
+    val userColor = DayMessageUser
+    val aiColor = if (isDarkTheme) NightMessageAI else Color.White
     
     Row(modifier = modifier.fillMaxWidth(), horizontalArrangement = if (isUser) Arrangement.End else Arrangement.Start) {
         Surface(
@@ -398,7 +420,7 @@ fun MessageBubble(message: Message, modifier: Modifier = Modifier, isDarkTheme: 
             modifier = Modifier.widthIn(max = 280.dp).padding(vertical = 4.dp)
         ) {
             Column(modifier = Modifier.padding(12.dp)) {
-                Text(text = message.text, color = Color.White)
+                Text(text = message.text, color = if (isUser) Color.White else Color.Black)
                 if (message.isError) { 
                     Spacer(modifier = Modifier.padding(top = 4.dp))
                     Text(text = "⚠️ حدث خطأ", color = Color(0xFFE94560), fontSize = 12.sp) 
