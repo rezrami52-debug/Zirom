@@ -37,8 +37,8 @@ fun ChatScreen(
                             modifier = Modifier
                                 .size(38.dp)
                                 .clip(CircleShape)
-                                .background(Color(0F0F172A))
-                                .border(1.5.dp, Color(0FF38BDF8), CircleShape),
+                                .background(Color(0xFF0F172A))
+                                .border(1.5.dp, Color(0xFF38BDF8), CircleShape),
                             contentAlignment = Alignment.Center
                         ) {
                             Image(
@@ -52,7 +52,7 @@ fun ChatScreen(
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = Color(0FF0F172A)
+                    containerColor = Color(0xFF0F172A)
                 )
             )
         }
