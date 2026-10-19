@@ -14,11 +14,9 @@ import com.racha.ai.core.context.ContextBuilder
 import com.racha.ai.core.context.SmartReplies
 import com.racha.ai.core.preferences.AppPreferences
 import com.racha.ai.core.security.SecurePreferences
-import com.racha.ai.core.tools.SystemController
 import com.racha.ai.data.api.GeminiService
 import com.racha.ai.data.llm.QwenService
 import com.racha.ai.data.local.ChatMessageEntity
-import com.racha.ai.data.local.ConversationEntity
 import com.racha.ai.data.repository.ChatMemoryRepository
 import com.racha.ai.data.repository.UserProfileRepository
 import com.racha.ai.data.search.KnowledgeAugmenter
@@ -27,9 +25,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collectLatest
-import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
-import java.util.UUID
 
 data class ChatUiState(
     val messages: List<Message> = emptyList(),
@@ -44,22 +40,21 @@ data class ChatUiState(
     val qwenModelReady: Boolean = false,
     val qwenCopying: Boolean = false,
     val isSearching: Boolean = false,
-    val appChooser: AppChooserState = AppChooserState(),
-    val currentConversationId: String = UUID.randomUUID().toString(),
-    val conversations: List<ConversationEntity> = emptyList()
+    val appChooser: AppChooserState = AppChooserState()
 )
 
 class ChatViewModel(application: Application) : AndroidViewModel(application) {
+
     private val securePrefs = SecurePreferences(application)
     private val appPrefs = AppPreferences(application)
     private val memory = ChatMemoryRepository(application)
     private val profileRepo = UserProfileRepository(application)
     private val localAgent = LocalAgent(application)
     private val contextBuilder = ContextBuilder(application)
+
     private val appResolver = AppResolver(application)
     private val contactResolver = ContactResolver(application)
-    private val systemController = SystemController(application)
-    private val intentHandler = IntentHandler(application, appResolver, contactResolver, systemController)
+    private val intentHandler = IntentHandler(application, appResolver, contactResolver)
 
     private var geminiService: GeminiService? = null
     private var qwenService: QwenService? = null
@@ -68,13 +63,12 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
     private val _uiState = MutableStateFlow(ChatUiState())
     val uiState: StateFlow<ChatUiState> = _uiState.asStateFlow()
 
+    private var welcomeInitialized = false
+
     init {
         initializeServices()
-        observeConversations()
-        viewModelScope.launch {
-            val convs = memory.getAllConversations().first()
-            if (convs.isNotEmpty()) loadConversation(convs.first().id) else startNewChat()
-        }
+        observeHistory()
+        checkProfile()
     }
 
     private fun initializeServices() {
@@ -87,34 +81,32 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         }
         qwenService = QwenService(getApplication())
         augmenter = KnowledgeAugmenter(getApplication(), qwenService!!)
-        _uiState.value = _uiState.value.copy(
-            activeLLM = appPrefs.getLLMProvider(),
-            qwenModelReady = qwenService?.isModelPresent() ?: false
-        )
+        _uiState.value = _uiState.value.copy(activeLLM = appPrefs.getLLMProvider(), qwenModelReady = qwenService?.isModelPresent() ?: false)
     }
 
-    private fun observeConversations() {
+    private fun checkProfile() {
         viewModelScope.launch {
-            memory.getAllConversations().collectLatest { convs ->
-                _uiState.value = _uiState.value.copy(conversations = convs)
-            }
+            val isFilled = profileRepo.isFilled()
+            _uiState.value = _uiState.value.copy(hasProfile = isFilled)
         }
     }
 
-    fun startNewChat() {
+    private fun observeHistory() {
         viewModelScope.launch {
-            val newId = memory.createNewConversation()
-            _uiState.value = _uiState.value.copy(currentConversationId = newId, messages = emptyList(), inputText = "", isSending = false, isLoadingHistory = false)
-            saveMessageEntity(Message(text = "أهلاً بك! أنا Racha، كيف يمكنني مساعدتك اليوم؟", isFromUser = false))
-        }
-    }
-
-    fun loadConversation(conversationId: String) {
-        viewModelScope.launch {
-            _uiState.value = _uiState.value.copy(currentConversationId = conversationId, isLoadingHistory = true, messages = emptyList())
-            memory.getMessagesByConversation(conversationId).collectLatest { entities ->
-                val messages = entities.map { Message(id = it.id, text = it.text, isFromUser = it.isFromUser, timestamp = it.timestamp, isError = it.isError) }
-                _uiState.value = _uiState.value.copy(messages = messages, isLoadingHistory = false)
+            memory.getConversation().collectLatest { entities ->
+                val messages = entities.map { entity ->
+                    Message(id = entity.id, text = entity.text, isFromUser = entity.isFromUser, timestamp = entity.timestamp, isError = entity.isError)
+                }
+                if (messages.isEmpty() && !welcomeInitialized && _uiState.value.hasApiKey) {
+                    welcomeInitialized = true
+                    launch {
+                        val welcomeText = "أهلاً بك! أنا Racha، رفيقك الشخصي. كيف حالك اليوم؟"
+                        val welcome = Message(text = welcomeText, isFromUser = false)
+                        saveMessageEntity(welcome)
+                    }
+                } else {
+                    _uiState.value = _uiState.value.copy(messages = messages, isLoadingHistory = false)
+                }
             }
         }
     }
@@ -125,8 +117,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
     fun copyQwenModel(uri: Uri) {
         viewModelScope.launch {
             _uiState.value = _uiState.value.copy(qwenCopying = true)
-            val result = qwenService?.copyModelFromUri(uri)
-            result?.fold(
+            qwenService?.copyModelFromUri(uri)?.fold(
                 onSuccess = {
                     saveMessageEntity(Message(text = "✅ تم نسخ نموذج Qwen بنجاح.", isFromUser = false))
                     _uiState.value = _uiState.value.copy(qwenCopying = false, qwenModelReady = true)
@@ -139,29 +130,52 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    fun onAppSelected(app: AppResolver.InstalledApp) {
+        val action = _uiState.value.appChooser.pendingAction
+        _uiState.value = _uiState.value.copy(appChooser = AppChooserState())
+        if (action == null) return
+        viewModelScope.launch {
+            val result = intentHandler.executeChoice(app, action)
+            saveMessageEntity(Message(text = result, isFromUser = false))
+        }
+    }
+
+    fun onAppChooserDismiss() { _uiState.value = _uiState.value.copy(appChooser = AppChooserState()) }
+
     fun sendMessage() {
         val text = _uiState.value.inputText.trim()
         if (text.isBlank() || _uiState.value.isSending) return
         viewModelScope.launch {
             saveMessageEntity(Message(text = text, isFromUser = true))
             _uiState.value = _uiState.value.copy(inputText = "", isSending = true)
-            val localResult = localAgent.processCommand(text)
-            when (localResult) {
+
+            when (val localResult = localAgent.processCommand(text)) {
                 is CommandResult.Executed -> { saveMessageEntity(Message(text = localResult.message, isFromUser = false)); _uiState.value = _uiState.value.copy(isSending = false); return@launch }
                 is CommandResult.NeedsAction -> { _uiState.value = _uiState.value.copy(isSending = false, pendingSpecialTool = localResult.action); return@launch }
                 is CommandResult.Failed -> { saveMessageEntity(Message(text = localResult.message, isFromUser = false, isError = true)); _uiState.value = _uiState.value.copy(isSending = false); return@launch }
-                is CommandResult.NeedsLLM -> { /* نكمل */ }
+                is CommandResult.NeedsLLM -> { }
             }
-            val intentResult = intentHandler.handle(text)
-            when (intentResult) {
+
+            when (val intentResult = intentHandler.handle(text)) {
                 is IntentHandler.HandlerResult.DirectReply -> { saveMessageEntity(Message(text = intentResult.message, isFromUser = false)); _uiState.value = _uiState.value.copy(isSending = false); return@launch }
                 is IntentHandler.HandlerResult.ShowChooser -> { _uiState.value = _uiState.value.copy(isSending = false, appChooser = AppChooserState(isVisible = true, title = intentResult.title, apps = intentResult.apps, pendingAction = intentResult.pendingAction)); return@launch }
                 is IntentHandler.HandlerResult.Error -> { saveMessageEntity(Message(text = intentResult.message, isFromUser = false, isError = true)); _uiState.value = _uiState.value.copy(isSending = false); return@launch }
-                is IntentHandler.HandlerResult.NeedsCorrection, is IntentHandler.HandlerResult.Unknown -> { /* نكمل */ }
+                is IntentHandler.HandlerResult.NeedsCorrection -> {
+                    val recent = memory.getRecentForContext()
+                    val history = recent.dropLast(1)
+                    val profileContext = profileRepo.getPromptContext()
+                    val contextPrompt = contextBuilder.build(history, text).toPrompt()
+                    val correctionContext = buildCorrectionContext(text, history)
+                    val provider = _uiState.value.activeLLM
+                    if (provider == "qwen" && augmenter != null) sendWithAugmenter(text, history, "$contextPrompt\n\n$correctionContext", profileContext)
+                    else sendToGemini(text, history, "$contextPrompt\n\n$correctionContext", profileContext)
+                    return@launch
+                }
+                is IntentHandler.HandlerResult.Unknown -> { }
             }
-            val currentConvId = _uiState.value.currentConversationId
-            val recent = memory.getRecentForContext(currentConvId)
-            val history = recent.dropLast(1).reversed()
+
+            val recent = memory.getRecentForContext()
+            val history = recent.dropLast(1)
             val context = contextBuilder.build(history, text)
             val smartReply = SmartReplies.tryReply(text, context)
             if (smartReply != null) {
@@ -169,6 +183,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                 _uiState.value = _uiState.value.copy(isSending = false)
                 return@launch
             }
+
             val profileContext = profileRepo.getPromptContext()
             val contextPrompt = context.toPrompt()
             val provider = _uiState.value.activeLLM
@@ -177,33 +192,47 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    private fun buildCorrectionContext(userText: String, history: List<ChatMessageEntity>): String {
+        val lastRachaReply = history.lastOrNull { !it.isFromUser }?.text ?: ""
+        val lastUserMsg = history.lastOrNull { it.isFromUser }?.text ?: ""
+        return """
+            [تصحيح من المستخدم]
+            آخر سؤال: "$lastUserMsg"
+            ردي السابق: "${lastRachaReply.take(200)}"
+            تصحيح المستخدم: "$userText"
+            
+            المطلوب:
+            - أعد الإجابة بالسياق المصحّح.
+            - لا تكتفِ بالشكر أو "تمام".
+            - اعتمد على المعلومة الجديدة التي قدّمها المستخدم.
+        """.trimIndent()
+    }
+
     private suspend fun sendWithAugmenter(text: String, history: List<ChatMessageEntity>, contextPrompt: String, profileContext: String) {
         val aug = augmenter ?: run { sendToGemini(text, history, contextPrompt, profileContext); return }
-        if (qwenService?.isModelPresent() != true) {
-            saveMessageEntity(Message(text = "⚠️ نموذج Qwen غير موجود.", isFromUser = false, isError = true))
-            _uiState.value = _uiState.value.copy(isSending = false); return
-        }
-        if (qwenService?.isReady() != true) _uiState.value = _uiState.value.copy(qwenLoading = true)
-        val result = aug.smartAnswer(text, "$profileContext\n\n$contextPrompt", history)
+        if (qwenService?.isModelPresent() != true) { saveMessageEntity(Message(text = "⚠️ نموذج Qwen غير موجود.", isFromUser = false, isError = true)); _uiState.value = _uiState.value.copy(isSending = false); return }
+        if (qwenService?.isReady() != true) { _uiState.value = _uiState.value.copy(qwenLoading = true) }
+        val fullContext = "$profileContext\n\n$contextPrompt"
+        val result = aug.smartAnswer(text, fullContext, history)
         saveMessageEntity(Message(text = result.answer, isFromUser = false, isError = false))
         _uiState.value = _uiState.value.copy(isSending = false, qwenLoading = false)
     }
 
     private suspend fun sendToGemini(text: String, history: List<ChatMessageEntity>, contextPrompt: String, profileContext: String) {
-        val service = geminiService ?: run {
-            saveMessageEntity(Message(text = "⚠️ مفتاح Gemini غير موجود.", isFromUser = false, isError = true))
-            _uiState.value = _uiState.value.copy(isSending = false); return
-        }
-        val result = service.sendMessageWithContext(history, text, "$profileContext\n\n$contextPrompt")
-        result.fold(
+        val service = geminiService
+        if (service == null) { saveMessageEntity(Message(text = "⚠️ مفتاح Gemini غير موجود.", isFromUser = false, isError = true)); _uiState.value = _uiState.value.copy(isSending = false); return }
+        val fullContext = "$profileContext\n\n$contextPrompt"
+        service.sendMessageWithContext(history, text, fullContext).fold(
             onSuccess = { reply -> saveMessageEntity(Message(text = reply, isFromUser = false)); _uiState.value = _uiState.value.copy(isSending = false) },
             onFailure = { error ->
-                val msg = when {
-                    error.message?.contains("503") == true || error.message?.contains("UNAVAILABLE") == true -> "⚠️ Gemini مزدحم حالياً."
-                    error.message?.contains("API key") == true -> "⚠️ المفتاح غير صالح."
+                val errorMessage = error.message ?: ""
+                val userFriendly = when {
+                    errorMessage.contains("503") || errorMessage.contains("UNAVAILABLE") -> "⚠️ Gemini مزدحم حالياً."
+                    errorMessage.contains("API key") -> "⚠️ المفتاح غير صالح."
+                    errorMessage.contains("quota") -> "⚠️ استُهلكت الحصة."
                     else -> "⚠️ خطأ: ${error.message ?: "غير معروف"}"
                 }
-                saveMessageEntity(Message(text = msg, isFromUser = false, isError = true))
+                saveMessageEntity(Message(text = userFriendly, isFromUser = false, isError = true))
                 _uiState.value = _uiState.value.copy(isSending = false)
             }
         )
@@ -213,30 +242,21 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch { saveMessageEntity(Message(text = message, isFromUser = false, isError = !success)) }
         _uiState.value = _uiState.value.copy(pendingSpecialTool = null)
     }
+
     fun onSpecialToolCancelled() {
         viewModelScope.launch { saveMessageEntity(Message(text = "❌ تم إلغاء العملية", isFromUser = false)) }
         _uiState.value = _uiState.value.copy(pendingSpecialTool = null)
     }
 
     private suspend fun saveMessageEntity(message: Message) {
-        val convId = _uiState.value.currentConversationId
-        memory.saveMessage(convId, ChatMessageEntity(id = message.id, conversationId = convId, text = message.text, isFromUser = message.isFromUser, isError = message.isError, timestamp = message.timestamp))
-        val currentMessages = _uiState.value.messages.toMutableList().apply { add(message) }
-        _uiState.value = _uiState.value.copy(messages = currentMessages)
+        memory.saveMessage(ChatMessageEntity(id = message.id, text = message.text, isFromUser = message.isFromUser, isError = message.isError, timestamp = message.timestamp))
     }
 
-    fun onAppSelected(app: AppResolver.InstalledApp) {
-        val chooser = _uiState.value.appChooser
-        val action = chooser.pendingAction
-        _uiState.value = _uiState.value.copy(appChooser = AppChooserState())
-        if (action == null) return
-        viewModelScope.launch {
-            val result = intentHandler.executeChoice(app, action)
-            saveMessageEntity(Message(text = result, isFromUser = false))
-        }
+    fun clearHistory() { viewModelScope.launch { memory.clearAll() } }
+    fun refreshProfileStatus() { checkProfile() }
+
+    override fun onCleared() {
+        super.onCleared()
+        qwenService?.close()
     }
-    fun onAppChooserDismiss() { _uiState.value = _uiState.value.copy(appChooser = AppChooserState()) }
-    fun clearHistory() { viewModelScope.launch { memory.clearAll(); startNewChat() } }
-    fun refreshProfileStatus() { viewModelScope.launch { _uiState.value = _uiState.value.copy(hasProfile = profileRepo.isFilled()) } }
-    override fun onCleared() { super.onCleared(); qwenService?.close() }
 }
