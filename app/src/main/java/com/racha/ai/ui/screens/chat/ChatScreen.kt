@@ -108,11 +108,9 @@ fun ChatScreen(
                 }) { Text("🫧 تشغيل EVE", fontSize = 12.sp, color = primaryGlow) }
                 TextButton(onClick = { com.racha.ai.core.eve.EveState.addNotification() }) { Text("🔔 إشعار", fontSize = 12.sp, color = primaryGlow) }
             }
-                TextButton(onClick = { com.racha.ai.core.eve.EveState.addNotification() }) { Text("🔔 إشعار", fontSize = 12.sp, color = primaryGlow) }
-            }
+
             TopBarRacha(isDarkTheme, primaryGlow, glassColor, glassBorder)
-            
-            // ✅ تخزين الطقس في متغير محلي لتجنب الخطأ
+
             val currentWeather = weatherState.weather
             if (currentWeather != null) {
                 WeatherCardRacha(currentWeather, isDarkTheme, glassColor, glassBorder, primaryGlow)
@@ -131,7 +129,7 @@ fun ChatScreen(
             InputBarRacha(
                 state.inputText,
                 viewModel::onInputChange,
-                { 
+                {
                     if (state.inputText.isNotBlank()) viewModel.sendMessage()
                     else if (micPermission.status.isGranted) {
                         isListening = true
@@ -211,12 +209,9 @@ fun WeatherCardRacha(weather: com.racha.ai.domain.model.WeatherInfo, isDark: Boo
                 Text("💨 ${weather.windSpeed} كم/س", color = if (isDark) Color.White.copy(alpha = 0.9f) else Color.Gray, fontSize = 13.sp)
             }
         }
-        
         Spacer(modifier = Modifier.height(8.dp))
         Text("${weather.temperature}°C", color = if (isDark) Color.White else Color(0xFF0A1B3A), fontSize = 48.sp, fontWeight = FontWeight.Light)
-        
         Spacer(modifier = Modifier.height(12.dp))
-        
         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             Box(
                 modifier = Modifier.weight(1f).height(70.dp).clip(RoundedCornerShape(16.dp))
@@ -247,7 +242,6 @@ fun WeatherCardRacha(weather: com.racha.ai.domain.model.WeatherInfo, isDark: Boo
 @Composable
 fun MessageBubbleRacha(message: Message, isDark: Boolean, userColor: Color, aiColor: Color, textColor: Color, glow: Color) {
     val isUser = message.isFromUser
-    
     Row(
         modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = if (isUser) Arrangement.End else Arrangement.Start
@@ -312,9 +306,7 @@ fun InputBarRacha(
                 }
             )
         }
-        
         Spacer(modifier = Modifier.width(12.dp))
-        
         Box(
             modifier = Modifier
                 .size(52.dp)
@@ -341,9 +333,9 @@ fun InputBarRacha(
 
 @Composable
 fun BottomNavRacha(
-    isDark: Boolean, 
-    glow: Color, 
-    glass: Color, 
+    isDark: Boolean,
+    glow: Color,
+    glass: Color,
     unreadCount: Int,
     onOpenPrayer: () -> Unit,
     onOpenNotifications: () -> Unit,
