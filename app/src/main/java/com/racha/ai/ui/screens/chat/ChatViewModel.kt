@@ -94,7 +94,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
     private fun observeHistory() {
         viewModelScope.launch {
             // استخدام getConversation() بدلاً من getAllMessages() لأنها الدالة الأصلية في مشروعك
-            memory.getConversation().collectLatest { entities -> 
+            memory.getMessagesByConversation(conversationId = "default").collectLatest { entities -> 
                 val messages = entities.map { entity ->
                     Message(id = entity.id, text = entity.text, isFromUser = entity.isFromUser, timestamp = entity.timestamp, isError = entity.isError)
                 }
