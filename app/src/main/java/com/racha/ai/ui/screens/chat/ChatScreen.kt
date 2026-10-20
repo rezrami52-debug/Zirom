@@ -97,8 +97,8 @@ fun ChatScreen(
         Column(modifier = Modifier.fillMaxSize()) {
             // ✅ أزرار EVE
             Row(modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp), horizontalArrangement = Arrangement.End) {
+                val ctx = LocalContext.current
                 TextButton(onClick = {
-                    val ctx = LocalContext.current
                     if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.M && !android.provider.Settings.canDrawOverlays(ctx)) {
                         val intent = android.content.Intent(android.provider.Settings.ACTION_MANAGE_OVERLAY_PERMISSION, android.net.Uri.parse("package:${ctx.packageName}"))
                         ctx.startActivity(intent)
@@ -106,6 +106,8 @@ fun ChatScreen(
                         ctx.startService(android.content.Intent(ctx, com.racha.ai.core.eve.EveBubbleService::class.java))
                     }
                 }) { Text("🫧 تشغيل EVE", fontSize = 12.sp, color = primaryGlow) }
+                TextButton(onClick = { com.racha.ai.core.eve.EveState.addNotification() }) { Text("🔔 إشعار", fontSize = 12.sp, color = primaryGlow) }
+            }
                 TextButton(onClick = { com.racha.ai.core.eve.EveState.addNotification() }) { Text("🔔 إشعار", fontSize = 12.sp, color = primaryGlow) }
             }
             TopBarRacha(isDarkTheme, primaryGlow, glassColor, glassBorder)
