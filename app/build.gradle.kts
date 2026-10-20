@@ -4,10 +4,6 @@ plugins {
     id("org.jetbrains.kotlin.plugin.serialization")
     id("com.google.devtools.ksp") version "1.9.23-1.0.19"
     // ✅ مكتبات إضافية لـ EveBubbleService
-    implementation("androidx.lifecycle:lifecycle-runtime-compose:2.7.0")
-    implementation("androidx.savedstate:savedstate-ktx:1.2.1")
-    implementation("androidx.compose.ui:ui-viewbinding:1.6.7")
-}
 
 android {
     namespace = "com.racha.ai"
@@ -67,6 +63,8 @@ android {
     implementation("androidx.lifecycle:lifecycle-runtime-compose:2.7.0")
     implementation("androidx.savedstate:savedstate-ktx:1.2.1")
     implementation("androidx.compose.ui:ui-viewbinding:1.6.7")
+    implementation("androidx.savedstate:savedstate-ktx:1.2.1")
+    implementation("androidx.compose.ui:ui-viewbinding:1.6.7")
 }
 
 dependencies {
@@ -110,6 +108,7 @@ dependencies {
 
     // ✅ jsoup — لاستخراج نص HTML
     implementation("org.jsoup:jsoup:1.17.2")
+    
     // ✅ مكتبات إضافية لـ EveBubbleService
     implementation("androidx.lifecycle:lifecycle-runtime-compose:2.7.0")
     implementation("androidx.savedstate:savedstate-ktx:1.2.1")
