@@ -13,6 +13,7 @@ import com.racha.ai.core.faceauth.FaceAuthRepository
 import com.racha.ai.core.faceauth.FaceCaptureScreen
 import com.racha.ai.core.preferences.AppPreferences
 import com.racha.ai.ui.screens.SettingsScreen
+import com.racha.ai.ui.screens.CustomizationScreen
 import com.racha.ai.ui.screens.WelcomeScreen
 import com.racha.ai.ui.screens.chat.ChatScreen
 import com.racha.ai.ui.screens.notifications.NotificationsScreen
@@ -34,6 +35,7 @@ sealed class Screen {
     object BiometricLock : Screen()
     object SecurityLog : Screen()
     object Welcome : Screen()
+    object Customization : Screen()
 }
 
 @Composable
@@ -101,6 +103,10 @@ fun RachaApp(
         is Screen.Notifications -> NotificationsScreen(onBack = { currentScreen = Screen.Chat })
         is Screen.Prayer -> PrayerScreen(onBack = { currentScreen = Screen.Chat })
         is Screen.Routine -> RoutineScreen(onBack = { currentScreen = Screen.Chat })
+        is Screen.Customization -> CustomizationScreen(
+            onBack = { currentScreen = Screen.Settings }
+        )
+
         is Screen.Welcome -> WelcomeScreen(
             onOpenSettings = { currentScreen = Screen.Settings },
             onOpenChat = { currentScreen = Screen.Chat },

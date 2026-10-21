@@ -79,6 +79,7 @@ import kotlinx.coroutines.launch
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SettingsScreen(
+    onOpenCustomization: () -> Unit = {},
     onBack: () -> Unit,
     onOpenProfile: () -> Unit,
     onOpenFaceEnrollment: () -> Unit,
@@ -151,6 +152,22 @@ fun SettingsScreen(
                 .padding(16.dp)
                 .verticalScroll(rememberScrollState())
         ) {
+            // ✅ زر التخصيص
+            Card(
+                modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp).clickable { onOpenCustomization() },
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer),
+                shape = RoundedCornerShape(16.dp)
+            ) {
+                Row(modifier = Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Text("🎨", fontSize = 24.sp)
+                    Spacer(modifier = Modifier.width(12.dp))
+                    Column {
+                        Text("التخصيص", fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                        Text("الألوان، الشفافية، التوهج", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f))
+                    }
+                }
+            }
+
             // ===== الملف الشخصي =====
             Card(
                 modifier = Modifier
@@ -497,106 +514,6 @@ fun SettingsScreen(
                                     val intent = context.packageManager.getLaunchIntentForPackage(context.packageName)
                                     intent?.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP)
                                     context.startActivity(intent)
-                                }
-                                .padding(vertical = 12.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Text(name, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
-                            if (code == currentLanguage) {
-                                Icon(Icons.Filled.Check, null, tint = MaterialTheme.colorScheme.primary)
-                            }
-                        }
-                    }
-                }
-            },
-            confirmButton = {
-                TextButton(onClick = { showLanguageDialog = false }) {
-                    Text(stringResource(id = R.string.back))
-                }
-            }
-        )
-    }
-
-            // ✅ قسم التخصيص (Customization)
-            Card(
-                modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp),
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
-                shape = RoundedCornerShape(16.dp)
-            ) {
-                Column(modifier = Modifier.padding(16.dp)) {
-                    Text("🎨 التخصيص", fontSize = 18.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
-                    Spacer(modifier = Modifier.height(12.dp))
-                    
-                    // لون فقاعة المستخدم
-                    Text("لون فقاعتك:", fontSize = 14.sp)
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        listOf(0xFF0EA5E9.toInt(), 0xFF4CAF50.toInt(), 0xFFFF9800.toInt(), 0xFF9C27B0.toInt(), 0xFFF44336.toInt()).forEach { color ->
-                            Box(
-                                modifier = Modifier
-                                    .size(36.dp)
-                                    .clip(CircleShape)
-                                    .background(Color(color))
-                                    .border(2.dp, if (appPrefs.getUserBubbleColor() == color) Color.White else Color.Transparent, CircleShape)
-                                    .clickable { appPrefs.setUserBubbleColor(color); refreshKey++ },
-                                contentAlignment = Alignment.Center
-                            ) {
-                                if (appPrefs.getUserBubbleColor() == color) {
-                                    Icon(Icons.Default.Check, contentDescription = null, tint = Color.White, modifier = Modifier.size(20.dp))
-                                }
-                            }
-                        }
-                    }
-                    Spacer(modifier = Modifier.height(12.dp))
-                    
-                    // لون فقاعة الذكاء الاصطناعي
-                    Text("لون فقاعة Racha:", fontSize = 14.sp)
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        listOf(0xFFFFFFFF.toInt(), 0xFFE0E0E0.toInt(), 0xFFBBDEFB.toInt(), 0xFFC8E6C9.toInt()).forEach { color ->
-                            Box(
-                                modifier = Modifier
-                                    .size(36.dp)
-                                    .clip(CircleShape)
-                                    .background(Color(color))
-                                    .border(2.dp, if (appPrefs.getAiBubbleColor() == color) MaterialTheme.colorScheme.primary else Color.Gray, CircleShape)
-                                    .clickable { appPrefs.setAiBubbleColor(color); refreshKey++ },
-                                contentAlignment = Alignment.Center
-                            ) {
-                                if (appPrefs.getAiBubbleColor() == color) {
-                                    Icon(Icons.Default.Check, contentDescription = null, tint = Color.Black, modifier = Modifier.size(20.dp))
-                                }
-                            }
-                        }
-                    }
-                    Spacer(modifier = Modifier.height(12.dp))
-                    
-                    // لون التوهج
-                    Text("لون التوهج:", fontSize = 14.sp)
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        listOf(0xFF0EA5E9.toInt(), 0xFFBD4CFF.toInt(), 0xFF00E5FF.toInt(), 0xFFFFD700.toInt()).forEach { color ->
-                            Box(
-                                modifier = Modifier
-                                    .size(36.dp)
-                                    .clip(CircleShape)
-                                    .background(Color(color))
-                                    .border(2.dp, if (appPrefs.getPrimaryGlowColor() == color) Color.White else Color.Transparent, CircleShape)
-                                    .clickable { appPrefs.setPrimaryGlowColor(color); refreshKey++ },
-                                contentAlignment = Alignment.Center
-                            ) {
-                                if (appPrefs.getPrimaryGlowColor() == color) {
-                                    Icon(Icons.Default.Check, contentDescription = null, tint = Color.White, modifier = Modifier.size(20.dp))
-                                }
-                            }
-                        }
-                    }
-                    Spacer(modifier = Modifier.height(12.dp))
-                    
-                    // شفافية الزجاج
-                    Text("شفافية العناصر: ${String.format("%.0f", appPrefs.getGlassAlpha() * 100)}%", fontSize = 14.sp)
-                    Slider(
-                        value = appPrefs.getGlassAlpha(),
-                        onValueChange = { appPrefs.setGlassAlpha(it); refreshKey++ },
-                        valueRange = 0.1f..1f,
-                        colors = SliderDefaults.colors(thumbColor = MaterialTheme.colorScheme.primary)
                     )
                     
                     // شدة التوهج
