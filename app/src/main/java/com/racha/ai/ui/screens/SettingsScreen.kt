@@ -1,79 +1,32 @@
 package com.racha.ai.ui.screens
 
 import android.content.Intent
+import android.net.Uri
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ArrowBack
-import androidx.compose.material.icons.filled.Check
-import androidx.compose.material.icons.filled.Lock
-import androidx.compose.material.icons.filled.Person
-import androidx.compose.material.icons.filled.PhotoCamera
-import androidx.compose.material.icons.filled.Security
-import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Button
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.HorizontalDivider
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Switch
-import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
-import androidx.compose.material3.TopAppBar
-import androidx.compose.material3.TopAppBarDefaults
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.runtime.setValue
+import androidx.compose.material.icons.filled.*
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.input.PasswordVisualTransformation
-import androidx.compose.ui.unit.dp
-import androidx.lifecycle.viewmodel.compose.viewModel
-import com.racha.ai.R
-import com.racha.ai.core.faceauth.FaceAuthRepository
-import com.racha.ai.core.locale.LocaleManager
-import com.racha.ai.core.preferences.AppPreferences
-import androidx.compose.material3.SliderDefaults
-import androidx.compose.material3.Slider
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.unit.sp
-import androidx.compose.foundation.border
-import androidx.compose.foundation.background
 import androidx.compose.ui.draw.clip
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.Box
-import androidx.compose.runtime.mutableIntStateOf
-import com.racha.ai.data.local.RoutineItem
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import androidx.lifecycle.viewmodel.compose.viewModel
+import com.racha.ai.core.preferences.AppPreferences
 import com.racha.ai.services.prayer.PrayerAlarmReceiver
 import com.racha.ai.services.routine.RoutineAlarmScheduler
 import com.racha.ai.services.weather.WeatherWorker
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -89,59 +42,22 @@ fun SettingsScreen(
     val state by viewModel.uiState.collectAsState()
     val context = LocalContext.current
     val appPrefs = remember { AppPreferences(context) }
-    var refreshKey by remember { mutableIntStateOf(0) }
-    val faceRepo = remember { FaceAuthRepository(context) }
     val scope = rememberCoroutineScope()
 
     var currentLanguage by remember { mutableStateOf(appPrefs.getLanguage()) }
     var showLanguageDialog by remember { mutableStateOf(false) }
-    var testMessage by remember { mutableStateOf<String?>(null) }
-    var faceEnabled by remember { mutableStateOf(faceRepo.isFaceAuthEnabled()) }
-    var showDisableDialog by remember { mutableStateOf(false) }
-
-    var intruderEnabled by remember { mutableStateOf(appPrefs.isIntruderPhotoEnabled()) }
-    var intruderThreshold by remember { mutableStateOf(appPrefs.getIntruderThreshold()) }
-
-    // SleepGuardian
-    var sleepGuardianEnabled by remember { mutableStateOf(appPrefs.isSleepGuardianEnabled()) }
-    var sleepStartHour by remember { mutableStateOf(appPrefs.getSleepGuardianStartHour()) }
-
-    LaunchedEffect(state.saveMessage) {
-        if (state.saveMessage != null) {
-            delay(3000)
-            viewModel.clearMessage()
-        }
-    }
-
-    LaunchedEffect(testMessage) {
-        if (testMessage != null) {
-            delay(3000)
-            testMessage = null
-        }
-    }
+    var apiKeyInput by remember { mutableStateOf(state.apiKey) }
+    var showApiKey by remember { mutableStateOf(false) }
 
     Scaffold(
         topBar = {
             TopAppBar(
-                title = {
-                    Text(
-                        stringResource(id = R.string.settings_title),
-                        fontWeight = FontWeight.Bold
-                    )
-                },
+                title = { Text("الإعدادات", fontWeight = FontWeight.Bold) },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
-                        Icon(
-                            imageVector = Icons.Filled.ArrowBack,
-                            contentDescription = stringResource(id = R.string.back)
-                        )
+                        Icon(Icons.Default.ArrowBack, contentDescription = "رجوع")
                     }
-                },
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.primary,
-                    titleContentColor = MaterialTheme.colorScheme.onPrimary,
-                    navigationIconContentColor = MaterialTheme.colorScheme.onPrimary
-                )
+                }
             )
         }
     ) { padding ->
@@ -150,11 +66,12 @@ fun SettingsScreen(
                 .fillMaxSize()
                 .padding(padding)
                 .padding(16.dp)
-                .verticalScroll(rememberScrollState())
+                .verticalScroll(rememberScrollState()),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             // ✅ زر التخصيص
             Card(
-                modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp).clickable { onOpenCustomization() },
+                modifier = Modifier.fillMaxWidth().clickable { onOpenCustomization() },
                 colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer),
                 shape = RoundedCornerShape(16.dp)
             ) {
@@ -170,340 +87,232 @@ fun SettingsScreen(
 
             // ===== الملف الشخصي =====
             Card(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clickable { onOpenProfile() },
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer)
+                modifier = Modifier.fillMaxWidth().clickable { onOpenProfile() },
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
+                shape = RoundedCornerShape(16.dp)
             ) {
-                Row(
-                    modifier = Modifier.fillMaxWidth().padding(16.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Icon(Icons.Filled.Person, null, tint = MaterialTheme.colorScheme.primary)
-                    Spacer(Modifier.width(12.dp))
-                    Column(Modifier.weight(1f)) {
-                        Text("ملفي الشخصي", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-                        Text("أخبر Racha عن نفسك", style = MaterialTheme.typography.bodySmall)
+                Row(modifier = Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Icon(Icons.Default.Person, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+                    Spacer(modifier = Modifier.width(12.dp))
+                    Column {
+                        Text("ملفي الشخصي", fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                        Text("أخبر Racha عن نفسك", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f))
                     }
                 }
             }
 
-            Spacer(Modifier.height(12.dp))
-
-            // ===== حماية Racha =====
+            // ===== الأمان =====
             Card(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clickable {
-                        if (faceEnabled) showDisableDialog = true else onOpenFaceEnrollment()
-                    },
-                colors = CardDefaults.cardColors(
-                    containerColor = if (faceEnabled) MaterialTheme.colorScheme.primaryContainer
-                                     else MaterialTheme.colorScheme.surfaceVariant
-                )
+                modifier = Modifier.fillMaxWidth(),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
+                shape = RoundedCornerShape(16.dp)
             ) {
-                Row(
-                    modifier = Modifier.fillMaxWidth().padding(16.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Icon(if (faceEnabled) Icons.Filled.Lock else Icons.Filled.PhotoCamera, null, tint = MaterialTheme.colorScheme.primary)
-                    Spacer(Modifier.width(12.dp))
-                    Column(Modifier.weight(1f)) {
-                        Text("حماية Racha", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-                        Text(
-                            if (faceEnabled) "✅ مفعّلة — اضغط للتعطيل" else "التقط صورة + سجّل بصمة",
-                            style = MaterialTheme.typography.bodySmall
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Text("الأمان", fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                    Spacer(modifier = Modifier.height(8.dp))
+
+                    // حماية Racha
+                    Row(
+                        modifier = Modifier.fillMaxWidth().clickable { onOpenFaceEnrollment() }.padding(vertical = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(Icons.Default.Lock, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+                        Spacer(modifier = Modifier.width(12.dp))
+                        Column {
+                            Text("حماية Racha", fontWeight = FontWeight.Bold)
+                            Text("التقاط صورة + تسجيل بصمة", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f))
+                        }
+                    }
+
+                    Divider()
+
+                    // التقاط صورة المتسلل
+                    Row(
+                        modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text("التقاط صورة المتسلل", fontWeight = FontWeight.Bold)
+                            Text("صورة بعد عدد محاولات فاشلة", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f))
+                        }
+                        Switch(
+                            checked = appPrefs.isIntruderPhotoEnabled(),
+                            onCheckedChange = { appPrefs.setIntruderPhotoEnabled(it) }
+                        )
+                    }
+
+                    Divider()
+
+                    // عدد المحاولات
+                    Row(
+                        modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Text("عدد المحاولات قبل التصوير", fontWeight = FontWeight.Bold)
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            IconButton(onClick = { appPrefs.setIntruderThreshold(appPrefs.getIntruderThreshold() - 1) }) {
+                                Icon(Icons.Default.Remove, contentDescription = null)
+                            }
+                            Text("${appPrefs.getIntruderThreshold()}", fontSize = 18.sp, fontWeight = FontWeight.Bold)
+                            IconButton(onClick = { appPrefs.setIntruderThreshold(appPrefs.getIntruderThreshold() + 1) }) {
+                                Icon(Icons.Default.Add, contentDescription = null)
+                            }
+                        }
+                    }
+
+                    Divider()
+
+                    // سجل المحاولات
+                    Row(
+                        modifier = Modifier.fillMaxWidth().clickable { onOpenSecurityLog() }.padding(vertical = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(Icons.Default.List, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+                        Spacer(modifier = Modifier.width(12.dp))
+                        Text("عرض سجل المحاولات", fontWeight = FontWeight.Bold)
+                    }
+                }
+            }
+
+            // ===== حارس النوم =====
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
+                shape = RoundedCornerShape(16.dp)
+            ) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Text("حارس النوم", fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                    Spacer(modifier = Modifier.height(8.dp))
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text("تذكير لطيف بالنوم", fontWeight = FontWeight.Bold)
+                            Text("إذا كنت مستيقظاً متأخراً", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f))
+                        }
+                        Switch(
+                            checked = appPrefs.isSleepGuardianEnabled(),
+                            onCheckedChange = { appPrefs.setSleepGuardianEnabled(it) }
                         )
                     }
                 }
             }
 
-            Spacer(Modifier.height(24.dp))
-            HorizontalDivider()
-            Spacer(Modifier.height(24.dp))
-
-            // ===== الأمان =====
-            Text("الأمان", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-            Spacer(Modifier.height(12.dp))
-
-            // التقاط صورة المتسلل
-            Card(
-                modifier = Modifier.fillMaxWidth(),
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
-            ) {
-                Row(
-                    modifier = Modifier.fillMaxWidth().padding(16.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Icon(Icons.Filled.Security, null, tint = MaterialTheme.colorScheme.primary)
-                    Spacer(Modifier.width(12.dp))
-                    Column(Modifier.weight(1f)) {
-                        Text("التقاط صورة المتسلل", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
-                        Text("صورة بعد عدد محاولات فاشلة", style = MaterialTheme.typography.bodySmall)
-                    }
-                    Switch(
-                        checked = intruderEnabled,
-                        onCheckedChange = {
-                            intruderEnabled = it
-                            appPrefs.setIntruderPhotoEnabled(it)
-                        }
-                    )
-                }
-            }
-
-            if (intruderEnabled) {
-                Spacer(Modifier.height(8.dp))
-                Card(
-                    modifier = Modifier.fillMaxWidth(),
-                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
-                ) {
-                    Column(Modifier.fillMaxWidth().padding(16.dp)) {
-                        Text("عدد المحاولات قبل التصوير", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
-                        Spacer(Modifier.height(8.dp))
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Button(
-                                onClick = {
-                                    if (intruderThreshold > 1) {
-                                        intruderThreshold--
-                                        appPrefs.setIntruderThreshold(intruderThreshold)
-                                    }
-                                },
-                                enabled = intruderThreshold > 1
-                            ) { Text("−") }
-                            Spacer(Modifier.width(16.dp))
-                            Text("$intruderThreshold", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
-                            Spacer(Modifier.width(16.dp))
-                            Button(
-                                onClick = {
-                                    if (intruderThreshold < 10) {
-                                        intruderThreshold++
-                                        appPrefs.setIntruderThreshold(intruderThreshold)
-                                    }
-                                },
-                                enabled = intruderThreshold < 10
-                            ) { Text("+") }
-                        }
-                    }
-                }
-            }
-
-            Spacer(Modifier.height(8.dp))
-
-            OutlinedButton(
-                onClick = onOpenSecurityLog,
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Icon(Icons.Filled.Security, null)
-                Spacer(Modifier.width(8.dp))
-                Text("📋 عرض سجل المحاولات")
-            }
-
-            Spacer(Modifier.height(24.dp))
-            HorizontalDivider()
-            Spacer(Modifier.height(24.dp))
-
-            // ===== حارس النوم =====
-            Text("حارس النوم", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-            Spacer(Modifier.height(12.dp))
-
-            Card(
-                modifier = Modifier.fillMaxWidth(),
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
-            ) {
-                Row(
-                    modifier = Modifier.fillMaxWidth().padding(16.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text("🌙", style = MaterialTheme.typography.headlineSmall)
-                    Spacer(Modifier.width(12.dp))
-                    Column(Modifier.weight(1f)) {
-                        Text("تذكير لطيف بالنوم", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
-                        Text("إذا كنت مستيقظاً متأخراً", style = MaterialTheme.typography.bodySmall)
-                    }
-                    Switch(
-                        checked = sleepGuardianEnabled,
-                        onCheckedChange = {
-                            sleepGuardianEnabled = it
-                            appPrefs.setSleepGuardianEnabled(it)
-                        }
-                    )
-                }
-            }
-
-            if (sleepGuardianEnabled) {
-                Spacer(Modifier.height(8.dp))
-                Card(
-                    modifier = Modifier.fillMaxWidth(),
-                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
-                ) {
-                    Column(Modifier.fillMaxWidth().padding(16.dp)) {
-                        Text("وقت البدء", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
-                        Spacer(Modifier.height(8.dp))
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Button(
-                                onClick = {
-                                    if (sleepStartHour > 20) {
-                                        sleepStartHour--
-                                        appPrefs.setSleepGuardianStartHour(sleepStartHour)
-                                    }
-                                },
-                                enabled = sleepStartHour > 20
-                            ) { Text("−") }
-                            Spacer(Modifier.width(16.dp))
-                            Text("$sleepStartHour:00", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
-                            Spacer(Modifier.width(16.dp))
-                            Button(
-                                onClick = {
-                                    if (sleepStartHour < 23) {
-                                        sleepStartHour++
-                                        appPrefs.setSleepGuardianStartHour(sleepStartHour)
-                                    }
-                                },
-                                enabled = sleepStartHour < 23
-                            ) { Text("+") }
-                        }
-                    }
-                }
-            }
-
-            Spacer(Modifier.height(24.dp))
-            HorizontalDivider()
-            Spacer(Modifier.height(24.dp))
-
             // ===== اللغة =====
-            Text(stringResource(id = R.string.settings_language), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-            Spacer(Modifier.height(8.dp))
             Card(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clickable { showLanguageDialog = true },
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
+                modifier = Modifier.fillMaxWidth(),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
+                shape = RoundedCornerShape(16.dp)
             ) {
-                Row(
-                    modifier = Modifier.fillMaxWidth().padding(16.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text(LocaleManager.getDisplayName(currentLanguage), style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
-                    Text("تغيير", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.primary)
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Text("اللغة", fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Button(
+                        onClick = { showLanguageDialog = true },
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text(if (currentLanguage == "ar") "العربية" else if (currentLanguage == "fr") "Français" else "English")
+                    }
                 }
             }
-
-            Spacer(Modifier.height(24.dp))
-            HorizontalDivider()
-            Spacer(Modifier.height(24.dp))
 
             // ===== مفتاح API =====
-            Text(stringResource(id = R.string.settings_api_key_label), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-            Spacer(Modifier.height(8.dp))
-            OutlinedTextField(
-                value = state.apiKey,
-                onValueChange = viewModel::onApiKeyChange,
+            Card(
                 modifier = Modifier.fillMaxWidth(),
-                placeholder = { Text("AIza...") },
-                visualTransformation = PasswordVisualTransformation(),
-                singleLine = true
-            )
-            Spacer(Modifier.height(8.dp))
-            Text(stringResource(id = R.string.settings_api_key_hint), style = MaterialTheme.typography.bodySmall)
-            Spacer(Modifier.height(16.dp))
-            Button(
-                onClick = viewModel::saveApiKey,
-                modifier = Modifier.fillMaxWidth(),
-                enabled = state.apiKey.isNotBlank()
-            ) { Text(stringResource(id = R.string.save)) }
-
-            state.saveMessage?.let { message ->
-                Spacer(Modifier.height(16.dp))
-                Text(
-                    message,
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = if (state.isSaved) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error
-                )
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
+                shape = RoundedCornerShape(16.dp)
+            ) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Text("مفتاح Gemini API", fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                    Spacer(modifier = Modifier.height(8.dp))
+                    OutlinedTextField(
+                        value = apiKeyInput,
+                        onValueChange = { apiKeyInput = it },
+                        modifier = Modifier.fillMaxWidth(),
+                        label = { Text("أدخل المفتاح") },
+                        visualTransformation = if (showApiKey) androidx.compose.ui.text.input.VisualTransformation.None else androidx.compose.ui.text.input.PasswordVisualTransformation(),
+                        trailingIcon = {
+                            IconButton(onClick = { showApiKey = !showApiKey }) {
+                                Icon(if (showApiKey) Icons.Default.Visibility else Icons.Default.VisibilityOff, contentDescription = null)
+                            }
+                        }
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Button(
+                        onClick = { viewModel.saveApiKey(apiKeyInput) },
+                        modifier = Modifier.fillMaxWidth(),
+                        enabled = apiKeyInput.isNotBlank()
+                    ) {
+                        Text("حفظ المفتاح")
+                    }
+                    if (state.apiKeySaved) {
+                        Text("✅ تم حفظ المفتاح بنجاح", color = Color.Green, fontSize = 12.sp)
+                    }
+                }
             }
-
-            Spacer(Modifier.height(24.dp))
-            HorizontalDivider()
-            Spacer(Modifier.height(24.dp))
 
             // ===== أدوات الاختبار =====
-            Text("أدوات الاختبار", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-            Spacer(Modifier.height(12.dp))
-
-            OutlinedButton(
-                onClick = {
-                    PrayerAlarmReceiver.triggerManually(context, "الفجر", isPreAlert = true)
-                    testMessage = "✅ تم إرسال إشعار اختبار مسبق"
-                },
-                modifier = Modifier.fillMaxWidth()
-            ) { Text("🔔 اختبار: إشعار الصلاة المسبق") }
-            Spacer(Modifier.height(8.dp))
-            OutlinedButton(
-                onClick = {
-                    PrayerAlarmReceiver.triggerManually(context, "الفجر", isPreAlert = false)
-                    testMessage = "✅ تم إرسال إشعار اختبار الأذان"
-                },
-                modifier = Modifier.fillMaxWidth()
-            ) { Text("🕌 اختبار: إشعار وقت الأذان") }
-            Spacer(Modifier.height(8.dp))
-            OutlinedButton(
-                onClick = {
-                    val item = RoutineItem(title = "شرب الماء", emoji = "💧", hour = 0, minute = 0)
-                    RoutineAlarmScheduler.triggerTest(context, item, isPreAlert = false)
-                    testMessage = "✅ تم إرسال إشعار اختبار الروتين"
-                },
-                modifier = Modifier.fillMaxWidth()
-            ) { Text("⏰ اختبار: إشعار روتين") }
-            Spacer(Modifier.height(8.dp))
-            OutlinedButton(
-                onClick = {
-                    scope.launch {
-                        val ok = WeatherWorker.triggerManually(context)
-                        testMessage = if (ok) "✅ تم إرسال إشعار الطقس" else "⚠️ فشل — تأكد من صلاحية الموقع"
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
+                shape = RoundedCornerShape(16.dp)
+            ) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Text("أدوات الاختبار", fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Button(
+                        onClick = {
+                            PrayerAlarmReceiver.scheduleTestNotification(context)
+                        },
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text("🔔 اختبار إشعار الصلاة")
                     }
-                },
-                modifier = Modifier.fillMaxWidth()
-            ) { Text("🌤️ اختبار: إشعار الطقس") }
-
-            testMessage?.let { message ->
-                Spacer(Modifier.height(12.dp))
-                Text(message, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.primary)
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Button(
+                        onClick = {
+                            PrayerAlarmReceiver.scheduleTestAdhan(context)
+                        },
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text("🕌 اختبار إشعار الأذان")
+                    }
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Button(
+                        onClick = {
+                            RoutineAlarmScheduler.scheduleTestNotification(context)
+                        },
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text("⏰ اختبار إشعار روتين")
+                    }
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Button(
+                        onClick = {
+                            WeatherWorker.scheduleTest(context)
+                        },
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text("🌤️ اختبار إشعار الطقس")
+                    }
+                }
             }
-
-            Spacer(Modifier.height(32.dp))
         }
-    }
-
-    // حوار تعطيل الحماية
-    if (showDisableDialog) {
-        AlertDialog(
-            onDismissRequest = { showDisableDialog = false },
-            title = { Text("تعطيل الحماية؟") },
-            text = { Text("بعد التعطيل، لن يُطلب منك التحقق عند فتح Racha.") },
-            confirmButton = {
-                TextButton(onClick = {
-                    faceRepo.deleteFaceImage()
-                    faceRepo.setFaceAuthEnabled(false)
-                    faceEnabled = false
-                    showDisableDialog = false
-                }) { Text("تعطيل") }
-            },
-            dismissButton = {
-                TextButton(onClick = { showDisableDialog = false }) { Text("إلغاء") }
-            }
-        )
     }
 
     // حوار اختيار اللغة
     if (showLanguageDialog) {
-        val languages = LocaleManager.getSupportedLanguages()
         AlertDialog(
             onDismissRequest = { showLanguageDialog = false },
-            title = { Text(stringResource(id = R.string.settings_language)) },
+            title = { Text("اختر اللغة") },
             text = {
                 Column {
-                    for (pair in languages) {
-                        val code = pair.first
-                        val name = pair.second
+                    listOf("ar" to "العربية", "fr" to "Français", "en" to "English").forEach { (code, name) ->
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
@@ -514,20 +323,20 @@ fun SettingsScreen(
                                     val intent = context.packageManager.getLaunchIntentForPackage(context.packageName)
                                     intent?.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP)
                                     context.startActivity(intent)
-                    )
-                    
-                    // شدة التوهج
-                    Text("شدة التوهج: ${String.format("%.1f", appPrefs.getGlowIntensity())}x", fontSize = 14.sp)
-                    Slider(
-                        value = appPrefs.getGlowIntensity(),
-                        onValueChange = { appPrefs.setGlowIntensity(it); refreshKey++ },
-                        valueRange = 0f..2f,
-                        colors = SliderDefaults.colors(thumbColor = MaterialTheme.colorScheme.primary)
-                    )
+                                }
+                                .padding(12.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(name, fontSize = 16.sp)
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { showLanguageDialog = false }) {
+                    Text("إلغاء")
                 }
             }
-
-}
+        )
     }
-}
 }
