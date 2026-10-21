@@ -68,12 +68,14 @@ class EveBubbleService : Service(), LifecycleOwner, SavedStateRegistryOwner {
 
     override fun onCreate() {
         super.onCreate()
+        android.util.Log.d("EveBubble", "onCreate: Service started")
         lifecycleRegistry.currentState = Lifecycle.State.CREATED
         savedStateRegistryController.performRestore(null)
         lifecycleRegistry.currentState = Lifecycle.State.STARTED
         
         startForegroundWithNotification()
         windowManager = getSystemService(WINDOW_SERVICE) as WindowManager
+        android.util.Log.d("EveBubble", "windowManager initialized")
         showBubble()
     }
 
@@ -132,9 +134,11 @@ class EveBubbleService : Service(), LifecycleOwner, SavedStateRegistryOwner {
         }
         bubbleView = composeView
         try {
+            android.util.Log.d("EveBubble", "Attempting to add bubble view")
             windowManager.addView(composeView, bubbleParams)
+            android.util.Log.d("EveBubble", "Bubble added successfully")
         } catch (e: Exception) {
-            e.printStackTrace()
+            android.util.Log.e("EveBubble", "Failed to add bubble: ${e.message}", e)
         }
     }
 
