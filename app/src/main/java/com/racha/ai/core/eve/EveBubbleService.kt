@@ -155,7 +155,6 @@ class EveBubbleService : Service(), LifecycleOwner, SavedStateRegistryOwner {
 fun EveBubbleContent(onClick: () -> Unit, onDrag: (Float, Float) -> Unit) {
     val status by EveState.status.collectAsState()
     
-    // أنيميشن نبض القلب (عند وجود إشعار)
     val infiniteTransition = rememberInfiniteTransition(label = "pulse")
     val pulseScale by infiniteTransition.animateFloat(
         initialValue = 1f,
@@ -166,120 +165,50 @@ fun EveBubbleContent(onClick: () -> Unit, onDrag: (Float, Float) -> Unit) {
         ),
         label = "pulseScale"
     )
-    val pulseAlpha by infiniteTransition.animateFloat(
-        initialValue = 1f,
-        targetValue = if (status == EveStatus.NOTIFYING) 0.2f else 1f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(600),
-            repeatMode = RepeatMode.Reverse
-        ),
-        label = "pulseAlpha"
-    )
-
-    // أنيميشن الرمش (العيون)
-    val blinkTransition = rememberInfiniteTransition(label = "blink")
-    val eyeOpenness by blinkTransition.animateFloat(
-        initialValue = 1f,
-        targetValue = 0.1f,
-        animationSpec = infiniteRepeatable(
-            animation = keyframes {
-                durationMillis = 4000
-                1f at 0
-                1f at 3900
-                0.1f at 3950
-                1f at 4000
-            },
-            repeatMode = RepeatMode.Restart
-        ),
-        label = "eyeOpenness"
-    )
-
-    var offsetX by remember { mutableFloatStateOf(0f) }
-    var offsetY by remember { mutableFloatStateOf(0f) }
 
     Box(
         modifier = Modifier
-            .size(90.dp)
+            .size(80.dp)
             .pointerInput(Unit) {
                 detectDragGestures { change, dragAmount ->
                     change.consume()
-                    offsetX += dragAmount.x
-                    offsetY += dragAmount.y
                     onDrag(dragAmount.x, dragAmount.y)
                 }
             }
             .clickable { onClick() },
         contentAlignment = Alignment.Center
     ) {
-        // ✅ هالة خارجية (تتوهج عند الإشعار)
         if (status == EveStatus.NOTIFYING) {
             Canvas(modifier = Modifier.fillMaxSize().scale(pulseScale)) {
                 drawCircle(
-                    color = Color.Red.copy(alpha = pulseAlpha),
+                    color = Color.Red.copy(alpha = 0.5f),
                     radius = size.minDimension / 2,
                     style = Stroke(width = 8f)
                 )
             }
         }
 
-        // ✅ جسم EVE (بيضاوي أبيض)
         Box(
             modifier = Modifier
-                .width(70.dp)
-                .height(80.dp)
-                .clip(RoundedCornerShape(50, 50, 35, 35)) // شكل بيضاوي مع قاع مسطح
+                .size(60.dp)
+                .clip(CircleShape)
                 .background(
                     when (status) {
                         EveStatus.NOTIFYING -> Color(0xFFFF4D4D)
                         EveStatus.AWAKE -> Color(0xFFBD4CFF)
                         EveStatus.LISTENING -> Color(0xFF00E5FF)
-                        EveStatus.SPEAKING -> Color(0xFF4CAF50)
-                        else -> Color.White
+                        else -> Color(0xFF0EA5E9)
                     }
                 )
-                .border(2.dp, if (status == EveStatus.IDLE) Color(0xFF0EA5E9) else Color.White.copy(alpha = 0.5f), RoundedCornerShape(50, 50, 35, 35)),
+                .border(2.dp, Color.White, CircleShape),
             contentAlignment = Alignment.Center
         ) {
-            // ✅ رسم الوجه (EVE)
-            Canvas(modifier = Modifier.size(60.dp)) {
-                val w = size.width
-                val h = size.height
-                val cx = w / 2
-                val cy = h / 2
-                val eyeRadius = 7f
-                val eyeY = cy - 10f
-                val eyeX = cx - 14f
-                
-                // لون العيون: أزرق متوهج (إذا كانت نشطة) أو أسود (إذا كانت نائمة)
-                val eyeColor = when (status) {
-                    EveStatus.IDLE -> Color.Black
-                    EveStatus.NOTIFYING -> Color.White
-                    else -> Color(0xFF00E5FF)
-                }
-
-                // العين اليسرى
-                drawOval(
-                    color = eyeColor,
-                    topLeft = Offset(eyeX - eyeRadius, eyeY - eyeRadius * eyeOpenness),
-                    size = Size(eyeRadius * 2, eyeRadius * 2 * eyeOpenness)
-                )
-                // العين اليمنى
-                drawOval(
-                    color = eyeColor,
-                    topLeft = Offset(cx + 14f - eyeRadius, eyeY - eyeRadius * eyeOpenness),
-                    size = Size(eyeRadius * 2, eyeRadius * 2 * eyeOpenness)
-                )
-
-                // ابتسامة رقيقة
-                val smilePath = Path()
-                smilePath.moveTo(cx - 12f, cy + 15f)
-                smilePath.quadraticBezierTo(cx, cy + 22f, cx + 12f, cy + 15f)
-                drawPath(
-                    smilePath,
-                    color = if (status == EveStatus.IDLE) Color.Black else Color(0xFF00E5FF),
-                    style = Stroke(width = 3f)
-                )
-            }
+            Icon(
+                imageVector = Icons.Default.SmartToy,
+                contentDescription = "EVE",
+                tint = Color.White,
+                modifier = Modifier.size(30.dp)
+            )
         }
     }
 }
