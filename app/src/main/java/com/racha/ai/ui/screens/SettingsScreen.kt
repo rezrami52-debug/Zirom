@@ -56,6 +56,18 @@ import com.racha.ai.R
 import com.racha.ai.core.faceauth.FaceAuthRepository
 import com.racha.ai.core.locale.LocaleManager
 import com.racha.ai.core.preferences.AppPreferences
+import androidx.compose.material3.SliderDefaults
+import androidx.compose.material3.Slider
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.unit.sp
+import androidx.compose.foundation.border
+import androidx.compose.foundation.background
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.Box
+import androidx.compose.runtime.mutableIntStateOf
 import com.racha.ai.data.local.RoutineItem
 import com.racha.ai.services.prayer.PrayerAlarmReceiver
 import com.racha.ai.services.routine.RoutineAlarmScheduler
@@ -517,7 +529,7 @@ fun SettingsScreen(
                     // لون فقاعة المستخدم
                     Text("لون فقاعتك:", fontSize = 14.sp)
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        listOf(0xFF0EA5E9, 0xFF4CAF50, 0xFFFF9800, 0xFF9C27B0, 0xFFF44336).forEach { color ->
+                        listOf(0xFF0EA5E9.toInt(), 0xFF4CAF50.toInt(), 0xFFFF9800.toInt(), 0xFF9C27B0.toInt(), 0xFFF44336.toInt()).forEach { color ->
                             Box(
                                 modifier = Modifier
                                     .size(36.dp)
@@ -538,7 +550,7 @@ fun SettingsScreen(
                     // لون فقاعة الذكاء الاصطناعي
                     Text("لون فقاعة Racha:", fontSize = 14.sp)
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        listOf(0xFFFFFFFF, 0xFFE0E0E0, 0xFFBBDEFB, 0xFFC8E6C9).forEach { color ->
+                        listOf(0xFFFFFFFF.toInt(), 0xFFE0E0E0.toInt(), 0xFFBBDEFB.toInt(), 0xFFC8E6C9.toInt()).forEach { color ->
                             Box(
                                 modifier = Modifier
                                     .size(36.dp)
@@ -559,7 +571,7 @@ fun SettingsScreen(
                     // لون التوهج
                     Text("لون التوهج:", fontSize = 14.sp)
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        listOf(0xFF0EA5E9, 0xFFBD4CFF, 0xFF00E5FF, 0xFFFFD700).forEach { color ->
+                        listOf(0xFF0EA5E9.toInt(), 0xFFBD4CFF.toInt(), 0xFF00E5FF.toInt(), 0xFFFFD700.toInt()).forEach { color ->
                             Box(
                                 modifier = Modifier
                                     .size(36.dp)
