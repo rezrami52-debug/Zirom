@@ -5,7 +5,7 @@ object IntentClassifier {
     enum class IntentType {
         SHOW_LOCATION, OPEN_MAP, SEND_MESSAGE, MAKE_CALL,
         SEND_EMAIL, OPEN_BROWSER, OPEN_CAMERA, PLAY_MUSIC,
-        OPEN_APP, LIST_APPS, SET_ALARM, CORRECTION, UNKNOWN
+        OPEN_APP, LIST_APPS, SET_ALARM, TOGGLE_WIFI, SET_RINGER, CORRECTION, UNKNOWN
     }
 
     fun classify(text: String): IntentType {
@@ -23,6 +23,10 @@ object IntentClassifier {
         if (lower.contains("كاميرا") && (lower.contains("افتح") || lower.contains("شغل"))) return IntentType.OPEN_CAMERA
         if (lower.contains("موسيقى") || lower.contains("اغنية") || lower.contains("spotify")) return IntentType.PLAY_MUSIC
         if (lower.contains("افتح") && lower.contains("تطبيق")) return IntentType.OPEN_APP
+
+
+        if (lower.contains("واي فاي") || lower.contains("wifi") || lower.contains("wi-fi")) return IntentType.TOGGLE_WIFI
+        if ((lower.contains("صامت") || lower.contains("اهتزاز") || lower.contains("عادي") || lower.contains("رنين")) && (lower.contains("وضع") || lower.contains("حول") || lower.contains("غير"))) return IntentType.SET_RINGER
 
         return IntentType.UNKNOWN
     }

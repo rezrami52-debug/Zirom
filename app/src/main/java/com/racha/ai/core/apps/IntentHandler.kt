@@ -1,6 +1,11 @@
 package com.racha.ai.core.apps
 
+
+import android.media.AudioManager
+import android.net.wifi.WifiManager
 import android.content.Context
+import android.provider.Settings
+
 import android.content.Intent
 import android.net.Uri
 import android.provider.MediaStore
@@ -31,6 +36,8 @@ class IntentHandler(private val context: Context, private val appResolver: AppRe
             IntentClassifier.IntentType.OPEN_CAMERA -> handleOpenCamera()
             IntentClassifier.IntentType.LIST_APPS -> handleListApps()
             IntentClassifier.IntentType.SET_ALARM -> handleSetAlarm(text)
+            IntentClassifier.IntentType.TOGGLE_WIFI -> handleToggleWifi()
+            IntentClassifier.IntentType.SET_RINGER -> handleSetRingerMode(text)
             IntentClassifier.IntentType.CORRECTION -> HandlerResult.NeedsCorrection(text)
             else -> HandlerResult.Unknown
         }
@@ -137,6 +144,48 @@ class IntentHandler(private val context: Context, private val appResolver: AppRe
             else -> {
                 if (appResolver.openApp(app.packageName)) "✅ تم فتح ${app.appName}" else "⚠️ فشل فتح ${app.appName}"
             }
+        }
+    }
+
+
+    private fun handleToggleWifi(): HandlerResult {
+        val wifiManager = context.applicationContext.getSystemService(Context.WIFI_SERVICE) as? WifiManager
+            ?: return HandlerResult.Error("⚠️ لا أستطيع الوصول إلى إعدادات الواي فاي.")
+        return try {
+            // ملاحظة: في Android 10+، لا يمكن تغيير حالة الواي فاي برمجياً بدون صلاحية النظام.
+            // الحل: فتح إعدادات الواي فاي.
+            val intent = Intent(Settings.ACTION_WIFI_SETTINGS).apply {
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            }
+            context.startActivity(intent)
+            HandlerResult.DirectReply("📶 فتحت إعدادات الواي فاي. يمكنك إغلاقه من هناك.")
+        } catch (e: Exception) {
+            HandlerResult.Error("⚠️ فشل فتح إعدادات الواي فاي.")
+        }
+    }
+
+    private fun handleSetRingerMode(text: String): HandlerResult {
+        val audioManager = context.getSystemService(Context.AUDIO_SERVICE) as? AudioManager
+            ?: return HandlerResult.Error("⚠️ لا أستطيع الوصول إلى إعدادات الصوت.")
+        return try {
+            val lowerText = text.lowercase()
+            when {
+                lowerText.contains("صامت") || lowerText.contains("silent") -> {
+                    audioManager.ringerMode = AudioManager.RINGER_MODE_SILENT
+                    HandlerResult.DirectReply("🔕 تم تحويل الهاتف إلى وضع الصامت.")
+                }
+                lowerText.contains("اهتزاز") || lowerText.contains("vibrate") -> {
+                    audioManager.ringerMode = AudioManager.RINGER_MODE_VIBRATE
+                    HandlerResult.DirectReply("📳 تم تحويل الهاتف إلى وضع الاهتزاز.")
+                }
+                lowerText.contains("عادي") || lowerText.contains("normal") || lowerText.contains("رنين") -> {
+                    audioManager.ringerMode = AudioManager.RINGER_MODE_NORMAL
+                    HandlerResult.DirectReply("🔔 تم تحويل الهاتف إلى الوضع العادي.")
+                }
+                else -> HandlerResult.Error("⚠️ لم أفهم وضع الصوت المطلوب. جرب: صامت، اهتزاز، عادي.")
+            }
+        } catch (e: Exception) {
+            HandlerResult.Error("⚠️ فشل تغيير وضع الصوت. تأكد من منح صلاحية 'عدم الإزعاج' (Do Not Disturb).")
         }
     }
 
