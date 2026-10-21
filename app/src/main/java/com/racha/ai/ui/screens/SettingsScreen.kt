@@ -75,6 +75,7 @@ fun SettingsScreen(
     val state by viewModel.uiState.collectAsState()
     val context = LocalContext.current
     val appPrefs = remember { AppPreferences(context) }
+    var refreshKey by remember { mutableIntStateOf(0) }
     val faceRepo = remember { FaceAuthRepository(context) }
     val scope = rememberCoroutineScope()
 
@@ -502,4 +503,98 @@ fun SettingsScreen(
             }
         )
     }
+
+            // ✅ قسم التخصيص (Customization)
+            Card(
+                modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
+                shape = RoundedCornerShape(16.dp)
+            ) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Text("🎨 التخصيص", fontSize = 18.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
+                    Spacer(modifier = Modifier.height(12.dp))
+                    
+                    // لون فقاعة المستخدم
+                    Text("لون فقاعتك:", fontSize = 14.sp)
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        listOf(0xFF0EA5E9, 0xFF4CAF50, 0xFFFF9800, 0xFF9C27B0, 0xFFF44336).forEach { color ->
+                            Box(
+                                modifier = Modifier
+                                    .size(36.dp)
+                                    .clip(CircleShape)
+                                    .background(Color(color))
+                                    .border(2.dp, if (appPrefs.getUserBubbleColor() == color) Color.White else Color.Transparent, CircleShape)
+                                    .clickable { appPrefs.setUserBubbleColor(color); refreshKey++ },
+                                contentAlignment = Alignment.Center
+                            ) {
+                                if (appPrefs.getUserBubbleColor() == color) {
+                                    Icon(Icons.Default.Check, contentDescription = null, tint = Color.White, modifier = Modifier.size(20.dp))
+                                }
+                            }
+                        }
+                    }
+                    Spacer(modifier = Modifier.height(12.dp))
+                    
+                    // لون فقاعة الذكاء الاصطناعي
+                    Text("لون فقاعة Racha:", fontSize = 14.sp)
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        listOf(0xFFFFFFFF, 0xFFE0E0E0, 0xFFBBDEFB, 0xFFC8E6C9).forEach { color ->
+                            Box(
+                                modifier = Modifier
+                                    .size(36.dp)
+                                    .clip(CircleShape)
+                                    .background(Color(color))
+                                    .border(2.dp, if (appPrefs.getAiBubbleColor() == color) MaterialTheme.colorScheme.primary else Color.Gray, CircleShape)
+                                    .clickable { appPrefs.setAiBubbleColor(color); refreshKey++ },
+                                contentAlignment = Alignment.Center
+                            ) {
+                                if (appPrefs.getAiBubbleColor() == color) {
+                                    Icon(Icons.Default.Check, contentDescription = null, tint = Color.Black, modifier = Modifier.size(20.dp))
+                                }
+                            }
+                        }
+                    }
+                    Spacer(modifier = Modifier.height(12.dp))
+                    
+                    // لون التوهج
+                    Text("لون التوهج:", fontSize = 14.sp)
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        listOf(0xFF0EA5E9, 0xFFBD4CFF, 0xFF00E5FF, 0xFFFFD700).forEach { color ->
+                            Box(
+                                modifier = Modifier
+                                    .size(36.dp)
+                                    .clip(CircleShape)
+                                    .background(Color(color))
+                                    .border(2.dp, if (appPrefs.getPrimaryGlowColor() == color) Color.White else Color.Transparent, CircleShape)
+                                    .clickable { appPrefs.setPrimaryGlowColor(color); refreshKey++ },
+                                contentAlignment = Alignment.Center
+                            ) {
+                                if (appPrefs.getPrimaryGlowColor() == color) {
+                                    Icon(Icons.Default.Check, contentDescription = null, tint = Color.White, modifier = Modifier.size(20.dp))
+                                }
+                            }
+                        }
+                    }
+                    Spacer(modifier = Modifier.height(12.dp))
+                    
+                    // شفافية الزجاج
+                    Text("شفافية العناصر: ${String.format("%.0f", appPrefs.getGlassAlpha() * 100)}%", fontSize = 14.sp)
+                    Slider(
+                        value = appPrefs.getGlassAlpha(),
+                        onValueChange = { appPrefs.setGlassAlpha(it); refreshKey++ },
+                        valueRange = 0.1f..1f,
+                        colors = SliderDefaults.colors(thumbColor = MaterialTheme.colorScheme.primary)
+                    )
+                    
+                    // شدة التوهج
+                    Text("شدة التوهج: ${String.format("%.1f", appPrefs.getGlowIntensity())}x", fontSize = 14.sp)
+                    Slider(
+                        value = appPrefs.getGlowIntensity(),
+                        onValueChange = { appPrefs.setGlowIntensity(it); refreshKey++ },
+                        valueRange = 0f..2f,
+                        colors = SliderDefaults.colors(thumbColor = MaterialTheme.colorScheme.primary)
+                    )
+                }
+            }
+
 }
