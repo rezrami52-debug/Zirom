@@ -193,49 +193,45 @@ fun WeatherCardRacha(weather: com.racha.ai.domain.model.WeatherInfo, isDark: Boo
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 8.dp)
-            .clip(RoundedCornerShape(20.dp))
+            .padding(horizontal = 16.dp, vertical = 4.dp) // ✅ تقليل الهوامش
+            .clip(RoundedCornerShape(16.dp))
             .background(glass)
-            .border(1.dp, border, RoundedCornerShape(20.dp))
-            .padding(16.dp)
+            .border(1.dp, border, RoundedCornerShape(16.dp))
+            .padding(12.dp) // ✅ تقليل الحشو الداخلي
     ) {
-        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
             Column {
-                Text("مساء الخير", color = if (isDark) Color.White else Color(0xFF0A1B3A), fontSize = 16.sp, fontWeight = FontWeight.Bold)
-                Text(weather.cityName ?: "موقعك", color = if (isDark) Color.White.copy(alpha = 0.7f) else Color.Gray, fontSize = 13.sp)
+                Text("مساء الخير", color = if (isDark) Color.White else Color(0xFF0A1B3A), fontSize = 14.sp, fontWeight = FontWeight.Bold) // ✅ تصغير الخط
+                Text(weather.cityName ?: "موقعك", color = if (isDark) Color.White.copy(alpha = 0.7f) else Color.Gray, fontSize = 11.sp)
             }
-            Column(horizontalAlignment = Alignment.End) {
-                Text("💧 ${weather.humidity}%", color = if (isDark) Color.White.copy(alpha = 0.9f) else Color.Gray, fontSize = 13.sp)
-                Text("💨 ${weather.windSpeed} كم/س", color = if (isDark) Color.White.copy(alpha = 0.9f) else Color.Gray, fontSize = 13.sp)
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text("${weather.temperature}°C", color = if (isDark) Color.White else Color(0xFF0A1B3A), fontSize = 28.sp, fontWeight = FontWeight.Light) // ✅ تصغير درجة الحرارة
+                Spacer(modifier = Modifier.width(8.dp))
+                Column(horizontalAlignment = Alignment.End) {
+                    Text("💧 ${weather.humidity}%", color = if (isDark) Color.White.copy(alpha = 0.9f) else Color.Gray, fontSize = 11.sp)
+                    Text("💨 ${weather.windSpeed} كم/س", color = if (isDark) Color.White.copy(alpha = 0.9f) else Color.Gray, fontSize = 11.sp)
+                }
             }
         }
+        
         Spacer(modifier = Modifier.height(8.dp))
-        Text("${weather.temperature}°C", color = if (isDark) Color.White else Color(0xFF0A1B3A), fontSize = 48.sp, fontWeight = FontWeight.Light)
-        Spacer(modifier = Modifier.height(12.dp))
-        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            Box(
-                modifier = Modifier.weight(1f).height(70.dp).clip(RoundedCornerShape(16.dp))
-                    .background(Brush.horizontalGradient(listOf(Color(0xFFD4841A).copy(alpha = 0.8f), Color(0xFFF5A623).copy(alpha = 0.8f))))
-                    .border(1.dp, Color(0xFFFFD700).copy(alpha = 0.5f), RoundedCornerShape(16.dp))
-            ) {
-                Column(modifier = Modifier.padding(12.dp)) {
-                    Text("⏳ القادمة", fontSize = 10.sp, color = Color.White.copy(alpha = 0.8f))
-                    Text("العشاء 🌙", fontSize = 14.sp, fontWeight = FontWeight.Bold, color = Color.White)
-                    Text("08:20 PM", fontSize = 11.sp, color = Color.White.copy(alpha = 0.9f))
-                }
-            }
-            Box(
-                modifier = Modifier.weight(1f).height(70.dp).clip(RoundedCornerShape(16.dp))
-                    .background(Brush.horizontalGradient(listOf(Color(0xFFD4AF37).copy(alpha = 0.8f), Color(0xFFF5E6A3).copy(alpha = 0.8f))))
-                    .border(1.dp, Color(0xFFFFFACD).copy(alpha = 0.5f), RoundedCornerShape(16.dp))
-            ) {
-                Column(modifier = Modifier.padding(12.dp)) {
-                    Text("🌅 الفجر", fontSize = 11.sp, color = Color.White.copy(alpha = 0.9f))
-                    Text("صلاة الفجر", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = Color.White)
-                    Text("بعد 8 ساعات", fontSize = 11.sp, color = Color.White.copy(alpha = 0.9f))
-                }
-            }
+        
+        // ✅ أوقات الصلاة (بيانات تجريبية - يمكن ربطها بـ API لاحقاً)
+        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+            PrayerTimeItem("الفجر", "05:12", isDark, glow)
+            PrayerTimeItem("الظهر", "12:30", isDark, glow)
+            PrayerTimeItem("العصر", "15:45", isDark, glow)
+            PrayerTimeItem("المغرب", "18:20", isDark, glow)
+            PrayerTimeItem("العشاء", "19:50", isDark, glow)
         }
+    }
+}
+
+@Composable
+fun PrayerTimeItem(name: String, time: String, isDark: Boolean, glow: Color) {
+    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+        Text(name, fontSize = 10.sp, color = if (isDark) Color.White.copy(alpha = 0.7f) else Color.Gray)
+        Text(time, fontSize = 12.sp, fontWeight = FontWeight.Bold, color = if (isDark) Color.White else Color(0xFF0A1B3A))
     }
 }
 
