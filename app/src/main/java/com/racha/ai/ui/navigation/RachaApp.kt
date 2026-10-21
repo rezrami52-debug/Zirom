@@ -82,6 +82,7 @@ fun RachaApp(
         )
 
         is Screen.Settings -> SettingsScreen(
+            onOpenCustomization = { currentScreen = Screen.Customization },
             onBack = { currentScreen = Screen.Chat },
             onOpenProfile = { currentScreen = Screen.Profile },
             onOpenFaceEnrollment = { currentScreen = Screen.FaceEnrollment },
