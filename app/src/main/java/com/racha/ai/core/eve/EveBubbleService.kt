@@ -17,6 +17,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.SmartToy
 import androidx.compose.material3.Icon
@@ -28,6 +29,8 @@ import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.clickable
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
@@ -191,7 +194,7 @@ fun EveBubbleContent(onClick: () -> Unit, onDrag: (Float, Float) -> Unit) {
 
     Box(
         modifier = Modifier
-            .size(90.dp) // ✅ حجم أكبر قليلاً
+            .size(90.dp)
             .pointerInput(Unit) {
                 detectDragGestures { change, dragAmount ->
                     change.consume()
@@ -200,7 +203,7 @@ fun EveBubbleContent(onClick: () -> Unit, onDrag: (Float, Float) -> Unit) {
                     onDrag(dragAmount.x, dragAmount.y)
                 }
             }
-            .clickable { onClick() }, // ✅ اللمس يفتح العيون ويوقظ EVE
+            .clickable { onClick() },
         contentAlignment = Alignment.Center
     ) {
         // ✅ هالة خارجية (تتوهج عند الإشعار)
@@ -214,21 +217,22 @@ fun EveBubbleContent(onClick: () -> Unit, onDrag: (Float, Float) -> Unit) {
             }
         }
 
-        // ✅ خلفية الفقاعة (تتغير حسب الحالة)
+        // ✅ جسم EVE (بيضاوي أبيض)
         Box(
             modifier = Modifier
-                .size(70.dp)
-                .clip(CircleShape)
+                .width(70.dp)
+                .height(80.dp)
+                .clip(RoundedCornerShape(50, 50, 35, 35)) // شكل بيضاوي مع قاع مسطح
                 .background(
                     when (status) {
-                        EveStatus.NOTIFYING -> Color(0xFFFF4D4D) // أحمر
-                        EveStatus.AWAKE -> Color(0xFFBD4CFF) // بنفسجي
-                        EveStatus.LISTENING -> Color(0xFF00E5FF) // سماوي
-                        EveStatus.SPEAKING -> Color(0xFF4CAF50) // أخضر
-                        else -> Color(0xFF0EA5E9) // أزرق (عادي)
+                        EveStatus.NOTIFYING -> Color(0xFFFF4D4D)
+                        EveStatus.AWAKE -> Color(0xFFBD4CFF)
+                        EveStatus.LISTENING -> Color(0xFF00E5FF)
+                        EveStatus.SPEAKING -> Color(0xFF4CAF50)
+                        else -> Color.White
                     }
                 )
-                .border(2.dp, Color.White.copy(alpha = 0.5f), CircleShape),
+                .border(2.dp, if (status == EveStatus.IDLE) Color(0xFF0EA5E9) else Color.White.copy(alpha = 0.5f), RoundedCornerShape(50, 50, 35, 35)),
             contentAlignment = Alignment.Center
         ) {
             // ✅ رسم الوجه (EVE)
@@ -237,56 +241,39 @@ fun EveBubbleContent(onClick: () -> Unit, onDrag: (Float, Float) -> Unit) {
                 val h = size.height
                 val cx = w / 2
                 val cy = h / 2
-                val eyeRadius = 8f
-                val eyeY = cy - 8f
-                val eyeX = cx - 15f
+                val eyeRadius = 7f
+                val eyeY = cy - 10f
+                val eyeX = cx - 14f
+                
+                // لون العيون: أزرق متوهج (إذا كانت نشطة) أو أسود (إذا كانت نائمة)
+                val eyeColor = when (status) {
+                    EveStatus.IDLE -> Color.Black
+                    EveStatus.NOTIFYING -> Color.White
+                    else -> Color(0xFF00E5FF)
+                }
 
-                // العين اليسرى (تتأثر بالرمش)
+                // العين اليسرى
                 drawOval(
-                    color = Color.White,
+                    color = eyeColor,
                     topLeft = Offset(eyeX - eyeRadius, eyeY - eyeRadius * eyeOpenness),
                     size = Size(eyeRadius * 2, eyeRadius * 2 * eyeOpenness)
                 )
                 // العين اليمنى
                 drawOval(
-                    color = Color.White,
-                    topLeft = Offset(cx + 15f - eyeRadius, eyeY - eyeRadius * eyeOpenness),
+                    color = eyeColor,
+                    topLeft = Offset(cx + 14f - eyeRadius, eyeY - eyeRadius * eyeOpenness),
                     size = Size(eyeRadius * 2, eyeRadius * 2 * eyeOpenness)
                 )
 
-                // البؤبؤ (يتحرك قليلاً)
-                val pupilOffset = when (status) {
-                    EveStatus.THINKING -> Offset(2f, -2f)
-                    EveStatus.AWAKE -> Offset(0f, -3f)
-                    else -> Offset(0f, 0f)
-                }
-                drawCircle(color = Color.Black, radius = 3f, center = Offset(eyeX + pupilOffset.x, eyeY + pupilOffset.y))
-                drawCircle(color = Color.Black, radius = 3f, center = Offset(cx + 15f + pupilOffset.x, eyeY + pupilOffset.y))
-
-                // الابتسامة (تتغير حسب الحالة)
+                // ابتسامة رقيقة
                 val smilePath = Path()
-                when (status) {
-                    EveStatus.SPEAKING -> {
-                        // فم مفتوح (يتحدث)
-                        drawOval(
-                            color = Color.White,
-                            topLeft = Offset(cx - 10f, cy + 10f),
-                            size = Size(20f, 12f)
-                        )
-                    }
-                    EveStatus.NOTIFYING -> {
-                        // ابتسامة عريضة (حماس)
-                        smilePath.moveTo(cx - 15f, cy + 10f)
-                        smilePath.quadraticBezierTo(cx, cy + 25f, cx + 15f, cy + 10f)
-                        drawPath(smilePath, Color.White, style = Stroke(width = 3f))
-                    }
-                    else -> {
-                        // ابتسامة عادية
-                        smilePath.moveTo(cx - 10f, cy + 12f)
-                        smilePath.quadraticBezierTo(cx, cy + 18f, cx + 10f, cy + 12f)
-                        drawPath(smilePath, Color.White, style = Stroke(width = 2.5f))
-                    }
-                }
+                smilePath.moveTo(cx - 12f, cy + 15f)
+                smilePath.quadraticBezierTo(cx, cy + 22f, cx + 12f, cy + 15f)
+                drawPath(
+                    smilePath,
+                    color = if (status == EveStatus.IDLE) Color.Black else Color(0xFF00E5FF),
+                    style = Stroke(width = 3f)
+                )
             }
         }
     }
