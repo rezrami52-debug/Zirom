@@ -261,8 +261,7 @@ fun SettingsScreen(
             }
             }
         }
-    }
-
+    
     // حوار اختيار اللغة
     if (showLanguageDialog) {
         AlertDialog(
@@ -297,4 +296,6 @@ fun SettingsScreen(
             }
         )
     }
+
 }
+
