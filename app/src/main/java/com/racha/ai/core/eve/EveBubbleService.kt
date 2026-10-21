@@ -179,7 +179,6 @@ fun EveBubbleContent(onClick: () -> Unit, onDrag: (Float, Float) -> Unit) {
         label = "pulseAlpha"
     )
 
-    // أنيميشن الرمش
     val blinkTransition = rememberInfiniteTransition(label = "blink")
     val eyeOpenness by blinkTransition.animateFloat(
         initialValue = 1f,
@@ -224,7 +223,6 @@ fun EveBubbleContent(onClick: () -> Unit, onDrag: (Float, Float) -> Unit) {
             }
         }
 
-        // جسم EVE (بيضاوي أبيض)
         Box(
             modifier = Modifier
                 .width(70.dp)
@@ -242,7 +240,6 @@ fun EveBubbleContent(onClick: () -> Unit, onDrag: (Float, Float) -> Unit) {
                 .border(2.dp, if (status == EveStatus.IDLE) Color(0xFF0EA5E9) else Color.White.copy(alpha = 0.5f), RoundedCornerShape(50, 50, 35, 35)),
             contentAlignment = Alignment.Center
         ) {
-            // رسم الوجه
             Canvas(modifier = Modifier.size(60.dp)) {
                 val w = size.width
                 val h = size.height
@@ -258,20 +255,17 @@ fun EveBubbleContent(onClick: () -> Unit, onDrag: (Float, Float) -> Unit) {
                     else -> Color(0xFF00E5FF)
                 }
 
-                // العين اليسرى
                 drawOval(
                     color = eyeColor,
                     topLeft = Offset(eyeX - eyeRadius, eyeY - eyeRadius * eyeOpenness),
                     size = Size(eyeRadius * 2, eyeRadius * 2 * eyeOpenness)
                 )
-                // العين اليمنى
                 drawOval(
                     color = eyeColor,
                     topLeft = Offset(cx + 14f - eyeRadius, eyeY - eyeRadius * eyeOpenness),
                     size = Size(eyeRadius * 2, eyeRadius * 2 * eyeOpenness)
                 )
 
-                // ابتسامة
                 val smilePath = Path()
                 smilePath.moveTo(cx - 12f, cy + 15f)
                 smilePath.quadraticBezierTo(cx, cy + 22f, cx + 12f, cy + 15f)
