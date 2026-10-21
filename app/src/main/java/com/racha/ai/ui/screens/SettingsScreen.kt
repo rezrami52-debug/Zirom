@@ -231,8 +231,8 @@ fun SettingsScreen(
                     Text("مفتاح Gemini API", fontWeight = FontWeight.Bold, fontSize = 16.sp)
                     Spacer(modifier = Modifier.height(8.dp))
                     OutlinedTextField(
-                        value = apiKeyInput,
-                        onValueChange = { apiKeyInput = it },
+                        value = state.apiKey,
+                        onValueChange = { viewModel.onApiKeyChange(it) },
                         modifier = Modifier.fillMaxWidth(),
                         label = { Text("أدخل المفتاح") },
                         visualTransformation = if (showApiKey) androidx.compose.ui.text.input.VisualTransformation.None else androidx.compose.ui.text.input.PasswordVisualTransformation(),
@@ -244,63 +244,21 @@ fun SettingsScreen(
                     )
                     Spacer(modifier = Modifier.height(8.dp))
                     Button(
-                        onClick = { viewModel.saveApiKey(apiKeyInput) },
+                        onClick = { viewModel.saveApiKey() },
                         modifier = Modifier.fillMaxWidth(),
-                        enabled = apiKeyInput.isNotBlank()
+                        enabled = state.apiKey.isNotBlank()
                     ) {
                         Text("حفظ المفتاح")
                     }
-                    if (state.apiKeySaved) {
-                        Text("✅ تم حفظ المفتاح بنجاح", color = Color.Green, fontSize = 12.sp)
+                    if (state.saveMessage != null) {
+                        Text(
+                            text = state.saveMessage!!,
+                            color = if (state.isSaved) Color.Green else Color.Red,
+                            fontSize = 12.sp
+                        )
                     }
                 }
             }
-
-            // ===== أدوات الاختبار =====
-            Card(
-                modifier = Modifier.fillMaxWidth(),
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
-                shape = RoundedCornerShape(16.dp)
-            ) {
-                Column(modifier = Modifier.padding(16.dp)) {
-                    Text("أدوات الاختبار", fontWeight = FontWeight.Bold, fontSize = 16.sp)
-                    Spacer(modifier = Modifier.height(8.dp))
-                    Button(
-                        onClick = {
-                            PrayerAlarmReceiver.scheduleTestNotification(context)
-                        },
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Text("🔔 اختبار إشعار الصلاة")
-                    }
-                    Spacer(modifier = Modifier.height(4.dp))
-                    Button(
-                        onClick = {
-                            PrayerAlarmReceiver.scheduleTestAdhan(context)
-                        },
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Text("🕌 اختبار إشعار الأذان")
-                    }
-                    Spacer(modifier = Modifier.height(4.dp))
-                    Button(
-                        onClick = {
-                            RoutineAlarmScheduler.scheduleTestNotification(context)
-                        },
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Text("⏰ اختبار إشعار روتين")
-                    }
-                    Spacer(modifier = Modifier.height(4.dp))
-                    Button(
-                        onClick = {
-                            WeatherWorker.scheduleTest(context)
-                        },
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Text("🌤️ اختبار إشعار الطقس")
-                    }
-                }
             }
         }
     }
