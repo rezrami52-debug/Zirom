@@ -68,14 +68,18 @@ class EveBubbleService : Service(), LifecycleOwner, SavedStateRegistryOwner {
 
     override fun onCreate() {
         super.onCreate()
-        android.util.Log.d("EveBubble", "onCreate: Service started")
-        lifecycleRegistry.currentState = Lifecycle.State.CREATED
+
+        // 1. تهيئة SavedStateRegistry أولاً
         savedStateRegistryController.performRestore(null)
-        lifecycleRegistry.currentState = Lifecycle.State.STARTED
-        
+
+        // 2. تهيئة Lifecycle
+        lifecycleRegistry.currentState = Lifecycle.State.CREATED
+
+        // 3. إعداد الإشعار
         startForegroundWithNotification()
+
+        // 4. إعداد WindowManager وعرض الفقاعة
         windowManager = getSystemService(WINDOW_SERVICE) as WindowManager
-        android.util.Log.d("EveBubble", "windowManager initialized")
         showBubble()
     }
 
