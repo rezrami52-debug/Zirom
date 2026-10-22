@@ -22,6 +22,7 @@ import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.unit.dp
+import kotlinx.coroutines.launch
 
 @Composable
 fun EveBubbleContent(
@@ -32,33 +33,44 @@ fun EveBubbleContent(
 ) {
     val infiniteTransition = rememberInfiniteTransition(label = "AlertPulse")
     val alertPulseScale by infiniteTransition.animateFloat(
-        initialValue = 1.0f, targetValue = 1.25f,
+        initialValue = 1.0f,
+        targetValue = 1.25f,
         animationSpec = infiniteRepeatable(
             animation = tween(800, easing = FastOutSlowInEasing),
             repeatMode = RepeatMode.Reverse
-        ), label = "PulseScale"
+        ),
+        label = "PulseScale"
     )
 
-    val eyeOpenRatio = remember { Animatable(0f) }
+    val eyeOpenRatio = remember { Animatable(0.15f) }
     var clickCount by remember { mutableIntStateOf(0) }
+    val scope = rememberCoroutineScope()
 
     LaunchedEffect(uiState.mood) {
         when (uiState.mood) {
-            EveMood.AWAKE_SMILING -> eyeOpenRatio.animateTo(1f, spring(dampingRatio = Spring.DampingRatioMediumBouncy))
-            EveMood.NOTIFICATION_ALERT -> eyeOpenRatio.animateTo(1f, tween(300))
-            EveMood.SLEEPING -> eyeOpenRatio.animateTo(0.15f, tween(600))
-            else -> {}
+            EveMood.AWAKE_SMILING -> {
+                eyeOpenRatio.animateTo(1f, animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy))
+            }
+            EveMood.NOTIFICATION_ALERT -> {
+                eyeOpenRatio.animateTo(1f, animationSpec = tween(300))
+            }
+            EveMood.SLEEPING -> {
+                eyeOpenRatio.animateTo(0.15f, animationSpec = tween(600))
+            }
         }
     }
 
     Box(
         modifier = Modifier
-            .size(110.dp, 130.dp) // ✅ جعل الفقاعة أطول قليلاً
+            .width(115.dp)
+            .height(145.dp)
             .pointerInput(Unit) {
-                detectDragGestures { change, dragAmount ->
-                    change.consume()
-                    onDrag(dragAmount.x, dragAmount.y)
-                }
+                detectDragGestures(
+                    onDrag = { change, dragAmount ->
+                        change.consume()
+                        onDrag(dragAmount.x, dragAmount.y)
+                    }
+                )
             },
         contentAlignment = Alignment.Center
     ) {
@@ -75,18 +87,19 @@ fun EveBubbleContent(
 
         Canvas(
             modifier = Modifier
-                .size(90.dp, 115.dp) // ✅ جعل الجسم أطول قليلاً
+                .size(90.dp, 130.dp)
                 .pointerInput(Unit) {
                     awaitPointerEventScope {
                         while (true) {
                             val event = awaitPointerEvent()
                             if (event.changes.any { !it.pressed }) {
+                                // منطق النقرتين
                                 if (clickCount == 0) {
-                                    // النقرة الأولى: فتح العيون (فقط)
+                                    // النقرة الأولى: فتح العيون فقط
                                     EveState.setMood(EveMood.AWAKE_SMILING)
                                     clickCount = 1
                                     // العودة للنوم بعد 2 ثانية
-                                    launch {
+                                    scope.launch {
                                         kotlinx.coroutines.delay(2000)
                                         EveState.setMood(EveMood.SLEEPING)
                                         clickCount = 0
@@ -107,11 +120,11 @@ fun EveBubbleContent(
             val bodyBrush = Brush.radialGradient(
                 colors = listOf(
                     uiState.config.bodyColor,
-                    uiState.config.bodyColor.copy(alpha = 0.85f),
-                    Color(0xFFD0D7DE)
+                    uiState.config.bodyColor.copy(alpha = 0.90f),
+                    Color(0xFFD2D9E0)
                 ),
-                center = Offset(width * 0.4f, height * 0.35f),
-                radius = width * 0.8f
+                center = Offset(width * 0.4f, height * 0.28f),
+                radius = width * 0.9f
             )
 
             drawOval(
@@ -122,15 +135,15 @@ fun EveBubbleContent(
             )
 
             drawOval(
-                color = Color.White.copy(alpha = 0.6f),
+                color = Color.White.copy(alpha = 0.7f),
                 topLeft = Offset(1.5f, 1.5f),
                 size = Size(width - 3f, height - 3f),
                 style = Stroke(width = 2.dp.toPx())
             )
 
-            val faceWidth = width * 0.72f
-            val faceHeight = height * 0.46f
-            val faceTop = height * 0.18f
+            val faceWidth = 62.dp.toPx()
+            val faceHeight = 44.dp.toPx()
+            val faceTop = 18.dp.toPx()
             val faceLeft = (width - faceWidth) / 2f
 
             drawOval(
@@ -141,13 +154,13 @@ fun EveBubbleContent(
 
             val currentEyeHeight = 16.dp.toPx() * eyeOpenRatio.value.coerceAtLeast(0.12f)
             val eyeWidth = 18.dp.toPx()
-            val eyeY = faceTop + (faceHeight * 0.35f)
+            val eyeY = faceTop + (faceHeight * 0.36f)
 
             drawOval(
                 brush = Brush.radialGradient(
                     colors = listOf(uiState.config.eyeColor, uiState.config.eyeGlowColor)
                 ),
-                topLeft = Offset(faceLeft + faceWidth * 0.18f, eyeY),
+                topLeft = Offset(faceLeft + faceWidth * 0.16f, eyeY),
                 size = Size(eyeWidth, currentEyeHeight)
             )
 
@@ -155,7 +168,7 @@ fun EveBubbleContent(
                 brush = Brush.radialGradient(
                     colors = listOf(uiState.config.eyeColor, uiState.config.eyeGlowColor)
                 ),
-                topLeft = Offset(faceLeft + faceWidth * 0.54f, eyeY),
+                topLeft = Offset(faceLeft + faceWidth * 0.55f, eyeY),
                 size = Size(eyeWidth, currentEyeHeight)
             )
 
@@ -163,12 +176,13 @@ fun EveBubbleContent(
                 val smilePath = Path().apply {
                     val startX = faceLeft + faceWidth * 0.35f
                     val endX = faceLeft + faceWidth * 0.65f
-                    val startY = faceTop + faceHeight * 0.72f
+                    val startY = faceTop + faceHeight * 0.74f
                     moveTo(startX, startY)
                     quadraticBezierTo(
                         (startX + endX) / 2f,
-                        startY + (8.dp.toPx() * eyeOpenRatio.value),
-                        endX, startY
+                        startY + (7.dp.toPx() * eyeOpenRatio.value),
+                        endX,
+                        startY
                     )
                 }
                 drawPath(
@@ -182,7 +196,7 @@ fun EveBubbleContent(
         IconButton(
             onClick = onCloseClick,
             modifier = Modifier
-                .size(20.dp) // ✅ تصغير زر الإغلاق
+                .size(24.dp)
                 .align(Alignment.TopEnd)
                 .clip(CircleShape)
                 .background(Color(0xFFE53935))
@@ -191,7 +205,7 @@ fun EveBubbleContent(
                 imageVector = Icons.Default.Close,
                 contentDescription = "Close Bubble",
                 tint = Color.White,
-                modifier = Modifier.size(12.dp) // ✅ تصغير الأيقونة
+                modifier = Modifier.size(15.dp)
             )
         }
     }
