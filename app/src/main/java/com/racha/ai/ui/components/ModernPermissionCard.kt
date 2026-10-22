@@ -22,10 +22,10 @@ fun ModernPermissionCard(
     title: String,
     description: String,
     isGranted: Boolean,
+    isOptional: Boolean = false,
     icon: @Composable () -> Unit = {
         Icon(Icons.Default.Notifications, contentDescription = null, tint = Color(0xFF00E5FF), modifier = Modifier.size(24.dp))
     },
-    isOptional: Boolean = false,
     onActionClick: () -> Unit
 ) {
     val isDark = isSystemInDarkTheme()
@@ -48,25 +48,18 @@ fun ModernPermissionCard(
     }
 
     Surface(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(vertical = 6.dp),
+        modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp),
         shape = RoundedCornerShape(20.dp),
         color = cardColor,
         border = BorderStroke(1.dp, borderColor),
         shadowElevation = 4.dp
     ) {
         Row(
-            modifier = Modifier
-                .padding(16.dp)
-                .fillMaxWidth(),
+            modifier = Modifier.padding(16.dp).fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically
         ) {
             Box(
-                modifier = Modifier
-                    .size(46.dp)
-                    .clip(CircleShape)
-                    .background(iconBgColor),
+                modifier = Modifier.size(46.dp).clip(CircleShape).background(iconBgColor),
                 contentAlignment = Alignment.Center
             ) {
                 icon()
@@ -75,15 +68,9 @@ fun ModernPermissionCard(
             Spacer(modifier = Modifier.width(14.dp))
 
             Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = title,
-                    style = MaterialTheme.typography.titleMedium.copy(color = titleColor, fontSize = 17.sp)
-                )
+                Text(text = title, style = MaterialTheme.typography.titleMedium.copy(color = titleColor, fontSize = 17.sp))
                 Spacer(modifier = Modifier.height(3.dp))
-                Text(
-                    text = description,
-                    style = MaterialTheme.typography.bodySmall.copy(color = descColor, fontSize = 12.sp)
-                )
+                Text(text = description, style = MaterialTheme.typography.bodySmall.copy(color = descColor, fontSize = 12.sp))
             }
 
             Spacer(modifier = Modifier.width(8.dp))
@@ -96,9 +83,7 @@ fun ModernPermissionCard(
             ) {
                 Text(
                     text = if (isGranted) "مفعل ✓" else if (isOptional) "لاحقاً" else "تفعيل",
-                    style = MaterialTheme.typography.labelMedium.copy(
-                        fontWeight = androidx.compose.ui.text.font.FontWeight.Bold
-                    )
+                    style = MaterialTheme.typography.labelMedium.copy(fontWeight = androidx.compose.ui.text.font.FontWeight.Bold)
                 )
             }
         }
