@@ -130,8 +130,8 @@ class EveBubbleService : Service(), LifecycleOwner, SavedStateRegistryOwner {
                 EveBubbleContent(
                     onClick = {
                         EveState.setStatus(EveStatus.AWAKE)
-                        val intent = packageManager.getLaunchIntentForPackage(packageName)
-                        intent?.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                        val intent = Intent(this@EveBubbleService, com.racha.ai.ui.screens.chat.ChatOverlayActivity::class.java)
+                        intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
                         startActivity(intent)
                     },
                     onDrag = { dx, dy ->
@@ -140,7 +140,8 @@ class EveBubbleService : Service(), LifecycleOwner, SavedStateRegistryOwner {
                             params.y += dy.toInt()
                             bubbleView?.let { windowManager.updateViewLayout(it, params) }
                         }
-                    }
+                    },
+                    onClose = { stopSelf() }
                 )
             }
         }
