@@ -107,6 +107,11 @@ fun ChatScreen(
                     }
                 }) { Text("🫧 تشغيل EVE", fontSize = 12.sp, color = primaryGlow) }
                 TextButton(onClick = { com.racha.ai.core.eve.EveState.addNotification() }) { Text("🔔 إشعار", fontSize = 12.sp, color = primaryGlow) }
+                TextButton(onClick = {
+                    // رابط فيديو تجريبي (Big Buck Bunny)
+                    val testVideoUrl = "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4"
+                    com.racha.ai.core.eve.EveState.startMedia(testVideoUrl, isVideo = true)
+                }) { Text("▶️ فيديو", fontSize = 12.sp, color = primaryGlow) }
             }
 
             TopBarRacha(isDarkTheme, primaryGlow, glassColor, glassBorder)
