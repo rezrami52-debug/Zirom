@@ -61,6 +61,7 @@ fun EveBubbleContent(
         }
     }
 
+    // 1. الفقاعة أطول (145.dp بدلاً من 110.dp)
     Box(
         modifier = Modifier
             .width(115.dp)
@@ -86,6 +87,7 @@ fun EveBubbleContent(
             }
         }
 
+        // 2. جسم EVE (90.dp عرض × 130.dp ارتفاع)
         Canvas(
             modifier = Modifier
                 .size(90.dp, 130.dp)
@@ -94,19 +96,15 @@ fun EveBubbleContent(
                         while (true) {
                             val event = awaitPointerEvent()
                             if (event.changes.any { !it.pressed }) {
-                                // منطق النقرتين
                                 if (clickCount == 0) {
-                                    // النقرة الأولى: فتح العيون فقط
                                     EveState.setMood(EveMood.AWAKE_SMILING)
                                     clickCount = 1
-                                    // العودة للنوم بعد 2 ثانية
                                     scope.launch {
                                         kotlinx.coroutines.delay(2000)
                                         EveState.setMood(EveMood.SLEEPING)
                                         clickCount = 0
                                     }
                                 } else {
-                                    // النقرة الثانية: فتح التطبيق
                                     onClick()
                                     clickCount = 0
                                 }
@@ -142,6 +140,7 @@ fun EveBubbleContent(
                 style = Stroke(width = 2.dp.toPx())
             )
 
+            // 3. الشاشة السوداء والعيون (بحجم ثابت)
             val faceWidth = 62.dp.toPx()
             val faceHeight = 44.dp.toPx()
             val faceTop = 18.dp.toPx()
@@ -182,8 +181,7 @@ fun EveBubbleContent(
                     quadraticBezierTo(
                         (startX + endX) / 2f,
                         startY + (7.dp.toPx() * eyeOpenRatio.value),
-                        endX,
-                        startY
+                        endX, startY
                     )
                 }
                 drawPath(
@@ -194,6 +192,7 @@ fun EveBubbleContent(
             }
         }
 
+        // 4. زر إغلاق أصغر
         IconButton(
             onClick = onCloseClick,
             modifier = Modifier
