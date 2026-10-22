@@ -84,11 +84,7 @@ class EveBubbleService : Service() {
     private fun updatePosition(dx: Float, dy: Float) {
         layoutParams.x += dx.toInt()
         layoutParams.y += dy.toInt()
-        try {
-            windowManager.updateViewLayout(composeView, layoutParams)
-        } catch (e: Exception) {
-            e.printStackTrace()
-        }
+        try { windowManager.updateViewLayout(composeView, layoutParams) } catch (e: Exception) { e.printStackTrace() }
     }
 
     private fun handleEveClick() {
@@ -121,9 +117,7 @@ class EveBubbleService : Service() {
     override fun onDestroy() {
         super.onDestroy()
         overlayLifecycleOwner.handleDestroy()
-        composeView?.let {
-            try { windowManager.removeView(it) } catch (e: Exception) { e.printStackTrace() }
-        }
+        composeView?.let { try { windowManager.removeView(it) } catch (e: Exception) { e.printStackTrace() } }
     }
 
     companion object {
