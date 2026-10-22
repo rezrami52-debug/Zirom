@@ -110,12 +110,7 @@ class EveBubbleService : Service() {
         }, 3000)
     }
 
-    private fun startForegroundServiceNotification()
-        tts = TextToSpeech(this) { status ->
-            if (status == TextToSpeech.SUCCESS) {
-                tts?.language = Locale("ar")
-            }
-        } {
+    private fun startForegroundServiceNotification() {
         val channelId = "eve_bubble_channel"
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             val channel = NotificationChannel(channelId, "Racha AI Bubble", NotificationManager.IMPORTANCE_MIN)
