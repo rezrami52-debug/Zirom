@@ -124,5 +124,5 @@ class MediaWindowManager(private val context: Context) {
         for (id in keys) closeWindow(id)
     }
 
-    private fun dpToPx(dp: Int): Int = (dp * resources.displayMetrics.density).toInt()
+    private fun dpToPx(dp: Int): Int = (dp * context.resources.displayMetrics.density).toInt()
 }
