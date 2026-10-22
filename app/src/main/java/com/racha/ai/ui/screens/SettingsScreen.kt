@@ -24,6 +24,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.racha.ai.core.preferences.AppPreferences
+import com.racha.ai.theme.AppThemeManager
 import com.racha.ai.services.prayer.PrayerAlarmReceiver
 import com.racha.ai.services.routine.RoutineAlarmScheduler
 import com.racha.ai.services.weather.WeatherWorker
