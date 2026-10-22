@@ -39,6 +39,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.google.accompanist.permissions.ExperimentalPermissionsApi
 import com.google.accompanist.permissions.isGranted
 import com.google.accompanist.permissions.rememberPermissionState
+import com.racha.ai.theme.AppThemeManager
 import com.racha.ai.R
 import com.racha.ai.core.tools.PhotoCaptureActivity
 import com.racha.ai.core.voice.VoiceInputHelper
@@ -76,9 +77,12 @@ fun ChatScreen(
     }
     val glassColor = if (isDarkTheme) Color(0xFF2A2A35).copy(alpha = 0.6f) else Color.White.copy(alpha = 0.7f)
     val glassBorder = if (isDarkTheme) Color(0xFFBD4CFF).copy(alpha = 0.5f) else Color(0xFF0EA5E9).copy(alpha = 0.3f)
-    val primaryGlow = if (isDarkTheme) Color(0xFFBD4CFF) else Color(0xFF0EA5E9)
-    val userBubbleColor = if (isDarkTheme) Color(0xFF4A2A6B).copy(alpha = 0.8f) else Color(0xFF0EA5E9)
-    val aiBubbleColor = if (isDarkTheme) Color(0xFF2A2A35).copy(alpha = 0.9f) else Color.White
+    val themeManager = remember { AppThemeManager(context) }
+    val themeState by themeManager.themeState.collectAsState()
+    
+    val primaryGlow = themeState.glowColor
+    val userBubbleColor = themeState.userBubbleColor.copy(alpha = themeState.elementsAlpha)
+    val aiBubbleColor = themeState.rachaBubbleColor.copy(alpha = themeState.elementsAlpha)
     val textColor = if (isDarkTheme) Color.White else Color(0xFF0A1B3A)
 
     val cameraLauncher = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->

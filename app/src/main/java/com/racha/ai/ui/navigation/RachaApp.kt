@@ -12,8 +12,10 @@ import com.racha.ai.core.faceauth.BiometricLockScreen
 import com.racha.ai.core.faceauth.FaceAuthRepository
 import com.racha.ai.core.faceauth.FaceCaptureScreen
 import com.racha.ai.core.preferences.AppPreferences
-import com.racha.ai.ui.screens.SettingsScreen
+import com.racha.ai.theme.AppThemeManager
+import com.racha.ai.theme.RachaAppContainer
 import com.racha.ai.ui.screens.CustomizationScreen
+import com.racha.ai.ui.screens.SettingsScreen
 import com.racha.ai.ui.screens.WelcomeScreen
 import com.racha.ai.ui.screens.chat.ChatScreen
 import com.racha.ai.ui.screens.notifications.NotificationsScreen
@@ -45,6 +47,7 @@ fun RachaApp(
     val context = LocalContext.current
     val appPrefs = remember { AppPreferences(context) }
     val faceRepo = remember { FaceAuthRepository(context) }
+    val themeManager = remember { AppThemeManager(context) }
 
     val startScreen: Screen = when {
         enableBiometricLock && faceRepo.isFaceAuthEnabled() -> Screen.BiometricLock
@@ -62,57 +65,61 @@ fun RachaApp(
         currentScreen = Screen.Chat
     }
 
-    when (currentScreen) {
-        is Screen.BiometricLock -> BiometricLockScreen(
-            onSuccess = { currentScreen = Screen.Chat },
-            onCancel = { android.os.Process.killProcess(android.os.Process.myPid()) },
-            onBypass = { currentScreen = Screen.Chat } // ✅ زر الطوارئ
-        )
+    RachaAppContainer(themeManager = themeManager) {
+        when (currentScreen) {
+            is Screen.BiometricLock -> BiometricLockScreen(
+                onSuccess = { currentScreen = Screen.Chat },
+                onCancel = { android.os.Process.killProcess(android.os.Process.myPid()) },
+                onBypass = { currentScreen = Screen.Chat }
+            )
 
-        is Screen.Onboarding -> OnboardingScreen(
-            onComplete = { currentScreen = Screen.Chat },
-            onOpenApiKeySettings = { currentScreen = Screen.Settings }
-        )
+            is Screen.Onboarding -> OnboardingScreen(
+                onComplete = { currentScreen = Screen.Chat },
+                onOpenApiKeySettings = { currentScreen = Screen.Settings }
+            )
 
-        is Screen.Chat -> ChatScreen(
-            onOpenSettings = { currentScreen = Screen.Settings },
-            onOpenNotifications = { currentScreen = Screen.Notifications },
-            onOpenPrayer = { currentScreen = Screen.Prayer },
-            onOpenRoutine = { currentScreen = Screen.Routine }
-        )
+            is Screen.Chat -> ChatScreen(
+                onOpenSettings = { currentScreen = Screen.Settings },
+                onOpenNotifications = { currentScreen = Screen.Notifications },
+                onOpenPrayer = { currentScreen = Screen.Prayer },
+                onOpenRoutine = { currentScreen = Screen.Routine }
+            )
 
-        is Screen.Settings -> SettingsScreen(
-            onOpenCustomization = { currentScreen = Screen.Customization },
-            onBack = { currentScreen = Screen.Chat },
-            onOpenProfile = { currentScreen = Screen.Profile },
-            onOpenFaceEnrollment = { currentScreen = Screen.FaceEnrollment },
-            onOpenSecurityLog = { currentScreen = Screen.SecurityLog }
-        )
+            is Screen.Settings -> SettingsScreen(
+                onOpenCustomization = { currentScreen = Screen.Customization },
+                onBack = { currentScreen = Screen.Chat },
+                onOpenProfile = { currentScreen = Screen.Profile },
+                onOpenFaceEnrollment = { currentScreen = Screen.FaceEnrollment },
+                onOpenSecurityLog = { currentScreen = Screen.SecurityLog }
+            )
 
-        is Screen.Profile -> ProfileScreen(onBack = { currentScreen = Screen.Settings })
+            is Screen.Profile -> ProfileScreen(onBack = { currentScreen = Screen.Settings })
 
-        is Screen.FaceEnrollment -> FaceCaptureScreen(
-            onCaptured = { bitmap: Bitmap ->
-                faceRepo.saveFaceImage(bitmap)
-                faceRepo.setFaceAuthEnabled(true)
-                currentScreen = Screen.Settings
-            },
-            onCancel = { currentScreen = Screen.Settings }
-        )
+            is Screen.FaceEnrollment -> FaceCaptureScreen(
+                onCaptured = { bitmap: Bitmap ->
+                    faceRepo.saveFaceImage(bitmap)
+                    faceRepo.setFaceAuthEnabled(true)
+                    currentScreen = Screen.Settings
+                },
+                onCancel = { currentScreen = Screen.Settings }
+            )
 
-        is Screen.SecurityLog -> SecurityLogScreen(onBack = { currentScreen = Screen.Settings })
-        is Screen.Notifications -> NotificationsScreen(onBack = { currentScreen = Screen.Chat })
-        is Screen.Prayer -> PrayerScreen(onBack = { currentScreen = Screen.Chat })
-        is Screen.Routine -> RoutineScreen(onBack = { currentScreen = Screen.Chat })
-        is Screen.Customization -> CustomizationScreen(
-            onBack = { currentScreen = Screen.Settings }
-        )
+            is Screen.SecurityLog -> SecurityLogScreen(onBack = { currentScreen = Screen.Settings })
+            is Screen.Notifications -> NotificationsScreen(onBack = { currentScreen = Screen.Chat })
+            is Screen.Prayer -> PrayerScreen(onBack = { currentScreen = Screen.Chat })
+            is Screen.Routine -> RoutineScreen(onBack = { currentScreen = Screen.Chat })
 
-        is Screen.Welcome -> WelcomeScreen(
-            onOpenSettings = { currentScreen = Screen.Settings },
-            onOpenChat = { currentScreen = Screen.Chat },
-            onOpenNotifications = { currentScreen = Screen.Notifications },
-            onOpenPrayer = { currentScreen = Screen.Prayer }
-        )
+            is Screen.Customization -> CustomizationScreen(
+                themeManager = themeManager,
+                onBackClick = { currentScreen = Screen.Settings }
+            )
+
+            is Screen.Welcome -> WelcomeScreen(
+                onOpenSettings = { currentScreen = Screen.Settings },
+                onOpenChat = { currentScreen = Screen.Chat },
+                onOpenNotifications = { currentScreen = Screen.Notifications },
+                onOpenPrayer = { currentScreen = Screen.Prayer }
+            )
+        }
     }
 }
