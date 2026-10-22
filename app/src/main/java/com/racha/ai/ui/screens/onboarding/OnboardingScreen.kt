@@ -36,6 +36,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.graphics.Color
 import com.google.accompanist.permissions.ExperimentalPermissionsApi
 import com.google.accompanist.permissions.rememberMultiplePermissionsState
 import com.racha.ai.core.permissions.PermissionHelper
@@ -107,41 +108,41 @@ fun OnboardingScreen(
             Spacer(modifier = Modifier.height(8.dp))
 
             // 1. الإشعارات
-            PermissionCard(
+            ModernPermissionCard(
                 title = "الوصول للإشعارات",
                 description = "لقراءة إشعارات التطبيقات وإخبارك بها صوتياً",
                 isGranted = hasNotificationPermission,
-                onRequest = {
+                onActionClick = {
                     PermissionHelper.openNotificationListenerSettings(context)
                 },
-                icon = { Icon(Icons.Filled.Notifications, null) }
+                icon = { Icon(Icons.Filled.Notifications, null, tint = Color(0xFF00E5FF)) }
             )
 
             // 2. الموقع
-            PermissionCard(
+            ModernPermissionCard(
                 title = "صلاحية الموقع",
                 description = "لمواقيت الصلاة وحالة الطقس والخرائط",
                 isGranted = locationPermissions.allPermissionsGranted,
-                onRequest = { locationPermissions.launchMultiplePermissionRequest() },
-                icon = { Icon(Icons.Filled.Place, null) }
+                onActionClick = { locationPermissions.launchMultiplePermissionRequest() },
+                icon = { Icon(Icons.Filled.Place, null, tint = Color(0xFF00E5FF)) }
             )
 
             // 3. جهات الاتصال (جديد)
-            PermissionCard(
+            ModernPermissionCard(
                 title = "جهات الاتصال",
                 description = "للبحث عن الأسماء والاتصال بهم عبر Racha",
                 isGranted = contactPermissions.allPermissionsGranted,
-                onRequest = { contactPermissions.launchMultiplePermissionRequest() },
-                icon = { Icon(Icons.Filled.Person, null) }
+                onActionClick = { contactPermissions.launchMultiplePermissionRequest() },
+                icon = { Icon(Icons.Filled.Person, null, tint = Color(0xFF00E5FF)) }
             )
 
             // 4. مفتاح API
-            PermissionCard(
+            ModernPermissionCard(
                 title = "مفتاح Gemini API",
                 description = "لتفعيل المحادثة الذكية (اختياري — يمكن إضافته لاحقاً)",
                 isGranted = appPrefs.isOnboardingComplete() && !appPrefs.getLLMProvider().isNullOrBlank(),
-                onRequest = onOpenApiKeySettings,
-                icon = { Icon(Icons.Filled.CheckCircle, null) },
+                onActionClick = onOpenApiKeySettings,
+                icon = { Icon(Icons.Filled.CheckCircle, null, tint = Color(0xFF00E5FF)) },
                 isOptional = true
             )
 
