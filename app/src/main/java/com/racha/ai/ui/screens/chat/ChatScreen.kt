@@ -110,7 +110,7 @@ fun ChatScreen(
                 TextButton(onClick = {
                     // رابط فيديو تجريبي (Big Buck Bunny)
                     val testVideoUrl = "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4"
-                    com.racha.ai.core.eve.EveState.startMedia(testVideoUrl, isVideo = true)
+                    com.racha.ai.core.eve.EveState.startMedia(testVideoUrl, video = true)
                 }) { Text("▶️ فيديو", fontSize = 12.sp, color = primaryGlow) }
             }
 
