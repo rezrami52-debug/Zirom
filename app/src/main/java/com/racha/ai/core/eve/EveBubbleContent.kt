@@ -40,6 +40,7 @@ fun EveBubbleContent(
     )
 
     val eyeOpenRatio = remember { Animatable(0f) }
+    var clickCount by remember { mutableIntStateOf(0) }
 
     LaunchedEffect(uiState.mood) {
         when (uiState.mood) {
@@ -52,7 +53,7 @@ fun EveBubbleContent(
 
     Box(
         modifier = Modifier
-            .size(110.dp)
+            .size(110.dp, 130.dp) // ✅ جعل الفقاعة أطول قليلاً
             .pointerInput(Unit) {
                 detectDragGestures { change, dragAmount ->
                     change.consume()
@@ -74,12 +75,28 @@ fun EveBubbleContent(
 
         Canvas(
             modifier = Modifier
-                .size(90.dp, 105.dp)
+                .size(90.dp, 115.dp) // ✅ جعل الجسم أطول قليلاً
                 .pointerInput(Unit) {
                     awaitPointerEventScope {
                         while (true) {
                             val event = awaitPointerEvent()
-                            if (event.changes.any { !it.pressed }) onClick()
+                            if (event.changes.any { !it.pressed }) {
+                                if (clickCount == 0) {
+                                    // النقرة الأولى: فتح العيون (فقط)
+                                    EveState.setMood(EveMood.AWAKE_SMILING)
+                                    clickCount = 1
+                                    // العودة للنوم بعد 2 ثانية
+                                    launch {
+                                        kotlinx.coroutines.delay(2000)
+                                        EveState.setMood(EveMood.SLEEPING)
+                                        clickCount = 0
+                                    }
+                                } else {
+                                    // النقرة الثانية: فتح التطبيق
+                                    onClick()
+                                    clickCount = 0
+                                }
+                            }
                         }
                     }
                 }
@@ -165,7 +182,7 @@ fun EveBubbleContent(
         IconButton(
             onClick = onCloseClick,
             modifier = Modifier
-                .size(24.dp)
+                .size(20.dp) // ✅ تصغير زر الإغلاق
                 .align(Alignment.TopEnd)
                 .clip(CircleShape)
                 .background(Color(0xFFE53935))
@@ -174,7 +191,7 @@ fun EveBubbleContent(
                 imageVector = Icons.Default.Close,
                 contentDescription = "Close Bubble",
                 tint = Color.White,
-                modifier = Modifier.size(16.dp)
+                modifier = Modifier.size(12.dp) // ✅ تصغير الأيقونة
             )
         }
     }
