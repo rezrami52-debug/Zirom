@@ -32,6 +32,7 @@ import kotlinx.coroutines.launch
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SettingsScreen(
+    themeManager: AppThemeManager,
     onOpenCustomization: () -> Unit = {},
     onBack: () -> Unit,
     onOpenProfile: () -> Unit,
@@ -42,6 +43,9 @@ fun SettingsScreen(
     val state by viewModel.uiState.collectAsState()
     val context = LocalContext.current
     val appPrefs = remember { AppPreferences(context) }
+    val themeState by themeManager.themeState.collectAsState()
+    val cardBgColor = themeState.rachaBubbleColor.copy(alpha = themeState.elementsAlpha)
+    val headerCardBgColor = themeState.glowColor.copy(alpha = themeState.elementsAlpha)
     val scope = rememberCoroutineScope()
 
     var currentLanguage by remember { mutableStateOf(appPrefs.getLanguage()) }
