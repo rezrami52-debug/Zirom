@@ -39,6 +39,10 @@ import androidx.compose.animation.core.tween
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Color
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.animation.animateColorAsState
 import androidx.compose.material3.IconButton
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Path
@@ -170,15 +174,15 @@ fun EveBubbleContent(onClick: () -> Unit, onDrag: (Float, Float) -> Unit, onClos
     var isEyesOpen by remember { mutableStateOf(false) }
 
     // أنيميشن فتح/إغلاق العيون
-    val eyeScale by animateFloatAsState(
-        targetValue = if (isEyesOpen) 1f else 0.15f,
-        animationSpec = tween(durationMillis = 300, easing = FastOutSlowInEasing),
-        label = "eyeScale"
+    val eyeHeight by animateFloatAsState(
+        targetValue = if (isEyesOpen) 18f else 4f,
+        animationSpec = tween(durationMillis = 200, easing = FastOutSlowInEasing),
+        label = "eyeHeight"
     )
-    val glowAlpha by animateFloatAsState(
-        targetValue = if (isEyesOpen) 1f else 0f,
-        animationSpec = tween(durationMillis = 400),
-        label = "glowAlpha"
+    val eyeColor by animateColorAsState(
+        targetValue = if (isEyesOpen) Color(0xFF00E5FF) else Color(0xFF0A1A2F),
+        animationSpec = tween(durationMillis = 200),
+        label = "eyeColor"
     )
 
     // أنيميشن نبض القلب (عند وجود إشعار)
@@ -207,7 +211,7 @@ fun EveBubbleContent(onClick: () -> Unit, onDrag: (Float, Float) -> Unit, onClos
 
     Box(
         modifier = Modifier
-            .size(90.dp)
+            .size(90.dp, 110.dp) // حجم الفقاعة (مطابق لـ XML: 90x110)
             .pointerInput(Unit) {
                 detectDragGestures { change, dragAmount ->
                     change.consume()
@@ -219,7 +223,7 @@ fun EveBubbleContent(onClick: () -> Unit, onDrag: (Float, Float) -> Unit, onClos
             .clickable {
                 isEyesOpen = !isEyesOpen
                 if (isEyesOpen) {
-                    onClick() // فتح التطبيق عند فتح العيون
+                    onClick()
                 }
             },
         contentAlignment = Alignment.Center
@@ -235,96 +239,44 @@ fun EveBubbleContent(onClick: () -> Unit, onDrag: (Float, Float) -> Unit, onClos
             }
         }
 
-        // جسم EVE (بيضاوي أبيض مع ظل وتدرج)
+        // جسم EVE (بيضاوي أبيض مع حدود)
         Box(
             modifier = Modifier
-                .width(70.dp)
-                .height(80.dp)
-                .clip(RoundedCornerShape(50, 50, 46, 46))
-                .background(
-                    Brush.verticalGradient(
-                        colors = listOf(Color.White, Color(0xFFF4F7FB), Color(0xFFE8EEF5))
-                    )
-                )
-                .border(1.dp, Color.White.copy(alpha = 0.5f), RoundedCornerShape(50, 50, 46, 46))
-                .shadow(4.dp, RoundedCornerShape(50, 50, 46, 46)),
+                .fillMaxSize()
+                .clip(RoundedCornerShape(50, 50, 15, 15)) // مطابق لـ XML: 15dp أعلى، 2dp أسفل
+                .background(Color(0xFFF5F5F7)) // مطابق لـ XML: #F5F5F7
+                .border(2.dp, Color(0xFFE0E0E0), RoundedCornerShape(50, 50, 15, 15)),
             contentAlignment = Alignment.Center
         ) {
-            // العيون
-            Row(
-                modifier = Modifier.offset(y = (-8).dp),
-                horizontalArrangement = Arrangement.spacedBy(7.dp)
+            // شاشة الوجه السوداء (مطابقة لـ XML)
+            Box(
+                modifier = Modifier
+                    .width(65.dp)
+                    .height(45.dp)
+                    .offset(y = (-5).dp)
+                    .clip(RoundedCornerShape(15.dp)) // مطابق لـ XML
+                    .background(Color.Black),
+                contentAlignment = Alignment.Center
             ) {
-                // العين اليسرى
-                Box(
-                    modifier = Modifier
-                        .size(9.dp, 12.dp)
-                        .clip(CircleShape)
-                        .background(Color(0xFF0A1A2F)),
-                    contentAlignment = Alignment.Center
+                // العيون (مع أنيميشن الفتح/الإغلاق)
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                    // البؤبؤ (يظهر عند فتح العيون)
-                    if (isEyesOpen) {
-                        Box(
-                            modifier = Modifier
-                                .size(5.dp, 7.dp)
-                                .clip(CircleShape)
-                                .background(
-                                    Brush.radialGradient(
-                                        colors = listOf(Color(0xFF00F0FF), Color(0xFF0077FF))
-                                    )
-                                )
+                    // العين اليسرى
+                    Canvas(modifier = Modifier.size(16.dp, eyeHeight.dp)) {
+                        drawRoundRect(
+                            color = eyeColor,
+                            cornerRadius = CornerRadius(8f, 8f)
                         )
                     }
-                    // جفن العين (يغلقها)
-                    if (!isEyesOpen) {
-                        Box(
-                            modifier = Modifier
-                                .fillMaxSize()
-                                .background(Color(0xFFF0F4F8))
+                    // العين اليمنى
+                    Canvas(modifier = Modifier.size(16.dp, eyeHeight.dp)) {
+                        drawRoundRect(
+                            color = eyeColor,
+                            cornerRadius = CornerRadius(8f, 8f)
                         )
                     }
-                }
-                // العين اليمنى
-                Box(
-                    modifier = Modifier
-                        .size(9.dp, 12.dp)
-                        .clip(CircleShape)
-                        .background(Color(0xFF0A1A2F)),
-                    contentAlignment = Alignment.Center
-                ) {
-                    if (isEyesOpen) {
-                        Box(
-                            modifier = Modifier
-                                .size(5.dp, 7.dp)
-                                .clip(CircleShape)
-                                .background(
-                                    Brush.radialGradient(
-                                        colors = listOf(Color(0xFF00F0FF), Color(0xFF0077FF))
-                                    )
-                                )
-                        )
-                    }
-                    if (!isEyesOpen) {
-                        Box(
-                            modifier = Modifier
-                                .fillMaxSize()
-                                .background(Color(0xFFF0F4F8))
-                        )
-                    }
-                }
-            }
-
-            // ابتسامة (تظهر عند فتح العيون)
-            if (isEyesOpen) {
-                Canvas(modifier = Modifier.size(40.dp)) {
-                    val path = Path()
-                    path.moveTo(size.width * 0.3f, size.height * 0.6f)
-                    path.quadraticBezierTo(
-                        size.width * 0.5f, size.height * 0.75f,
-                        size.width * 0.7f, size.height * 0.6f
-                    )
-                    drawPath(path, Color(0xFF0A1A2F), style = Stroke(width = 2f))
                 }
             }
         }
