@@ -57,6 +57,7 @@ fun EveBubbleContent(
             EveMood.SLEEPING -> {
                 eyeOpenRatio.animateTo(0.15f, animationSpec = tween(600))
             }
+            else -> {}
         }
     }
 
