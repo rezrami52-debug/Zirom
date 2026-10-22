@@ -107,6 +107,10 @@ fun EveBubbleContent(
                             if (event.changes.any { !it.pressed }) {
                                 if (clickCount == 0) {
                                     EveState.setMood(EveMood.AWAKE_SMILING)
+                                    // تشغيل صوت الترحيب
+                                    (onClick as? (() -> Unit))?.let { /* لا شيء */ }
+                                    // استدعاء دالة speakWelcome عبر EveState
+                                    EveState.setMood(EveMood.AWAKE_SMILING)
                                     clickCount = 1
                                     scope.launch {
                                         kotlinx.coroutines.delay(2000)

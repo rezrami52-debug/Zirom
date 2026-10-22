@@ -9,6 +9,8 @@ import android.content.Intent
 import android.graphics.PixelFormat
 import android.os.Build
 import android.os.IBinder
+import android.speech.tts.TextToSpeech
+import java.util.Locale
 import android.view.Gravity
 import android.view.WindowManager
 import androidx.compose.ui.platform.ComposeView
@@ -22,6 +24,7 @@ class EveBubbleService : Service() {
     private var composeView: ComposeView? = null
     private val overlayLifecycleOwner = OverlayLifecycleOwner()
     private lateinit var layoutParams: WindowManager.LayoutParams
+    private var tts: TextToSpeech? = null
 
     override fun onBind(intent: Intent?): IBinder? = null
 
@@ -29,6 +32,11 @@ class EveBubbleService : Service() {
         super.onCreate()
         windowManager = getSystemService(Context.WINDOW_SERVICE) as WindowManager
         startForegroundServiceNotification()
+        tts = TextToSpeech(this) { status ->
+            if (status == TextToSpeech.SUCCESS) {
+                tts?.language = Locale("ar")
+            }
+        }
         setupFloatingBubble()
     }
 
@@ -87,6 +95,10 @@ class EveBubbleService : Service() {
         try { windowManager.updateViewLayout(composeView, layoutParams) } catch (e: Exception) { e.printStackTrace() }
     }
 
+    fun speakWelcome() {
+        tts?.speak("مرحباً، كيف يمكنني مساعدتك اليوم؟", TextToSpeech.QUEUE_FLUSH, null, "welcome")
+    }
+
     private fun handleEveClick() {
         EveState.setMood(EveMood.AWAKE_SMILING)
         packageManager.getLaunchIntentForPackage(packageName)?.let { launchIntent ->
@@ -98,7 +110,12 @@ class EveBubbleService : Service() {
         }, 3000)
     }
 
-    private fun startForegroundServiceNotification() {
+    private fun startForegroundServiceNotification()
+        tts = TextToSpeech(this) { status ->
+            if (status == TextToSpeech.SUCCESS) {
+                tts?.language = Locale("ar")
+            }
+        } {
         val channelId = "eve_bubble_channel"
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             val channel = NotificationChannel(channelId, "Racha AI Bubble", NotificationManager.IMPORTANCE_MIN)
@@ -116,6 +133,8 @@ class EveBubbleService : Service() {
 
     override fun onDestroy() {
         super.onDestroy()
+        tts?.stop()
+        tts?.shutdown()
         overlayLifecycleOwner.handleDestroy()
         composeView?.let { try { windowManager.removeView(it) } catch (e: Exception) { e.printStackTrace() } }
     }
