@@ -79,7 +79,7 @@ fun EveBubbleContent(
                     awaitPointerEventScope {
                         while (true) {
                             val event = awaitPointerEvent()
-                            if (event.changes.any { it.changedToUp() }) onClick()
+                            if (event.changes.any { !it.pressed }) onClick()
                         }
                     }
                 }
