@@ -1,3 +1,8 @@
+import java.io.FileOutputStream
+import java.io.File
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.activity.compose.rememberLauncherForActivityResult
+import android.net.Uri
 package com.racha.ai.ui.screens
 
 import android.content.Context
@@ -36,6 +41,23 @@ fun CustomizationScreen(onBack: () -> Unit) {
     var glowColor by remember { mutableIntStateOf(prefs.getPrimaryGlowColor()) }
     var glassAlpha by remember { mutableFloatStateOf(prefs.getGlassAlpha()) }
     var glowIntensity by remember { mutableFloatStateOf(prefs.getGlowIntensity()) }
+
+    val photoPickerLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.GetContent()
+    ) { uri: Uri? ->
+        uri?.let {
+            try {
+                val inputStream = context.contentResolver.openInputStream(it)
+                val file = File(context.filesDir, "custom_bg.jpg")
+                val outputStream = FileOutputStream(file)
+                inputStream?.use { input -> outputStream.use { output -> input.copyTo(output) } }
+                prefs.setBackgroundImagePath(file.absolutePath)
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
+        }
+    }
+
 
     Scaffold(
         topBar = {
