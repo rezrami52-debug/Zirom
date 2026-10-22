@@ -42,6 +42,12 @@
         <service android:name=".core.eve.EveBubbleService" android:enabled="true" android:exported="false" android:foregroundServiceType="specialUse">
             <property android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE" android:value="Floating AI assistant bubble" />
         </service>
+    
+        <service
+            android:name=".core.media.FloatingMediaService"
+            android:enabled="true"
+            android:exported="false"
+            android:foregroundServiceType="mediaPlayback" />
     </application>
 
 </manifest>

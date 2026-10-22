@@ -98,6 +98,7 @@ fun ChatScreen(
             // ✅ أزرار EVE
             Row(modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp), horizontalArrangement = Arrangement.End) {
                 val ctx = LocalContext.current
+                // زر تشغيل EVE
                 TextButton(onClick = {
                     if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.M && !android.provider.Settings.canDrawOverlays(ctx)) {
                         val intent = android.content.Intent(android.provider.Settings.ACTION_MANAGE_OVERLAY_PERMISSION, android.net.Uri.parse("package:${ctx.packageName}"))
@@ -106,11 +107,17 @@ fun ChatScreen(
                         ctx.startService(android.content.Intent(ctx, com.racha.ai.core.eve.EveBubbleService::class.java))
                     }
                 }) { Text("🫧 تشغيل EVE", fontSize = 12.sp, color = primaryGlow) }
+
+                // زر الإشعار
                 TextButton(onClick = { com.racha.ai.core.eve.EveState.addNotification() }) { Text("🔔 إشعار", fontSize = 12.sp, color = primaryGlow) }
+
+                // زر تشغيل فيديو تجريبي
                 TextButton(onClick = {
-                    // رابط فيديو تجريبي (Big Buck Bunny)
-                    val testVideoUrl = "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4"
-                    com.racha.ai.core.eve.EveState.startMedia(testVideoUrl, video = true)
+                    val intent = android.content.Intent(ctx, com.racha.ai.core.media.FloatingMediaService::class.java).apply {
+                        putExtra(com.racha.ai.core.media.FloatingMediaService.EXTRA_MEDIA_URI, "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4")
+                        putExtra(com.racha.ai.core.media.FloatingMediaService.EXTRA_MEDIA_TITLE, "Big Buck Bunny")
+                    }
+                    ctx.startService(intent)
                 }) { Text("▶️ فيديو", fontSize = 12.sp, color = primaryGlow) }
             }
 
