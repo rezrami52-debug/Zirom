@@ -21,6 +21,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.SmartToy
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Surface
 import androidx.compose.runtime.*
@@ -159,7 +160,7 @@ class EveBubbleService : Service(), LifecycleOwner, SavedStateRegistryOwner {
 }
 
 @Composable
-fun EveBubbleContent(onClick: () -> Unit, onDrag: (Float, Float) -> Unit) {
+fun EveBubbleContent(onClick: () -> Unit, onDrag: (Float, Float) -> Unit, onClose: () -> Unit) {
     val status by EveState.status.collectAsState()
     
     // أنيميشن نبض القلب (عند وجود إشعار)
@@ -286,6 +287,22 @@ fun EveBubbleContent(onClick: () -> Unit, onDrag: (Float, Float) -> Unit) {
                     style = Stroke(width = 3f)
                 )
             }
+        }
+
+        // زر الإغلاق (X)
+        IconButton(
+            onClick = { onClose() },
+            modifier = Modifier
+                .align(Alignment.TopEnd)
+                .size(24.dp)
+                .background(Color.Red.copy(alpha = 0.7f), CircleShape)
+        ) {
+            Icon(
+                imageVector = Icons.Default.Close,
+                contentDescription = "إغلاق",
+                tint = Color.White,
+                modifier = Modifier.size(16.dp)
+            )
         }
     }
 }
