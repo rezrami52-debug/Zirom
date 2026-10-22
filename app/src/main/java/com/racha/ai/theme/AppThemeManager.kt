@@ -70,8 +70,11 @@ class AppThemeManager(private val context: Context) {
             val outputStream = FileOutputStream(file)
             inputStream?.use { input -> outputStream.use { output -> input.copyTo(output) } }
             prefs.edit().putString("bg_image_path", file.absolutePath).apply()
+            // إجبار التحديث عبر إنشاء كائن جديد
             _themeState.value = _themeState.value.copy(customBackgroundPath = file.absolutePath)
-        } catch (e: Exception) { e.printStackTrace() }
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
     }
 
     fun clearBackgroundImage() {

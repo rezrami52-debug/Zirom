@@ -67,10 +67,19 @@ fun EveBubbleContent(
             .width(115.dp)
             .height(145.dp)
             .pointerInput(Unit) {
+                var totalDragY = 0f
                 detectDragGestures(
                     onDrag = { change, dragAmount ->
                         change.consume()
+                        totalDragY += dragAmount.y
                         onDrag(dragAmount.x, dragAmount.y)
+                    },
+                    onDragEnd = {
+                        // إذا كان السحب للأسفل أكثر من 150 بكسل، أغلق الخدمة
+                        if (totalDragY > 150f) {
+                            onCloseClick()
+                        }
+                        totalDragY = 0f
                     }
                 )
             },
@@ -192,21 +201,6 @@ fun EveBubbleContent(
             }
         }
 
-        // 4. زر إغلاق أصغر
-        IconButton(
-            onClick = onCloseClick,
-            modifier = Modifier
-                .size(24.dp)
-                .align(Alignment.TopEnd)
-                .clip(CircleShape)
-                .background(Color(0xFFE53935))
-        ) {
-            Icon(
-                imageVector = Icons.Default.Close,
-                contentDescription = "Close Bubble",
-                tint = Color.White,
-                modifier = Modifier.size(15.dp)
-            )
-        }
+
     }
 }

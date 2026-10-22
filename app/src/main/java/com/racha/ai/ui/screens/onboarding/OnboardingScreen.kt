@@ -1,6 +1,8 @@
 package com.racha.ai.ui.screens.onboarding
 
 import android.Manifest
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import android.content.Context
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
@@ -93,11 +95,20 @@ fun OnboardingScreen(
             )
 
             // 3. جهات الاتصال
+            val contactLauncher = rememberLauncherForActivityResult(
+                contract = ActivityResultContracts.RequestMultiplePermissions()
+            ) { permissions ->
+                // يمكن إضافة منطق هنا إذا لزم الأمر
+            }
             ModernPermissionCard(
                 title = "جهات الاتصال",
                 description = "للبحث عن الأسماء والاتصال بهم عبر Racha",
                 isGranted = contactPermissions.allPermissionsGranted,
-                onActionClick = { contactPermissions.launchMultiplePermissionRequest() },
+                onActionClick = {
+                    if (!contactPermissions.allPermissionsGranted) {
+                        contactLauncher.launch(arrayOf(Manifest.permission.READ_CONTACTS))
+                    }
+                },
                 icon = { Icon(Icons.Filled.Person, null, tint = Color(0xFF00E5FF)) }
             )
 

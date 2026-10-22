@@ -19,6 +19,7 @@ fun RachaAppContainer(
 ) {
     val themeState by themeManager.themeState.collectAsState()
 
+    // ✅ استخدام key لتحديث الصورة عند تغيير المسار
     val backgroundBitmap = remember(themeState.customBackgroundPath) {
         themeState.customBackgroundPath?.let { path ->
             val file = File(path)
@@ -34,7 +35,8 @@ fun RachaAppContainer(
                 modifier = Modifier.fillMaxSize(),
                 contentScale = ContentScale.Crop
             )
-            Box(modifier = Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.25f)))
+            // طبقة تعتيم خفيفة لضمان وضوح النصوص
+            Box(modifier = Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.3f)))
         } else {
             Box(modifier = Modifier.fillMaxSize().background(Color(0xFFEBF4FA)))
         }
