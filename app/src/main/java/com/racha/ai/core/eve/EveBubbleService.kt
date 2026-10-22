@@ -35,6 +35,11 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.clickable
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
+import androidx.compose.foundation.layout.offset
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.geometry.Offset
@@ -162,7 +167,20 @@ class EveBubbleService : Service(), LifecycleOwner, SavedStateRegistryOwner {
 @Composable
 fun EveBubbleContent(onClick: () -> Unit, onDrag: (Float, Float) -> Unit, onClose: () -> Unit) {
     val status by EveState.status.collectAsState()
-    
+    var isEyesOpen by remember { mutableStateOf(false) }
+
+    // أنيميشن فتح/إغلاق العيون
+    val eyeScale by animateFloatAsState(
+        targetValue = if (isEyesOpen) 1f else 0.15f,
+        animationSpec = tween(durationMillis = 300, easing = FastOutSlowInEasing),
+        label = "eyeScale"
+    )
+    val glowAlpha by animateFloatAsState(
+        targetValue = if (isEyesOpen) 1f else 0f,
+        animationSpec = tween(durationMillis = 400),
+        label = "glowAlpha"
+    )
+
     // أنيميشن نبض القلب (عند وجود إشعار)
     val infiniteTransition = rememberInfiniteTransition(label = "pulse")
     val pulseScale by infiniteTransition.animateFloat(
@@ -184,24 +202,6 @@ fun EveBubbleContent(onClick: () -> Unit, onDrag: (Float, Float) -> Unit, onClos
         label = "pulseAlpha"
     )
 
-    // أنيميشن الرمش (العيون)
-    val blinkTransition = rememberInfiniteTransition(label = "blink")
-    val eyeOpenness by blinkTransition.animateFloat(
-        initialValue = 1f,
-        targetValue = 0.1f,
-        animationSpec = infiniteRepeatable(
-            animation = keyframes {
-                durationMillis = 4000
-                1f at 0
-                1f at 3900
-                0.1f at 3950
-                1f at 4000
-            },
-            repeatMode = RepeatMode.Restart
-        ),
-        label = "eyeOpenness"
-    )
-
     var offsetX by remember { mutableFloatStateOf(0f) }
     var offsetY by remember { mutableFloatStateOf(0f) }
 
@@ -216,7 +216,12 @@ fun EveBubbleContent(onClick: () -> Unit, onDrag: (Float, Float) -> Unit, onClos
                     onDrag(dragAmount.x, dragAmount.y)
                 }
             }
-            .clickable { onClick() },
+            .clickable {
+                isEyesOpen = !isEyesOpen
+                if (isEyesOpen) {
+                    onClick() // فتح التطبيق عند فتح العيون
+                }
+            },
         contentAlignment = Alignment.Center
     ) {
         // هالة النبض (عند الإشعار)
@@ -230,62 +235,97 @@ fun EveBubbleContent(onClick: () -> Unit, onDrag: (Float, Float) -> Unit, onClos
             }
         }
 
-        // جسم EVE (بيضاوي أبيض)
+        // جسم EVE (بيضاوي أبيض مع ظل وتدرج)
         Box(
             modifier = Modifier
                 .width(70.dp)
                 .height(80.dp)
-                .clip(RoundedCornerShape(50, 50, 35, 35))
+                .clip(RoundedCornerShape(50, 50, 46, 46))
                 .background(
-                    when (status) {
-                        EveStatus.NOTIFYING -> Color(0xFFFF4D4D)
-                        EveStatus.AWAKE -> Color(0xFFBD4CFF)
-                        EveStatus.LISTENING -> Color(0xFF00E5FF)
-                        EveStatus.SPEAKING -> Color(0xFF4CAF50)
-                        else -> Color.White
-                    }
+                    Brush.verticalGradient(
+                        colors = listOf(Color.White, Color(0xFFF4F7FB), Color(0xFFE8EEF5))
+                    )
                 )
-                .border(2.dp, if (status == EveStatus.IDLE) Color(0xFF0EA5E9) else Color.White.copy(alpha = 0.5f), RoundedCornerShape(50, 50, 35, 35)),
+                .border(1.dp, Color.White.copy(alpha = 0.5f), RoundedCornerShape(50, 50, 46, 46))
+                .shadow(4.dp, RoundedCornerShape(50, 50, 46, 46)),
             contentAlignment = Alignment.Center
         ) {
-            // رسم الوجه
-            Canvas(modifier = Modifier.size(60.dp)) {
-                val w = size.width
-                val h = size.height
-                val cx = w / 2
-                val cy = h / 2
-                val eyeRadius = 7f
-                val eyeY = cy - 10f
-                val eyeX = cx - 14f
-                
-                val eyeColor = when (status) {
-                    EveStatus.IDLE -> Color.Black
-                    EveStatus.NOTIFYING -> Color.White
-                    else -> Color(0xFF00E5FF)
-                }
-
+            // العيون
+            Row(
+                modifier = Modifier.offset(y = (-8).dp),
+                horizontalArrangement = Arrangement.spacedBy(7.dp)
+            ) {
                 // العين اليسرى
-                drawOval(
-                    color = eyeColor,
-                    topLeft = Offset(eyeX - eyeRadius, eyeY - eyeRadius * eyeOpenness),
-                    size = Size(eyeRadius * 2, eyeRadius * 2 * eyeOpenness)
-                )
+                Box(
+                    modifier = Modifier
+                        .size(9.dp, 12.dp)
+                        .clip(CircleShape)
+                        .background(Color(0xFF0A1A2F)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    // البؤبؤ (يظهر عند فتح العيون)
+                    if (isEyesOpen) {
+                        Box(
+                            modifier = Modifier
+                                .size(5.dp, 7.dp)
+                                .clip(CircleShape)
+                                .background(
+                                    Brush.radialGradient(
+                                        colors = listOf(Color(0xFF00F0FF), Color(0xFF0077FF))
+                                    )
+                                )
+                        )
+                    }
+                    // جفن العين (يغلقها)
+                    if (!isEyesOpen) {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .background(Color(0xFFF0F4F8))
+                        )
+                    }
+                }
                 // العين اليمنى
-                drawOval(
-                    color = eyeColor,
-                    topLeft = Offset(cx + 14f - eyeRadius, eyeY - eyeRadius * eyeOpenness),
-                    size = Size(eyeRadius * 2, eyeRadius * 2 * eyeOpenness)
-                )
+                Box(
+                    modifier = Modifier
+                        .size(9.dp, 12.dp)
+                        .clip(CircleShape)
+                        .background(Color(0xFF0A1A2F)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    if (isEyesOpen) {
+                        Box(
+                            modifier = Modifier
+                                .size(5.dp, 7.dp)
+                                .clip(CircleShape)
+                                .background(
+                                    Brush.radialGradient(
+                                        colors = listOf(Color(0xFF00F0FF), Color(0xFF0077FF))
+                                    )
+                                )
+                        )
+                    }
+                    if (!isEyesOpen) {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .background(Color(0xFFF0F4F8))
+                        )
+                    }
+                }
+            }
 
-                // ابتسامة
-                val smilePath = Path()
-                smilePath.moveTo(cx - 12f, cy + 15f)
-                smilePath.quadraticBezierTo(cx, cy + 22f, cx + 12f, cy + 15f)
-                drawPath(
-                    smilePath,
-                    color = if (status == EveStatus.IDLE) Color.Black else Color(0xFF00E5FF),
-                    style = Stroke(width = 3f)
-                )
+            // ابتسامة (تظهر عند فتح العيون)
+            if (isEyesOpen) {
+                Canvas(modifier = Modifier.size(40.dp)) {
+                    val path = Path()
+                    path.moveTo(size.width * 0.3f, size.height * 0.6f)
+                    path.quadraticBezierTo(
+                        size.width * 0.5f, size.height * 0.75f,
+                        size.width * 0.7f, size.height * 0.6f
+                    )
+                    drawPath(path, Color(0xFF0A1A2F), style = Stroke(width = 2f))
+                }
             }
         }
 
