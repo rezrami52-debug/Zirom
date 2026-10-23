@@ -1,210 +1,274 @@
 package com.racha.ai.core.eve
 
-import androidx.compose.animation.core.*
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
-import androidx.compose.foundation.background
-import androidx.compose.foundation.gestures.detectDragGestures
-import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Close
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
-import androidx.compose.runtime.*
+import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.gestures.detectVerticalDragGestures
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.offset
+import androidx.compose.foundation.layout.size
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.PathEffect
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.drawscope.rotate
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlin.math.PI
+import kotlin.math.cos
+import kotlin.math.roundToInt
+import kotlin.math.sin
 
 @Composable
 fun EveBubbleContent(
-    uiState: EveUiState,
-    onDrag: (dx: Float, dy: Float) -> Unit,
-    onClick: () -> Unit,
-    onCloseClick: () -> Unit
+    modifier: Modifier = Modifier,
+    isProcessing: Boolean = false,
+    onClick: () -> Unit = {},
+    onDismiss: () -> Unit = {}
 ) {
-    val infiniteTransition = rememberInfiniteTransition(label = "AlertPulse")
-    val alertPulseScale by infiniteTransition.animateFloat(
-        initialValue = 1.0f,
-        targetValue = 1.25f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(800, easing = FastOutSlowInEasing),
-            repeatMode = RepeatMode.Reverse
-        ),
-        label = "PulseScale"
+    val coroutineScope = rememberCoroutineScope()
+
+    var dragOffsetY by remember { mutableFloatStateOf(0f) }
+    val animatedOffsetY by animateFloatAsState(
+        targetValue = dragOffsetY,
+        animationSpec = tween(durationMillis = 200),
+        label = "dragOffset"
     )
 
-    val eyeOpenRatio = remember { Animatable(0.15f) }
-    var clickCount by remember { mutableIntStateOf(0) }
-    val scope = rememberCoroutineScope()
+    var isClicked by remember { mutableStateOf(false) }
+    val clickPulse by animateFloatAsState(
+        targetValue = if (isClicked) 1.25f else 1.0f,
+        animationSpec = tween(durationMillis = 250, easing = FastOutSlowInEasing),
+        label = "clickPulse"
+    )
 
-    LaunchedEffect(uiState.mood) {
-        when (uiState.mood) {
-            EveMood.AWAKE_SMILING -> {
-                eyeOpenRatio.animateTo(1f, animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy))
-            }
-            EveMood.NOTIFICATION_ALERT -> {
-                eyeOpenRatio.animateTo(1f, animationSpec = tween(300))
-            }
-            EveMood.SLEEPING -> {
-                eyeOpenRatio.animateTo(0.15f, animationSpec = tween(600))
-            }
-            else -> {}
-        }
-    }
+    val infiniteTransition = rememberInfiniteTransition(label = "ArcReactorTransitions")
 
-    // 1. الفقاعة أطول (145.dp بدلاً من 110.dp)
+    val outerRotation by infiniteTransition.animateFloat(
+        initialValue = 0f,
+        targetValue = 360f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(if (isProcessing) 2000 else 6000, easing = LinearEasing),
+            repeatMode = RepeatMode.Restart
+        ),
+        label = "outerRotation"
+    )
+
+    val innerRotation by infiniteTransition.animateFloat(
+        initialValue = 360f,
+        targetValue = 0f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(if (isProcessing) 1500 else 4500, easing = LinearEasing),
+            repeatMode = RepeatMode.Restart
+        ),
+        label = "innerRotation"
+    )
+
+    val glowPulse by infiniteTransition.animateFloat(
+        initialValue = 0.85f,
+        targetValue = 1.15f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(1200, easing = FastOutSlowInEasing),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "glowPulse"
+    )
+
     Box(
-        modifier = Modifier
-            .width(115.dp)
-            .height(145.dp)
+        modifier = modifier
+            .size(width = 90.dp, height = 130.dp)
+            .offset { IntOffset(0, animatedOffsetY.roundToInt()) }
             .pointerInput(Unit) {
-                var totalDragY = 0f
-                detectDragGestures(
-                    onDrag = { change, dragAmount ->
-                        change.consume()
-                        totalDragY += dragAmount.y
-                        onDrag(dragAmount.x, dragAmount.y)
+                detectVerticalDragGestures(
+                    onVerticalDrag = { _, dragAmount ->
+                        if (dragAmount > 0 || dragOffsetY > 0) {
+                            dragOffsetY = (dragOffsetY + dragAmount).coerceAtLeast(0f)
+                        }
                     },
                     onDragEnd = {
-                        // إذا كان السحب للأسفل أكثر من 150 بكسل، أغلق الخدمة
-                        if (totalDragY > 150f) {
-                            onCloseClick()
+                        if (dragOffsetY > 160f) {
+                            onDismiss()
+                        } else {
+                            dragOffsetY = 0f
                         }
-                        totalDragY = 0f
+                    },
+                    onDragCancel = { dragOffsetY = 0f }
+                )
+            }
+            .pointerInput(Unit) {
+                detectTapGestures(
+                    onTap = {
+                        coroutineScope.launch {
+                            isClicked = true
+                            delay(200)
+                            isClicked = false
+                            onClick()
+                        }
                     }
                 )
             },
-        contentAlignment = Alignment.Center
+        contentAlignment = Alignment.TopCenter
     ) {
-        if (uiState.mood == EveMood.NOTIFICATION_ALERT) {
-            Canvas(modifier = Modifier.fillMaxSize()) {
-                val radius = (size.minDimension / 2f) * alertPulseScale
+        Canvas(modifier = Modifier.fillMaxSize()) {
+            val canvasWidth = size.width
+            val reactorCenter = Offset(x = canvasWidth / 2f, y = canvasWidth / 2f)
+            val maxRadius = (canvasWidth / 2f) * 0.85f * clickPulse
+
+            drawCircle(
+                brush = Brush.radialGradient(
+                    colors = listOf(
+                        Color(0x5500E5FF),
+                        Color(0x2200E5FF),
+                        Color.Transparent
+                    ),
+                    center = reactorCenter,
+                    radius = maxRadius * 1.35f * glowPulse
+                ),
+                radius = maxRadius * 1.35f * glowPulse,
+                center = reactorCenter
+            )
+
+            drawCircle(
+                color = Color(0xFF003050),
+                radius = maxRadius,
+                center = reactorCenter,
+                style = Stroke(width = 4f)
+            )
+
+            rotate(degrees = outerRotation, pivot = reactorCenter) {
                 drawCircle(
-                    color = uiState.config.alertRingColor.copy(alpha = 0.4f),
-                    radius = radius,
-                    style = Stroke(width = 6.dp.toPx())
-                )
-            }
-        }
-
-        // 2. جسم EVE (90.dp عرض × 130.dp ارتفاع)
-        Canvas(
-            modifier = Modifier
-                .size(90.dp, 130.dp)
-                .pointerInput(Unit) {
-                    awaitPointerEventScope {
-                        while (true) {
-                            val event = awaitPointerEvent()
-                            if (event.changes.any { !it.pressed }) {
-                                if (clickCount == 0) {
-                                    EveState.setMood(EveMood.AWAKE_SMILING)
-                                    // تشغيل صوت الترحيب
-                                    (onClick as? (() -> Unit))?.let { /* لا شيء */ }
-                                    // استدعاء دالة speakWelcome عبر EveState
-                                    EveState.setMood(EveMood.AWAKE_SMILING)
-                                    clickCount = 1
-                                    scope.launch {
-                                        kotlinx.coroutines.delay(2000)
-                                        EveState.setMood(EveMood.SLEEPING)
-                                        clickCount = 0
-                                    }
-                                } else {
-                                    onClick()
-                                    clickCount = 0
-                                }
-                            }
-                        }
-                    }
-                }
-        ) {
-            val width = size.width
-            val height = size.height
-
-            val bodyBrush = Brush.radialGradient(
-                colors = listOf(
-                    uiState.config.bodyColor,
-                    uiState.config.bodyColor.copy(alpha = 0.90f),
-                    Color(0xFFD2D9E0)
-                ),
-                center = Offset(width * 0.4f, height * 0.28f),
-                radius = width * 0.9f
-            )
-
-            drawOval(
-                brush = bodyBrush,
-                topLeft = Offset(0f, 0f),
-                size = Size(width, height),
-                alpha = uiState.config.backgroundAlpha
-            )
-
-            drawOval(
-                color = Color.White.copy(alpha = 0.7f),
-                topLeft = Offset(1.5f, 1.5f),
-                size = Size(width - 3f, height - 3f),
-                style = Stroke(width = 2.dp.toPx())
-            )
-
-            // 3. الشاشة السوداء والعيون (بحجم ثابت)
-            val faceWidth = 62.dp.toPx()
-            val faceHeight = 44.dp.toPx()
-            val faceTop = 18.dp.toPx()
-            val faceLeft = (width - faceWidth) / 2f
-
-            drawOval(
-                color = uiState.config.faceScreenColor,
-                topLeft = Offset(faceLeft, faceTop),
-                size = Size(faceWidth, faceHeight)
-            )
-
-            val currentEyeHeight = 16.dp.toPx() * eyeOpenRatio.value.coerceAtLeast(0.12f)
-            val eyeWidth = 18.dp.toPx()
-            val eyeY = faceTop + (faceHeight * 0.36f)
-
-            drawOval(
-                brush = Brush.radialGradient(
-                    colors = listOf(uiState.config.eyeColor, uiState.config.eyeGlowColor)
-                ),
-                topLeft = Offset(faceLeft + faceWidth * 0.16f, eyeY),
-                size = Size(eyeWidth, currentEyeHeight)
-            )
-
-            drawOval(
-                brush = Brush.radialGradient(
-                    colors = listOf(uiState.config.eyeColor, uiState.config.eyeGlowColor)
-                ),
-                topLeft = Offset(faceLeft + faceWidth * 0.55f, eyeY),
-                size = Size(eyeWidth, currentEyeHeight)
-            )
-
-            if (eyeOpenRatio.value > 0.6f) {
-                val smilePath = Path().apply {
-                    val startX = faceLeft + faceWidth * 0.35f
-                    val endX = faceLeft + faceWidth * 0.65f
-                    val startY = faceTop + faceHeight * 0.74f
-                    moveTo(startX, startY)
-                    quadraticBezierTo(
-                        (startX + endX) / 2f,
-                        startY + (7.dp.toPx() * eyeOpenRatio.value),
-                        endX, startY
+                    color = Color(0xFF00E5FF),
+                    radius = maxRadius * 0.92f,
+                    center = reactorCenter,
+                    style = Stroke(
+                        width = 3f,
+                        pathEffect = PathEffect.dashPathEffect(floatArrayOf(30f, 15f, 10f, 15f), 0f)
                     )
-                }
-                drawPath(
-                    path = smilePath,
-                    color = uiState.config.eyeColor,
-                    style = Stroke(width = 2.5.dp.toPx())
                 )
             }
+
+            val coilCount = 10
+            val coilRingRadius = maxRadius * 0.76f
+            for (i in 0 until coilCount) {
+                val angleDeg = (i * (360f / coilCount)) + outerRotation * 0.5f
+                val angleRad = (angleDeg * PI / 180f).toFloat()
+                val coilCenter = Offset(
+                    x = reactorCenter.x + coilRingRadius * cos(angleRad),
+                    y = reactorCenter.y + coilRingRadius * sin(angleRad)
+                )
+
+                drawCircle(
+                    color = Color(0xFF00B0FF),
+                    radius = 5.5f * clickPulse,
+                    center = coilCenter
+                )
+                drawCircle(
+                    color = Color(0xFFE0FFFF),
+                    radius = 2.5f,
+                    center = coilCenter
+                )
+            }
+
+            rotate(degrees = innerRotation, pivot = reactorCenter) {
+                drawCircle(
+                    color = Color(0xFF00E5FF),
+                    radius = maxRadius * 0.56f,
+                    center = reactorCenter,
+                    style = Stroke(
+                        width = 2.5f,
+                        pathEffect = PathEffect.dashPathEffect(floatArrayOf(14f, 8f), 0f),
+                        cap = StrokeCap.Round
+                    )
+                )
+
+                drawTechTriad(reactorCenter, maxRadius * 0.40f)
+            }
+
+            drawCircle(
+                brush = Brush.radialGradient(
+                    colors = listOf(
+                        Color(0xFFFFFFFF),
+                        Color(0xFF80DEEA),
+                        Color(0xFF00E5FF),
+                        Color(0x0000E5FF)
+                    ),
+                    center = reactorCenter,
+                    radius = maxRadius * 0.38f * glowPulse
+                ),
+                radius = maxRadius * 0.38f * glowPulse,
+                center = reactorCenter
+            )
+
+            drawSwipeIndicator(
+                startX = canvasWidth * 0.35f,
+                endX = canvasWidth * 0.65f,
+                y = size.height - 18.dp.toPx()
+            )
         }
-
-
     }
+}
+
+private fun DrawScope.drawTechTriad(center: Offset, radius: Float) {
+    for (i in 0..2) {
+        val angleRad = (i * 120f * PI / 180f).toFloat()
+        val endPoint = Offset(
+            x = center.x + radius * cos(angleRad),
+            y = center.y + radius * sin(angleRad)
+        )
+        drawLine(
+            color = Color(0xAA00E5FF),
+            start = center,
+            end = endPoint,
+            strokeWidth = 2.5f,
+            cap = StrokeCap.Round
+        )
+    }
+}
+
+private fun DrawScope.drawSwipeIndicator(startX: Float, endX: Float, y: Float) {
+    drawLine(
+        color = Color(0x8800E5FF),
+        start = Offset(startX, y),
+        end = Offset(endX, y),
+        strokeWidth = 4f,
+        cap = StrokeCap.Round
+    )
+
+    drawLine(
+        color = Color(0xCC00E5FF),
+        start = Offset(startX + (endX - startX) * 0.3f, y + 6f),
+        end = Offset((startX + endX) / 2f, y + 10f),
+        strokeWidth = 3f,
+        cap = StrokeCap.Round
+    )
+    drawLine(
+        color = Color(0xCC00E5FF),
+        start = Offset((startX + endX) / 2f, y + 10f),
+        end = Offset(endX - (endX - startX) * 0.3f, y + 6f),
+        strokeWidth = 3f,
+        cap = StrokeCap.Round
+    )
 }
