@@ -9,7 +9,7 @@ import androidx.work.CoroutineWorker
 import androidx.work.WorkerParameters
 import com.racha.ai.R
 import com.racha.ai.core.eve.EveState
-import com.racha.ai.core.preferences.AppPreferences
+import com.racha.ai.core.security.SecurePreferences
 import com.racha.ai.data.api.GeminiService
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -22,18 +22,17 @@ class ProactiveNewsWorker(
     companion object {
         const val CHANNEL_ID = "jarvis_proactive_channel"
         const val PREF_LAST_NEWS_TIME = "last_proactive_news_time"
-        private const val MIN_INTERVAL_MILLIS = 3 * 60 * 60 * 1000L // كل 3 ساعات على الأقل لمنع الإزعاج
+        private const val MIN_INTERVAL_MILLIS = 3 * 60 * 60 * 1000L // كل 3 ساعات على الأقل
     }
 
     override suspend fun doWork(): Result = withContext(Dispatchers.IO) {
-        val appPrefs = AppPreferences(context)
-        val apiKey = appPrefs.getApiKey()
+        val securePrefs = SecurePreferences(context)
+        val apiKey = securePrefs.getApiKey()
 
         if (apiKey.isNullOrBlank()) {
             return@withContext Result.success()
         }
 
-        // فحص آخر مرة أرسل فيها الأخبار
         val sharedPrefs = context.getSharedPreferences("proactive_prefs", Context.MODE_PRIVATE)
         val lastSent = sharedPrefs.getLong(PREF_LAST_NEWS_TIME, 0L)
         val now = System.currentTimeMillis()
@@ -48,7 +47,6 @@ class ProactiveNewsWorker(
                 val gemini = GeminiService(apiKey)
                 val summary = gemini.summarizeNewsAsJarvis(headlines)
 
-                // إرسال الإشعار والتنبيه
                 showJarvisNotification(summary)
                 EveState.addNotification()
 

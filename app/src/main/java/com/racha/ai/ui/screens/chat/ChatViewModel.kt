@@ -7,7 +7,7 @@ import com.racha.ai.core.apps.AppResolver
 import com.racha.ai.core.apps.IntentHandler
 import com.racha.ai.core.apps.PendingAction
 import com.racha.ai.core.contacts.ContactResolver
-import com.racha.ai.core.preferences.AppPreferences
+import com.racha.ai.core.security.SecurePreferences
 import com.racha.ai.data.api.GeminiService
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -38,13 +38,13 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
     private val appResolver = AppResolver(context)
     private val contactResolver = ContactResolver(context)
     private val intentHandler = IntentHandler(context, appResolver, contactResolver)
-    private val appPrefs = AppPreferences(context)
+    private val securePrefs = SecurePreferences(context)
 
     private val _uiState = MutableStateFlow(ChatUiState())
     val uiState: StateFlow<ChatUiState> = _uiState.asStateFlow()
 
     init {
-        _uiState.update { it.copy(hasApiKey = !appPrefs.getApiKey().isNullOrBlank()) }
+        _uiState.update { it.copy(hasApiKey = !securePrefs.getApiKey().isNullOrBlank()) }
     }
 
     fun onInputChange(text: String) {
@@ -105,7 +105,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
 
     private suspend fun forwardToGemini(prompt: String) {
         try {
-            val apiKey = appPrefs.getApiKey()
+            val apiKey = securePrefs.getApiKey()
             if (apiKey.isNullOrBlank()) {
                 appendMessage(
                     ChatMessage(
