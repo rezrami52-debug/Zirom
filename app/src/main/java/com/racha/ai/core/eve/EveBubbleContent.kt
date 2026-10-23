@@ -1,274 +1,223 @@
 package com.racha.ai.core.eve
 
-import androidx.compose.animation.core.FastOutSlowInEasing
-import androidx.compose.animation.core.LinearEasing
-import androidx.compose.animation.core.RepeatMode
-import androidx.compose.animation.core.animateFloat
-import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.core.infiniteRepeatable
-import androidx.compose.animation.core.rememberInfiniteTransition
-import androidx.compose.animation.core.tween
+import androidx.compose.animation.core.*
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
-import androidx.compose.foundation.gestures.detectVerticalDragGestures
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.offset
-import androidx.compose.foundation.layout.size
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableFloatStateOf
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.runtime.setValue
+import androidx.compose.foundation.layout.*
+import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.PathEffect
+import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
-import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
-import androidx.compose.ui.graphics.drawscope.rotate
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
-import kotlin.math.PI
-import kotlin.math.cos
 import kotlin.math.roundToInt
-import kotlin.math.sin
 
 @Composable
 fun EveBubbleContent(
     modifier: Modifier = Modifier,
     isProcessing: Boolean = false,
     onClick: () -> Unit = {},
-    onDismiss: () -> Unit = {}
+    onDismiss: () -> Unit = {},
+    onDrag: (dx: Float, dy: Float) -> Unit = { _, _ -> }
 ) {
     val coroutineScope = rememberCoroutineScope()
 
-    var dragOffsetY by remember { mutableFloatStateOf(0f) }
-    val animatedOffsetY by animateFloatAsState(
-        targetValue = dragOffsetY,
-        animationSpec = tween(durationMillis = 200),
-        label = "dragOffset"
-    )
-
-    var isClicked by remember { mutableStateOf(false) }
-    val clickPulse by animateFloatAsState(
-        targetValue = if (isClicked) 1.25f else 1.0f,
-        animationSpec = tween(durationMillis = 250, easing = FastOutSlowInEasing),
-        label = "clickPulse"
-    )
-
-    val infiniteTransition = rememberInfiniteTransition(label = "ArcReactorTransitions")
-
-    val outerRotation by infiniteTransition.animateFloat(
-        initialValue = 0f,
-        targetValue = 360f,
+    // 1. حركة الطفو الدائمة (Anti-gravity floating)
+    val infiniteTransition = rememberInfiniteTransition(label = "EveHover")
+    val hoverY by infiniteTransition.animateFloat(
+        initialValue = -5f,
+        targetValue = 5f,
         animationSpec = infiniteRepeatable(
-            animation = tween(if (isProcessing) 2000 else 6000, easing = LinearEasing),
-            repeatMode = RepeatMode.Restart
+            animation = tween(1800, easing = FastOutSlowInEasing),
+            repeatMode = RepeatMode.Reverse
         ),
-        label = "outerRotation"
+        label = "hoverY"
     )
 
-    val innerRotation by infiniteTransition.animateFloat(
-        initialValue = 360f,
-        targetValue = 0f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(if (isProcessing) 1500 else 4500, easing = LinearEasing),
-            repeatMode = RepeatMode.Restart
-        ),
-        label = "innerRotation"
-    )
-
-    val glowPulse by infiniteTransition.animateFloat(
+    // 2. توهج العيون النيون
+    val eyeGlow by infiniteTransition.animateFloat(
         initialValue = 0.85f,
         targetValue = 1.15f,
         animationSpec = infiniteRepeatable(
-            animation = tween(1200, easing = FastOutSlowInEasing),
+            animation = tween(if (isProcessing) 500 else 1200, easing = LinearEasing),
             repeatMode = RepeatMode.Reverse
         ),
-        label = "glowPulse"
+        label = "eyeGlow"
+    )
+
+    // 3. محاكاة الرمش الطبيعي للعيون (Blinking)
+    var isBlinking by remember { mutableStateOf(false) }
+    var isHappy by remember { mutableStateOf(false) }
+
+    LaunchedEffect(Unit) {
+        while (true) {
+            delay((3000..5000).random().toLong())
+            isBlinking = true
+            delay(150)
+            isBlinking = false
+        }
+    }
+
+    val eyeHeightScale by animateFloatAsState(
+        targetValue = if (isBlinking) 0.1f else 1.0f,
+        animationSpec = tween(durationMillis = 100),
+        label = "eyeBlink"
     )
 
     Box(
         modifier = modifier
-            .size(width = 90.dp, height = 130.dp)
-            .offset { IntOffset(0, animatedOffsetY.roundToInt()) }
+            .size(width = 80.dp, height = 105.dp)
+            .offset { IntOffset(0, hoverY.roundToInt()) }
             .pointerInput(Unit) {
-                detectVerticalDragGestures(
-                    onVerticalDrag = { _, dragAmount ->
-                        if (dragAmount > 0 || dragOffsetY > 0) {
-                            dragOffsetY = (dragOffsetY + dragAmount).coerceAtLeast(0f)
-                        }
-                    },
-                    onDragEnd = {
-                        if (dragOffsetY > 160f) {
-                            onDismiss()
-                        } else {
-                            dragOffsetY = 0f
-                        }
-                    },
-                    onDragCancel = { dragOffsetY = 0f }
+                detectDragGestures(
+                    onDrag = { change, dragAmount ->
+                        change.consume()
+                        onDrag(dragAmount.x, dragAmount.y)
+                    }
                 )
             }
             .pointerInput(Unit) {
                 detectTapGestures(
                     onTap = {
                         coroutineScope.launch {
-                            isClicked = true
-                            delay(200)
-                            isClicked = false
+                            isHappy = true
+                            delay(600)
+                            isHappy = false
                             onClick()
                         }
+                    },
+                    onLongPress = {
+                        onDismiss() // الضغط المطول يغلق الفقاعة
                     }
                 )
             },
-        contentAlignment = Alignment.TopCenter
+        contentAlignment = Alignment.Center
     ) {
         Canvas(modifier = Modifier.fillMaxSize()) {
-            val canvasWidth = size.width
-            val reactorCenter = Offset(x = canvasWidth / 2f, y = canvasWidth / 2f)
-            val maxRadius = (canvasWidth / 2f) * 0.85f * clickPulse
+            val w = size.width
+            val h = size.height
 
-            drawCircle(
-                brush = Brush.radialGradient(
-                    colors = listOf(
-                        Color(0x5500E5FF),
-                        Color(0x2200E5FF),
-                        Color.Transparent
-                    ),
-                    center = reactorCenter,
-                    radius = maxRadius * 1.35f * glowPulse
+            // --- أ) رسم جسم EVE الكبسولي الأبيض اللامع (Glossy White Shell) ---
+            val bodyBrush = Brush.verticalGradient(
+                colors = listOf(
+                    Color(0xFFFFFFFF),
+                    Color(0xFFF3F6FA),
+                    Color(0xFFDCE4ED)
+                )
+            )
+
+            // ظل مجسم ثلاثي الأبعاد
+            drawRoundRect(
+                color = Color(0x33000000),
+                topLeft = Offset(w * 0.08f, h * 0.05f),
+                size = Size(w * 0.84f, h * 0.90f),
+                cornerRadius = CornerRadius(w * 0.42f, h * 0.45f)
+            )
+
+            // الهيكل الأبيض
+            drawRoundRect(
+                brush = bodyBrush,
+                topLeft = Offset(w * 0.07f, h * 0.03f),
+                size = Size(w * 0.86f, h * 0.92f),
+                cornerRadius = CornerRadius(w * 0.43f, h * 0.46f)
+            )
+
+            // إطار خارجي رفيع وناعم
+            drawRoundRect(
+                color = Color(0xFFC7D3E0),
+                topLeft = Offset(w * 0.07f, h * 0.03f),
+                size = Size(w * 0.86f, h * 0.92f),
+                cornerRadius = CornerRadius(w * 0.43f, h * 0.46f),
+                style = Stroke(width = 1.5f)
+            )
+
+            // خط فاصل ناعم بين الرأس والجسم
+            val seamPath = Path().apply {
+                moveTo(w * 0.12f, h * 0.48f)
+                cubicTo(w * 0.35f, h * 0.52f, w * 0.65f, h * 0.52f, w * 0.88f, h * 0.48f)
+            }
+            drawPath(seamPath, color = Color(0xFFBDCAD8), style = Stroke(width = 1.2f))
+
+            // --- ب) قناع الوجه الأسود الزجاجي (Black Glossy Visor) ---
+            val visorWidth = w * 0.64f
+            val visorHeight = h * 0.32f
+            val visorTop = h * 0.13f
+            val visorLeft = (w - visorWidth) / 2f
+
+            drawRoundRect(
+                brush = Brush.verticalGradient(
+                    listOf(Color(0xFF151922), Color(0xFF090B0E), Color(0xFF020305))
                 ),
-                radius = maxRadius * 1.35f * glowPulse,
-                center = reactorCenter
+                topLeft = Offset(visorLeft, visorTop),
+                size = Size(visorWidth, visorHeight),
+                cornerRadius = CornerRadius(visorWidth * 0.42f, visorHeight * 0.50f)
             )
 
-            drawCircle(
-                color = Color(0xFF003050),
-                radius = maxRadius,
-                center = reactorCenter,
-                style = Stroke(width = 4f)
-            )
-
-            rotate(degrees = outerRotation, pivot = reactorCenter) {
-                drawCircle(
-                    color = Color(0xFF00E5FF),
-                    radius = maxRadius * 0.92f,
-                    center = reactorCenter,
-                    style = Stroke(
-                        width = 3f,
-                        pathEffect = PathEffect.dashPathEffect(floatArrayOf(30f, 15f, 10f, 15f), 0f)
-                    )
-                )
+            // لمعان زجاجي أعلى القناع (Glass Reflection)
+            val reflectionPath = Path().apply {
+                moveTo(visorLeft + 8f, visorTop + 4f)
+                lineTo(visorLeft + visorWidth - 8f, visorTop + 4f)
+                cubicTo(visorLeft + visorWidth * 0.7f, visorTop + 14f, visorLeft + visorWidth * 0.3f, visorTop + 14f, visorLeft + 8f, visorTop + 4f)
             }
+            drawPath(reflectionPath, color = Color.White.copy(alpha = 0.28f))
 
-            val coilCount = 10
-            val coilRingRadius = maxRadius * 0.76f
-            for (i in 0 until coilCount) {
-                val angleDeg = (i * (360f / coilCount)) + outerRotation * 0.5f
-                val angleRad = (angleDeg * PI / 180f).toFloat()
-                val coilCenter = Offset(
-                    x = reactorCenter.x + coilRingRadius * cos(angleRad),
-                    y = reactorCenter.y + coilRingRadius * sin(angleRad)
-                )
+            // --- ج) العيون النيون الزرقاء التفاعلية (Cyan LED Eyes) ---
+            val cyanGlow = Color(0xFF00E5FF)
+            val eyeCenterY = visorTop + visorHeight * 0.52f
+            val eyeWidth = visorWidth * 0.28f
+            val eyeHeight = (visorHeight * 0.30f) * eyeHeightScale
+            val leftEyeX = visorLeft + visorWidth * 0.22f
+            val rightEyeX = visorLeft + visorWidth * 0.78f
 
-                drawCircle(
-                    color = Color(0xFF00B0FF),
-                    radius = 5.5f * clickPulse,
-                    center = coilCenter
-                )
-                drawCircle(
-                    color = Color(0xFFE0FFFF),
-                    radius = 2.5f,
-                    center = coilCenter
-                )
-            }
-
-            rotate(degrees = innerRotation, pivot = reactorCenter) {
-                drawCircle(
-                    color = Color(0xFF00E5FF),
-                    radius = maxRadius * 0.56f,
-                    center = reactorCenter,
-                    style = Stroke(
-                        width = 2.5f,
-                        pathEffect = PathEffect.dashPathEffect(floatArrayOf(14f, 8f), 0f),
-                        cap = StrokeCap.Round
-                    )
-                )
-
-                drawTechTriad(reactorCenter, maxRadius * 0.40f)
-            }
-
-            drawCircle(
-                brush = Brush.radialGradient(
-                    colors = listOf(
-                        Color(0xFFFFFFFF),
-                        Color(0xFF80DEEA),
-                        Color(0xFF00E5FF),
-                        Color(0x0000E5FF)
+            if (isHappy) {
+                // عيون مبتسمة مقوسة (Happy Crescent Eyes)
+                val happyLeft = Path().apply {
+                    moveTo(leftEyeX - eyeWidth * 0.5f, eyeCenterY + 4f)
+                    quadraticBezierTo(leftEyeX, eyeCenterY - 10f, leftEyeX + eyeWidth * 0.5f, eyeCenterY + 4f)
+                }
+                val happyRight = Path().apply {
+                    moveTo(rightEyeX - eyeWidth * 0.5f, eyeCenterY + 4f)
+                    quadraticBezierTo(rightEyeX, eyeCenterY - 10f, rightEyeX + eyeWidth * 0.5f, eyeCenterY + 4f)
+                }
+                drawPath(happyLeft, color = cyanGlow, style = Stroke(width = 5f, cap = StrokeCap.Round))
+                drawPath(happyRight, color = cyanGlow, style = Stroke(width = 5f, cap = StrokeCap.Round))
+            } else {
+                // العيون الطبيعية الكبسولية المتوهجة
+                // العين اليسرى
+                drawRoundRect(
+                    brush = Brush.radialGradient(
+                        listOf(Color(0xFFE0FFFF), cyanGlow, Color(0xFF0091EA)),
+                        center = Offset(leftEyeX, eyeCenterY),
+                        radius = eyeWidth * eyeGlow
                     ),
-                    center = reactorCenter,
-                    radius = maxRadius * 0.38f * glowPulse
-                ),
-                radius = maxRadius * 0.38f * glowPulse,
-                center = reactorCenter
-            )
+                    topLeft = Offset(leftEyeX - eyeWidth / 2f, eyeCenterY - eyeHeight / 2f),
+                    size = Size(eyeWidth, eyeHeight),
+                    cornerRadius = CornerRadius(eyeWidth * 0.45f, eyeHeight * 0.45f)
+                )
 
-            drawSwipeIndicator(
-                startX = canvasWidth * 0.35f,
-                endX = canvasWidth * 0.65f,
-                y = size.height - 18.dp.toPx()
-            )
+                // العين اليمنى
+                drawRoundRect(
+                    brush = Brush.radialGradient(
+                        listOf(Color(0xFFE0FFFF), cyanGlow, Color(0xFF0091EA)),
+                        center = Offset(rightEyeX, eyeCenterY),
+                        radius = eyeWidth * eyeGlow
+                    ),
+                    topLeft = Offset(rightEyeX - eyeWidth / 2f, eyeCenterY - eyeHeight / 2f),
+                    size = Size(eyeWidth, eyeHeight),
+                    cornerRadius = CornerRadius(eyeWidth * 0.45f, eyeHeight * 0.45f)
+                )
+            }
         }
     }
-}
-
-private fun DrawScope.drawTechTriad(center: Offset, radius: Float) {
-    for (i in 0..2) {
-        val angleRad = (i * 120f * PI / 180f).toFloat()
-        val endPoint = Offset(
-            x = center.x + radius * cos(angleRad),
-            y = center.y + radius * sin(angleRad)
-        )
-        drawLine(
-            color = Color(0xAA00E5FF),
-            start = center,
-            end = endPoint,
-            strokeWidth = 2.5f,
-            cap = StrokeCap.Round
-        )
-    }
-}
-
-private fun DrawScope.drawSwipeIndicator(startX: Float, endX: Float, y: Float) {
-    drawLine(
-        color = Color(0x8800E5FF),
-        start = Offset(startX, y),
-        end = Offset(endX, y),
-        strokeWidth = 4f,
-        cap = StrokeCap.Round
-    )
-
-    drawLine(
-        color = Color(0xCC00E5FF),
-        start = Offset(startX + (endX - startX) * 0.3f, y + 6f),
-        end = Offset((startX + endX) / 2f, y + 10f),
-        strokeWidth = 3f,
-        cap = StrokeCap.Round
-    )
-    drawLine(
-        color = Color(0xCC00E5FF),
-        start = Offset((startX + endX) / 2f, y + 10f),
-        end = Offset(endX - (endX - startX) * 0.3f, y + 6f),
-        strokeWidth = 3f,
-        cap = StrokeCap.Round
-    )
 }

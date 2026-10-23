@@ -97,7 +97,7 @@ fun ChatScreen(
         if (state.messages.isNotEmpty()) listState.animateScrollToItem(state.messages.size - 1)
     }
 
-    Box(modifier = Modifier.fillMaxSize().background(bgGradient)) {
+    Box(modifier = Modifier.fillMaxSize().background(bgGradient.copy(alpha = 0.15f))) {
         Column(modifier = Modifier.fillMaxSize()) {
             // ✅ أزرار EVE
             Row(modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp), horizontalArrangement = Arrangement.End) {

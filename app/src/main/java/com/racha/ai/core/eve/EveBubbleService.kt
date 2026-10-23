@@ -64,17 +64,18 @@ class EveBubbleService : Service() {
             PixelFormat.TRANSLUCENT
         ).apply {
             gravity = Gravity.TOP or Gravity.START
-            x = 100; y = 300
+            x = 100
+            y = 300
         }
 
         composeView = ComposeView(this).apply {
             overlayLifecycleOwner.attachToComposeView(this)
             setContent {
-                val state = EveState.uiState.collectAsState().value
                 EveBubbleContent(
                     isProcessing = EveState.status.collectAsState().value == EveStatus.THINKING,
                     onClick = { handleEveClick() },
-                    onDismiss = { stopSelf() }
+                    onDismiss = { stopSelf() },
+                    onDrag = { dx, dy -> updatePosition(dx, dy) }
                 )
             }
         }
@@ -91,11 +92,11 @@ class EveBubbleService : Service() {
     private fun updatePosition(dx: Float, dy: Float) {
         layoutParams.x += dx.toInt()
         layoutParams.y += dy.toInt()
-        try { windowManager.updateViewLayout(composeView, layoutParams) } catch (e: Exception) { e.printStackTrace() }
-    }
-
-    fun speakWelcome() {
-        tts?.speak("مرحباً، كيف يمكنني مساعدتك اليوم؟", TextToSpeech.QUEUE_FLUSH, null, "welcome")
+        try {
+            windowManager.updateViewLayout(composeView, layoutParams)
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
     }
 
     private fun handleEveClick() {
@@ -104,21 +105,18 @@ class EveBubbleService : Service() {
             launchIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP)
             startActivity(launchIntent)
         }
-        android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
-            EveState.setMood(EveMood.SLEEPING)
-        }, 3000)
     }
 
     private fun startForegroundServiceNotification() {
         val channelId = "eve_bubble_channel"
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            val channel = NotificationChannel(channelId, "Racha AI Bubble", NotificationManager.IMPORTANCE_MIN)
+            val channel = NotificationChannel(channelId, "Racha AI (EVE)", NotificationManager.IMPORTANCE_MIN)
             val manager = getSystemService(NotificationManager::class.java)
             manager.createNotificationChannel(channel)
         }
         val notification: Notification = NotificationCompat.Builder(this, channelId)
             .setContentTitle("Racha AI (EVE)")
-            .setContentText("المساعد الذكي نشط في وضع الطفو")
+            .setContentText("المساعد الذكي نشط وجاهز للطفو")
             .setSmallIcon(android.R.drawable.ic_dialog_info)
             .setPriority(NotificationCompat.PRIORITY_MIN)
             .build()
@@ -130,7 +128,9 @@ class EveBubbleService : Service() {
         tts?.stop()
         tts?.shutdown()
         overlayLifecycleOwner.handleDestroy()
-        composeView?.let { try { windowManager.removeView(it) } catch (e: Exception) { e.printStackTrace() } }
+        composeView?.let {
+            try { windowManager.removeView(it) } catch (e: Exception) { e.printStackTrace() }
+        }
     }
 
     companion object {
