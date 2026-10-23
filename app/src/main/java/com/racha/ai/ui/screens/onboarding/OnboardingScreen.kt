@@ -23,6 +23,8 @@ import com.google.accompanist.permissions.isGranted
 import com.google.accompanist.permissions.rememberMultiplePermissionsState
 import com.google.accompanist.permissions.rememberPermissionState
 import com.racha.ai.core.permissions.PermissionHelper
+import com.racha.ai.core.shizuku.ShizukuPermissionGranter
+import android.widget.Toast
 import com.racha.ai.core.preferences.AppPreferences
 import com.racha.ai.ui.components.ModernPermissionCard
 
