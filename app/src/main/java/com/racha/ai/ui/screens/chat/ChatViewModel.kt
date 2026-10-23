@@ -1,12 +1,13 @@
 package com.racha.ai.ui.screens.chat
 
-import androidx.lifecycle.ViewModel
+import android.app.Application
+import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.racha.ai.core.apps.AppResolver
 import com.racha.ai.core.apps.IntentHandler
 import com.racha.ai.core.apps.PendingAction
 import com.racha.ai.core.contacts.ContactResolver
-import com.racha.ai.core.shizuku.ShizukuShellRunner
+import com.racha.ai.core.preferences.AppPreferences
 import com.racha.ai.data.api.GeminiService
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -31,13 +32,20 @@ data class ChatUiState(
     val pendingSpecialTool: String? = null
 )
 
-class ChatViewModel(
-    private val intentHandler: IntentHandler,
-    private val geminiService: GeminiService
-) : ViewModel() {
+class ChatViewModel(application: Application) : AndroidViewModel(application) {
+
+    private val context = application.applicationContext
+    private val appResolver = AppResolver(context)
+    private val contactResolver = ContactResolver(context)
+    private val intentHandler = IntentHandler(context, appResolver, contactResolver)
+    private val appPrefs = AppPreferences(context)
 
     private val _uiState = MutableStateFlow(ChatUiState())
     val uiState: StateFlow<ChatUiState> = _uiState.asStateFlow()
+
+    init {
+        _uiState.update { it.copy(hasApiKey = !appPrefs.getApiKey().isNullOrBlank()) }
+    }
 
     fun onInputChange(text: String) {
         _uiState.update { it.copy(inputText = text) }
@@ -97,12 +105,23 @@ class ChatViewModel(
 
     private suspend fun forwardToGemini(prompt: String) {
         try {
+            val apiKey = appPrefs.getApiKey()
+            if (apiKey.isNullOrBlank()) {
+                appendMessage(
+                    ChatMessage(
+                        text = "سيدي، لم تقم بإدخال مفتاح Gemini API بعد. يمكنك تعيينه من الإعدادات ⚙️.",
+                        isFromUser = false
+                    )
+                )
+                return
+            }
+            val geminiService = GeminiService(apiKey)
             val response = geminiService.generateResponse(prompt)
             appendMessage(ChatMessage(text = response, isFromUser = false))
         } catch (e: Exception) {
             appendMessage(
                 ChatMessage(
-                    text = "سيدي، يبدو أن هناك تعثراً في الاتصال بالخادم السحابي. يرجى التحقق من الشبكة.",
+                    text = "سيدي، يبدو أن هناك تعثراً في الاتصال بالخادم السحابي. يرجى التحقق من الشبكة ومفتاح API.",
                     isFromUser = false
                 )
             )
