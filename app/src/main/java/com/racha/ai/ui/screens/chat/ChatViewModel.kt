@@ -7,7 +7,7 @@ import com.racha.ai.core.apps.IntentHandler
 import com.racha.ai.core.apps.PendingAction
 import com.racha.ai.core.contacts.ContactResolver
 import com.racha.ai.core.shizuku.ShizukuShellRunner
-import com.racha.ai.data.gemini.GeminiService
+import com.racha.ai.data.api.GeminiService
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow

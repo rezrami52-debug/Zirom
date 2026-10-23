@@ -44,7 +44,7 @@ import com.racha.ai.R
 import com.racha.ai.core.tools.PhotoCaptureActivity
 import com.racha.ai.core.voice.VoiceInputHelper
 import com.racha.ai.data.repository.NotificationRepository
-import com.racha.ai.domain.model.Message
+
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.*
@@ -249,7 +249,7 @@ fun PrayerTimeItem(name: String, time: String, isDark: Boolean, glow: Color) {
 }
 
 @Composable
-fun MessageBubbleRacha(message: Message, isDark: Boolean, userColor: Color, aiColor: Color, textColor: Color, glow: Color) {
+fun MessageBubbleRacha(message: ChatMessage, isDark: Boolean, userColor: Color, aiColor: Color, textColor: Color, glow: Color) {
     val isUser = message.isFromUser
     Row(
         modifier = Modifier.fillMaxWidth(),

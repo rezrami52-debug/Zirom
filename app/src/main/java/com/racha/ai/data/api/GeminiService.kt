@@ -2,44 +2,33 @@ package com.racha.ai.data.api
 
 import com.google.ai.client.generativeai.GenerativeModel
 import com.google.ai.client.generativeai.type.content
-import com.racha.ai.data.local.ChatMessageEntity
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
 
 class GeminiService(private val apiKey: String) {
 
-    private val generativeModel = GenerativeModel(
-        modelName = "gemini-1.5-flash",
-        apiKey = apiKey
-    )
+    // شخصية JARVIS
+    private val jarvisSystemInstruction = """
+        You are J.A.R.V.I.S., the highly intelligent, witty, loyal, and sophisticated AI assistant from Iron Man.
+        Guidelines:
+        1. Address the user with respect as 'سيدي' (Sir) or Mr. Stark if appropriate, in a natural, polite, and calm tone.
+        2. Keep your answers concise, razor-sharp, and informative. Avoid unnecessary fluff.
+        3. Match the user's language: If they speak in Arabic, reply in polished, articulate Arabic with a touch of elegance.
+        4. If asked about system operations, speak as an integrated AI operating system.
+    """.trimIndent()
 
-    suspend fun sendMessageWithContext(
-        history: List<ChatMessageEntity>,
-        userMessage: String,
-        systemContext: String
-    ): Result<String> = withContext(Dispatchers.IO) {
-        try {
-            val chatHistory = history.map { entity ->
-                content(role = if (entity.isFromUser) "user" else "model") {
-                    text(entity.text)
-                }
-            }
+    private val generativeModel by lazy {
+        GenerativeModel(
+            modelName = "gemini-2.0-flash",
+            apiKey = apiKey,
+            systemInstruction = content { text(jarvisSystemInstruction) }
+        )
+    }
 
-            val chat = generativeModel.startChat(history = chatHistory)
-            val fullPrompt = "$systemContext\n\nالمستخدم: $userMessage"
-            
-            val response = chat.sendMessage(fullPrompt)
-            val textResponse = response.text
-
-            if (!textResponse.isNullOrBlank()) {
-                Result.success(textResponse)
-            } else {
-                Result.success("أهلاً بك يا سيدي، استلمت رسالتك ولكن الاستجابة كانت فارغة، كيف يمكنني مساعدتك أكثر؟")
-            }
+    suspend fun generateResponse(prompt: String): String {
+        return try {
+            val response = generativeModel.generateContent(prompt)
+            response.text ?: "سيدي، لم أتلقَ بيانات صالحة من المعالج."
         } catch (e: Exception) {
-            e.printStackTrace()
-            // إرجاع رد ودي بدلاً من انهيار الطلب
-            Result.success("أهلاً بك يا سيدي، أواجه ضغطاً طفيفاً في الاتصال بالشبكة، هل تود تنفيذ أمر محلي كفتح تطبيق أو أداة؟")
+            throw e
         }
     }
 }
