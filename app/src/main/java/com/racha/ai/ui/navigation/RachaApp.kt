@@ -57,12 +57,17 @@ fun RachaApp(
 
     var currentScreen by remember { mutableStateOf<Screen>(startScreen) }
 
+    // التحكم الذكي في الرجوع حسب الشاشة الحالية لمنع الإغلاق المفاجئ
     BackHandler(
         enabled = currentScreen !is Screen.Chat &&
                   currentScreen !is Screen.Onboarding &&
                   currentScreen !is Screen.BiometricLock
     ) {
-        currentScreen = Screen.Chat
+        currentScreen = when (currentScreen) {
+            is Screen.Customization -> Screen.Settings
+            is Screen.Profile, is Screen.FaceEnrollment, is Screen.SecurityLog -> Screen.Settings
+            else -> Screen.Chat
+        }
     }
 
     RachaAppContainer(themeManager = themeManager) {
@@ -86,7 +91,7 @@ fun RachaApp(
             )
 
             is Screen.Settings -> SettingsScreen(
-            themeManager = themeManager,
+                themeManager = themeManager,
                 onOpenCustomization = { currentScreen = Screen.Customization },
                 onBack = { currentScreen = Screen.Chat },
                 onOpenProfile = { currentScreen = Screen.Profile },

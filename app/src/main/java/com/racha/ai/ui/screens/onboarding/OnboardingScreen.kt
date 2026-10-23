@@ -3,7 +3,7 @@ package com.racha.ai.ui.screens.onboarding
 import android.Manifest
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
-import android.content.Context
+import android.widget.Toast
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -11,7 +11,6 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
@@ -23,10 +22,12 @@ import com.google.accompanist.permissions.isGranted
 import com.google.accompanist.permissions.rememberMultiplePermissionsState
 import com.google.accompanist.permissions.rememberPermissionState
 import com.racha.ai.core.permissions.PermissionHelper
-import com.racha.ai.core.shizuku.ShizukuPermissionGranter
-import android.widget.Toast
 import com.racha.ai.core.preferences.AppPreferences
+import com.racha.ai.core.shizuku.ShizukuPermissionGranter
 import com.racha.ai.ui.components.ModernPermissionCard
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalPermissionsApi::class)
 @Composable
@@ -35,6 +36,7 @@ fun OnboardingScreen(
     onOpenApiKeySettings: () -> Unit
 ) {
     val context = LocalContext.current
+    val scope = rememberCoroutineScope()
     val appPrefs = remember { AppPreferences(context) }
 
     val notificationPermission = rememberPermissionState(Manifest.permission.POST_NOTIFICATIONS)
@@ -44,6 +46,10 @@ fun OnboardingScreen(
     val contactPermissions = rememberMultiplePermissionsState(
         listOf(Manifest.permission.READ_CONTACTS)
     )
+
+    var isContactsGranted by remember {
+        mutableStateOf(contactPermissions.allPermissionsGranted)
+    }
 
     Scaffold(
         topBar = {
@@ -96,19 +102,37 @@ fun OnboardingScreen(
                 icon = { Icon(Icons.Filled.Place, null, tint = Color(0xFF00E5FF)) }
             )
 
-            // 3. جهات الاتصال
+            // 3. جهات الاتصال (عبر Shizuku أولاً، مع بديل النظام)
             val contactLauncher = rememberLauncherForActivityResult(
                 contract = ActivityResultContracts.RequestMultiplePermissions()
             ) { permissions ->
-                // يمكن إضافة منطق هنا إذا لزم الأمر
+                if (permissions[Manifest.permission.READ_CONTACTS] == true) {
+                    isContactsGranted = true
+                    Toast.makeText(context, "✅ تم تفعيل إذن جهات الاتصال", Toast.LENGTH_SHORT).show()
+                }
             }
+
             ModernPermissionCard(
                 title = "جهات الاتصال",
                 description = "للبحث عن الأسماء والاتصال بهم عبر Racha",
-                isGranted = contactPermissions.allPermissionsGranted,
+                isGranted = isContactsGranted,
                 onActionClick = {
-                    if (!contactPermissions.allPermissionsGranted) {
-                        contactLauncher.launch(arrayOf(Manifest.permission.READ_CONTACTS))
+                    if (!isContactsGranted) {
+                        scope.launch(Dispatchers.IO) {
+                            val grantedViaShizuku = ShizukuPermissionGranter.grantPermission(
+                                context.packageName,
+                                Manifest.permission.READ_CONTACTS
+                            )
+                            withContext(Dispatchers.Main) {
+                                if (grantedViaShizuku) {
+                                    isContactsGranted = true
+                                    Toast.makeText(context, "⚡ تم تفعيل جهات الاتصال عبر Shizuku بنجاح", Toast.LENGTH_SHORT).show()
+                                } else {
+                                    // إذا لم يكن Shizuku متاحاً، نطلب إذن النظام العادي
+                                    contactLauncher.launch(arrayOf(Manifest.permission.READ_CONTACTS))
+                                }
+                            }
+                        }
                     }
                 },
                 icon = { Icon(Icons.Filled.Person, null, tint = Color(0xFF00E5FF)) }
