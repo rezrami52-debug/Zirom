@@ -72,10 +72,9 @@ class EveBubbleService : Service() {
             setContent {
                 val state = EveState.uiState.collectAsState().value
                 EveBubbleContent(
-                    uiState = state,
-                    onDrag = { dx, dy -> updatePosition(dx, dy) },
+                    isProcessing = EveState.status.collectAsState().value == EveStatus.THINKING,
                     onClick = { handleEveClick() },
-                    onCloseClick = { stopSelf() }
+                    onDismiss = { stopSelf() }
                 )
             }
         }
