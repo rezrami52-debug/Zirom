@@ -12,6 +12,7 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.core.content.ContextCompat
+import com.racha.ai.core.proactive.ProactiveScheduler
 import com.racha.ai.ui.navigation.RachaApp
 import com.racha.ai.ui.theme.RachaTheme
 
@@ -23,7 +24,7 @@ class MainActivity : ComponentActivity() {
         if (isGranted) {
             Toast.makeText(this, "✅ تم تفعيل الإشعارات", Toast.LENGTH_SHORT).show()
         } else {
-            Toast.makeText(this, "⚠️ الإشعارات معطلة. قد لا تعمل الفقاعة.", Toast.LENGTH_LONG).show()
+            Toast.makeText(this, "⚠️ الإشعارات معطلة. قد لا تعمل الاستباقية أو الفقاعة.", Toast.LENGTH_LONG).show()
         }
     }
 
@@ -38,8 +39,10 @@ class MainActivity : ComponentActivity() {
             }
         }
 
-        // التحقق من إذن Overlay (بدون طلب تلقائي)
         checkOverlayPermission()
+
+        // 🚀 تفعيل مراقبة الإنترنت والعمل الاستباقي لـ JARVIS
+        ProactiveScheduler.scheduleNewsWorker(this)
 
         setContent {
             RachaTheme {
@@ -51,7 +54,7 @@ class MainActivity : ComponentActivity() {
     private fun checkOverlayPermission() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
             if (!Settings.canDrawOverlays(this)) {
-                // طلب الإذن عند الحاجة (للاستخدام المستقبلي)
+                // متاح للمستقبل
             }
         }
     }

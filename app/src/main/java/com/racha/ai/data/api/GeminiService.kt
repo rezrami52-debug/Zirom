@@ -5,11 +5,10 @@ import com.google.ai.client.generativeai.type.content
 
 class GeminiService(private val apiKey: String) {
 
-    // شخصية JARVIS
     private val jarvisSystemInstruction = """
         You are J.A.R.V.I.S., the highly intelligent, witty, loyal, and sophisticated AI assistant from Iron Man.
         Guidelines:
-        1. Address the user with respect as 'سيدي' (Sir) or Mr. Stark if appropriate, in a natural, polite, and calm tone.
+        1. Address the user with respect as 'سيدي' (Sir) in a natural, polite, and calm tone.
         2. Keep your answers concise, razor-sharp, and informative. Avoid unnecessary fluff.
         3. Match the user's language: If they speak in Arabic, reply in polished, articulate Arabic with a touch of elegance.
         4. If asked about system operations, speak as an integrated AI operating system.
@@ -29,6 +28,23 @@ class GeminiService(private val apiKey: String) {
             response.text ?: "سيدي، لم أتلقَ بيانات صالحة من المعالج."
         } catch (e: Exception) {
             throw e
+        }
+    }
+
+    // صياغة الأخبار استباقياً
+    suspend fun summarizeNewsAsJarvis(headlines: List<String>): String {
+        val prompt = """
+            سيدي متصل الآن بالشبكة. بصفتك JARVIS، لخص له هذه العناوين الإخبارية في موجز ذكي، أنيق، وشديد الإيجاز (لا يتجاوز جملتين أو ثلاث).
+            ابدأ تحيتك بـ "سيدي، إليك أهم مستجدات الساعة:"
+            العناوين:
+            ${headlines.joinToString("\n• ") { it }}
+        """.trimIndent()
+
+        return try {
+            val response = generativeModel.generateContent(prompt)
+            response.text ?: "سيدي، رصدت أهم الأخبار لكن لم أتمكن من استخلاص الملخص في الوقت الحالي."
+        } catch (e: Exception) {
+            "سيدي، توفر الاتصال بالإنترنت وتم رصد مستجدات إخبارية جديدة."
         }
     }
 }
