@@ -41,7 +41,20 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
     private val intentHandler = IntentHandler(application, appResolver, contactResolver)
 
     init {
-        _uiState.update { it.copy(hasApiKey = !securePrefs.getApiKey().isNullOrBlank()) }
+        // تبدأ الواجهة دائماً بجلسة جديدة ونظيفة
+        _uiState.update { 
+            it.copy(
+                messages = emptyList(),
+                hasApiKey = !securePrefs.getApiKey().isNullOrBlank()
+            ) 
+        }
+    }
+
+    /**
+     * بدء محادثة جديدة وتصفير الشاشة
+     */
+    fun startNewChat() {
+        _uiState.update { it.copy(messages = emptyList(), inputText = "") }
     }
 
     fun onInputChange(newText: String) {
@@ -91,7 +104,6 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                         _uiState.update { it.copy(isLoading = false) }
                     }
                     is IntentHandler.HandlerResult.Unknown -> {
-                        // البحث عبر محرك الويب المدمج والاستغناء التام عن أخطاء السحابة
                         handleWebAndSmartQuery(trimmed)
                     }
                 }
@@ -104,11 +116,9 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
 
     private suspend fun handleWebAndSmartQuery(query: String) {
         try {
-            // محاولة الفحص المحلي والبحث بالويب أولاً
             val webResponse = WebSearchEngine.searchWeb(query)
             appendMessage(ChatMessage(text = webResponse, isFromUser = false))
         } catch (e: Exception) {
-            // كحل بديل أخير في حال توفر مفتاح Gemini
             val apiKey = securePrefs.getApiKey()
             if (!apiKey.isNullOrBlank()) {
                 try {
@@ -116,10 +126,10 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                     val response = geminiService.generateResponse(query)
                     appendMessage(ChatMessage(text = response, isFromUser = false))
                 } catch (e2: Exception) {
-                    appendMessage(ChatMessage(text = "سيدي، بحثت عن طلبك، ولكن يبدو أن هناك مشكلة مؤقتة في الاتصال.", isFromUser = false))
+                    appendMessage(ChatMessage(text = "سيدي، تعذر جلب تفاصيل إضافية في الوقت الحالي.", isFromUser = false))
                 }
             } else {
-                appendMessage(ChatMessage(text = "سيدي، استلمت سؤالك عن: '$query'، وسأتابع البحث لك بشأنه.", isFromUser = false))
+                appendMessage(ChatMessage(text = "سيدي، تلقيت استفسارك وسأساعدك فيه فور توفر المعطيات.", isFromUser = false))
             }
         } finally {
             _uiState.update { it.copy(isLoading = false) }

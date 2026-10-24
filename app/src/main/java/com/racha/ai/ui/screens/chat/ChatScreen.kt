@@ -9,7 +9,6 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
-import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.isSystemInDarkTheme
@@ -48,13 +47,14 @@ import com.racha.ai.core.voice.VoiceInputHelper
 import com.racha.ai.data.repository.NotificationRepository
 import kotlinx.coroutines.launch
 
-@OptIn(ExperimentalMaterial3Api::class, ExperimentalPermissionsApi::class, ExperimentalLayoutApi::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalPermissionsApi::class)
 @Composable
 fun ChatScreen(
     onOpenSettings: () -> Unit = {},
     onOpenNotifications: () -> Unit = {},
     onOpenPrayer: () -> Unit = {},
     onOpenRoutine: () -> Unit = {},
+    onOpenHistory: () -> Unit = {},
     viewModel: ChatViewModel = viewModel(),
     weatherViewModel: WeatherViewModel = viewModel()
 ) {
@@ -81,9 +81,6 @@ fun ChatScreen(
         listOf(primaryGlow.copy(alpha = 0.6f), Color.White.copy(alpha = 0.1f))
     )
 
-    // رصد ظهور لوحة المفاتيح لضبط الواجهة
-    val isKeyboardOpen = WindowInsets.isImeVisible
-
     val cameraLauncher = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
         if (result.resultCode == android.app.Activity.RESULT_OK) viewModel.onSpecialToolCompleted(true, "📸 تم حفظ الصورة")
         else viewModel.onSpecialToolCancelled()
@@ -96,75 +93,143 @@ fun ChatScreen(
         if (state.messages.isNotEmpty()) listState.animateScrollToItem(state.messages.size - 1)
     }
 
-    Box(
+    Column(
         modifier = Modifier
             .fillMaxSize()
-            .imePadding() // يرفع الشاشة كاملة فوق الكيبورد بدون تداخل
+            .imePadding()
+            .navigationBarsPadding()
     ) {
-        Column(modifier = Modifier.fillMaxSize()) {
-            
-            // 1. أزرار EVE العلوية
-            QuickActionBarRacha(primaryGlow)
+        // 1. أزرار EVE العلوية
+        QuickActionBarRacha(primaryGlow)
 
-            // 2. شريط Racha AI
-            TopBarRacha(primaryGlow)
+        // 2. الهيدر العلوي مع زري المحادثات السابقة والجديدة
+        TopBarRacha(
+            glow = primaryGlow,
+            onOpenHistory = onOpenHistory,
+            onNewChat = { viewModel.startNewChat() }
+        )
 
-            // 3. بطاقة الطقس والصلوات (تختفي مؤقتاً عند الكتابة لتوفير مساحة للرسائل)
-            val currentWeather = weatherState.weather
-            if (currentWeather != null && !isKeyboardOpen) {
-                WeatherCardRacha(currentWeather, cardBackground, cardBorder, primaryGlow)
+        // 3. بطاقة الطقس ومواقيت الصلاة (تظهر بثبات دائماً)
+        val currentWeather = weatherState.weather
+        if (currentWeather != null) {
+            WeatherCardRacha(currentWeather, cardBackground, cardBorder, primaryGlow)
+        }
+
+        // 4. منطقة الرسائل
+        LazyColumn(
+            state = listState,
+            modifier = Modifier
+                .weight(1f)
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            items(state.messages) { msg ->
+                MessageBubbleRacha(msg, isDarkTheme, userBubbleColor, aiBubbleColor, primaryGlow)
             }
+        }
 
-            // 4. منطقة الرسائل
-            LazyColumn(
-                state = listState,
-                modifier = Modifier
-                    .weight(1f)
-                    .fillMaxWidth()
-                    .padding(horizontal = 16.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                items(state.messages) { msg ->
-                    MessageBubbleRacha(msg, isDarkTheme, userBubbleColor, aiBubbleColor, primaryGlow)
+        // 5. حقل الإدخال
+        InputBarRacha(
+            text = state.inputText,
+            onValueChange = viewModel::onInputChange,
+            onSend = {
+                if (state.inputText.isNotBlank()) viewModel.sendMessage()
+                else if (micPermission.status.isGranted) {
+                    isListening = true
+                    voiceHelper.startListening(
+                        onResult = { viewModel.onInputChange(it); isListening = false },
+                        onError = { isListening = false }
+                    )
+                } else {
+                    micPermission.launchPermissionRequest()
+                }
+            },
+            isListening = isListening,
+            isDark = isDarkTheme,
+            glow = primaryGlow
+        )
+
+        // 6. الشريط السفلي العائم (يظهر دائماً بثبات)
+        BottomNavRacha(
+            glow = primaryGlow,
+            unreadCount = unreadCount,
+            onOpenPrayer = onOpenPrayer,
+            onOpenNotifications = onOpenNotifications,
+            onOpenSettings = onOpenSettings
+        )
+    }
+}
+
+// ---------------- المكونات المحدثة ----------------
+
+@Composable
+fun TopBarRacha(
+    glow: Color,
+    onOpenHistory: () -> Unit,
+    onNewChat: () -> Unit
+) {
+    Surface(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 2.dp),
+        shape = RoundedCornerShape(20.dp),
+        color = Color(0xFF0F172A).copy(alpha = 0.75f),
+        border = BorderStroke(1.dp, Brush.horizontalGradient(listOf(glow.copy(alpha = 0.5f), Color.White.copy(alpha = 0.1f))))
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 12.dp, vertical = 6.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Box(
+                    modifier = Modifier
+                        .size(36.dp)
+                        .clip(CircleShape)
+                        .background(Brush.radialGradient(listOf(glow.copy(alpha = 0.35f), Color.Transparent)))
+                        .border(2.dp, glow, CircleShape),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Image(
+                        painter = painterResource(id = R.drawable.ic_racha_avatar),
+                        contentDescription = "EVE Avatar",
+                        modifier = Modifier.fillMaxSize().padding(3.dp),
+                        contentScale = ContentScale.Crop
+                    )
+                }
+                Spacer(modifier = Modifier.width(10.dp))
+                Column {
+                    Text("Racha AI", color = Color.White, fontSize = 17.sp, fontWeight = FontWeight.ExtraBold)
+                    Text("المساعد التكتيكي النشط", color = glow.copy(alpha = 0.85f), fontSize = 10.sp)
                 }
             }
 
-            // 5. حقل الإدخال الذكي (فوق لوحة المفاتيح مباشرة)
-            InputBarRacha(
-                text = state.inputText,
-                onValueChange = viewModel::onInputChange,
-                onSend = {
-                    if (state.inputText.isNotBlank()) viewModel.sendMessage()
-                    else if (micPermission.status.isGranted) {
-                        isListening = true
-                        voiceHelper.startListening(
-                            onResult = { viewModel.onInputChange(it); isListening = false },
-                            onError = { isListening = false }
-                        )
-                    } else {
-                        micPermission.launchPermissionRequest()
-                    }
-                },
-                isListening = isListening,
-                isDark = isDarkTheme,
-                glow = primaryGlow
-            )
+            // أزرار التحكم بالمحادثات
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                // زر محادثة جديدة
+                IconButton(
+                    onClick = onNewChat,
+                    modifier = Modifier.size(36.dp)
+                ) {
+                    Icon(Icons.Default.Add, contentDescription = "محادثة جديدة", tint = glow)
+                }
 
-            // 6. شريط التنقل السفلي العائم (يختفي فقط أثناء ظهور الكيبورد حتى لا يحجب الرؤية)
-            if (!isKeyboardOpen) {
-                BottomNavRacha(
-                    glow = primaryGlow,
-                    unreadCount = unreadCount,
-                    onOpenPrayer = onOpenPrayer,
-                    onOpenNotifications = onOpenNotifications,
-                    onOpenSettings = onOpenSettings
-                )
+                Spacer(modifier = Modifier.width(4.dp))
+
+                // زر سجل المحادثات السابقة
+                IconButton(
+                    onClick = onOpenHistory,
+                    modifier = Modifier.size(36.dp)
+                ) {
+                    Icon(Icons.Default.History, contentDescription = "المحادثات السابقة", tint = Color.White)
+                }
             }
         }
     }
 }
-
-// ---------------- باقي المكونات المصممة ----------------
 
 @Composable
 fun QuickActionBarRacha(glow: Color) {
@@ -210,46 +275,6 @@ fun QuickActionButton(text: String, glow: Color, onClick: () -> Unit) {
     ) {
         Box(contentAlignment = Alignment.Center, modifier = Modifier.padding(horizontal = 10.dp)) {
             Text(text, fontSize = 11.sp, fontWeight = FontWeight.SemiBold, color = glow)
-        }
-    }
-}
-
-@Composable
-fun TopBarRacha(glow: Color) {
-    Surface(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 2.dp),
-        shape = RoundedCornerShape(20.dp),
-        color = Color(0xFF0F172A).copy(alpha = 0.75f),
-        border = BorderStroke(1.dp, Brush.horizontalGradient(listOf(glow.copy(alpha = 0.5f), Color.White.copy(alpha = 0.1f))))
-    ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 16.dp, vertical = 8.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Box(
-                modifier = Modifier
-                    .size(38.dp)
-                    .clip(CircleShape)
-                    .background(Brush.radialGradient(listOf(glow.copy(alpha = 0.35f), Color.Transparent)))
-                    .border(2.dp, glow, CircleShape),
-                contentAlignment = Alignment.Center
-            ) {
-                Image(
-                    painter = painterResource(id = R.drawable.ic_racha_avatar),
-                    contentDescription = "EVE Avatar",
-                    modifier = Modifier.fillMaxSize().padding(3.dp),
-                    contentScale = ContentScale.Crop
-                )
-            }
-            Spacer(modifier = Modifier.width(12.dp))
-            Column {
-                Text("Racha AI", color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.ExtraBold)
-                Text("المساعد التكتيكي النشط", color = glow.copy(alpha = 0.85f), fontSize = 10.sp)
-            }
         }
     }
 }
@@ -425,7 +450,7 @@ fun BottomNavRacha(
     Surface(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 24.dp, vertical = 8.dp),
+            .padding(horizontal = 24.dp, vertical = 6.dp),
         shape = RoundedCornerShape(26.dp),
         color = Color(0xFF0F172A).copy(alpha = 0.92f),
         border = BorderStroke(1.dp, Brush.horizontalGradient(listOf(Color.White.copy(alpha = 0.15f), glow.copy(alpha = 0.4f), Color.White.copy(alpha = 0.15f)))),
