@@ -10,6 +10,7 @@ import android.graphics.PixelFormat
 import android.os.Build
 import android.os.IBinder
 import android.speech.tts.TextToSpeech
+import android.speech.tts.UtteranceProgressListener
 import android.speech.tts.Voice
 import java.util.Locale
 import android.view.Gravity
@@ -17,6 +18,7 @@ import android.view.WindowManager
 import androidx.compose.ui.platform.ComposeView
 import androidx.core.app.NotificationCompat
 import com.racha.ai.core.overlay.OverlayLifecycleOwner
+import com.racha.ai.core.voice.VoiceInputHelper
 import kotlinx.coroutines.*
 
 class EveBubbleService : Service() {
@@ -30,26 +32,26 @@ class EveBubbleService : Service() {
     private var screenObserverJob: Job? = null
     private var lastSpokenContentHash: Int = 0
 
+    // حلقة الإشعارات الذكية
+    private var pendingNotificationJob: Job? = null
+    private var currentNotifKey: String? = null
+    private var voiceInputHelper: VoiceInputHelper? = null
+
     override fun onBind(intent: Intent?): IBinder? = null
 
     override fun onCreate() {
         super.onCreate()
         windowManager = getSystemService(Context.WINDOW_SERVICE) as WindowManager
+        voiceInputHelper = VoiceInputHelper(this)
         startForegroundServiceNotification()
         setupHighQualityArabicTts()
         setupFloatingBubble()
     }
 
-    /**
-     * إعداد صوت عربي أنثوي فائق الجودة متناسق مع شخصية EVE
-     */
     private fun setupHighQualityArabicTts() {
         tts = TextToSpeech(this) { status ->
             if (status == TextToSpeech.SUCCESS) {
-                val arabicLocale = Locale("ar")
-                tts?.language = arabicLocale
-
-                // محاولة اختيار أفضل صوت عربي متاح في نظام الهاتف
+                tts?.language = Locale("ar")
                 try {
                     val highQualityVoice = tts?.voices?.firstOrNull { voice ->
                         voice.locale.language == "ar" && 
@@ -63,34 +65,103 @@ class EveBubbleService : Service() {
                     e.printStackTrace()
                 }
 
-                // ضبط نبرة الصوت وسرعته ليصبح ناعماً كصوت EVE وليس صوت آلة خشن
-                tts?.setPitch(1.08f)      // نبرة أنثوية أرق قليلاً
-                tts?.setSpeechRate(0.92f) // سرعة هادئة ومتزنة تمنع التلعثم في مخارج الحروف
+                tts?.setPitch(1.08f)
+                tts?.setSpeechRate(0.92f)
+
+                // رصد انتهاء نطق الإشعار لفتح الميكروفون فوراً
+                tts?.setOnUtteranceProgressListener(object : UtteranceProgressListener() {
+                    override fun onStart(utteranceId: String?) {}
+                    override fun onDone(utteranceId: String?) {
+                        if (utteranceId == UTTERANCE_NOTIF_READ) {
+                            serviceScope.launch(Dispatchers.Main) {
+                                listenForDismissCommand()
+                            }
+                        }
+                    }
+                    override fun onError(utteranceId: String?) {}
+                })
             }
         }
     }
 
-    /**
-     * تنظيف النص العربي من الإيموجي والرموز قبل النطق لتفادي التلعثم
-     */
-    private fun speakCleanText(text: String, queueMode: Int = TextToSpeech.QUEUE_FLUSH) {
+    private fun speakCleanText(text: String, utteranceId: String = "EVE_SPEECH_${System.currentTimeMillis()}", queueMode: Int = TextToSpeech.QUEUE_FLUSH) {
         val clean = text
-            .replace(Regex("[\\p{So}\\p{Cn}]"), "") // إزالة كل الإيموجي والرموز
-            .replace(Regex("[\\*\\_\\#\\`\\~]"), "") // إزالة علامات Markdown
+            .replace(Regex("[\\p{So}\\p{Cn}]"), "")
+            .replace(Regex("[\\*\\_\\#\\`\\~]"), "")
             .replace("  ", " ")
             .trim()
 
         if (clean.isNotBlank()) {
-            tts?.speak(clean, queueMode, null, "EVE_SPEECH_${System.currentTimeMillis()}")
+            tts?.speak(clean, queueMode, null, utteranceId)
         }
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         when (intent?.action) {
-            ACTION_TRIGGER_NOTIFICATION_PULSE -> EveState.addNotification()
+            ACTION_NEW_NOTIFICATION -> {
+                val speechText = intent.getStringExtra(EXTRA_SPEECH_TEXT) ?: ""
+                val notifKey = intent.getStringExtra(EXTRA_NOTIF_KEY)
+                handleNewNotification(speechText, notifKey)
+            }
+            ACTION_CANCEL_NOTIFICATION -> {
+                val notifKey = intent.getStringExtra(EXTRA_NOTIF_KEY)
+                handleCancelNotification(notifKey)
+            }
             ACTION_STOP_SERVICE -> stopSelf()
         }
         return START_STICKY
+    }
+
+    /**
+     * استقبال الإشعار: وميض + عداد 15 ثانية
+     */
+    private fun handleNewNotification(speechText: String, notifKey: String?) {
+        currentNotifKey = notifKey
+        EveState.addNotification() // تفعيل وميض EVE التنبيهي
+
+        pendingNotificationJob?.cancel()
+        pendingNotificationJob = serviceScope.launch(Dispatchers.Main) {
+            // انتظار 15 ثانية لإعطاء المستخدم فرصة قراءته بنفسه
+            delay(15000)
+
+            // إن لم يمسحه المستخدم، تقرأه EVE بصوتها
+            speakCleanText("سيدي، وصلك إشعار: $speechText", utteranceId = UTTERANCE_NOTIF_READ)
+        }
+    }
+
+    /**
+     * إلغاء التنبيه إذا مسح المستخدم الإشعار بنفسه
+     */
+    private fun handleCancelNotification(notifKey: String?) {
+        if (notifKey == null || notifKey == currentNotifKey) {
+            pendingNotificationJob?.cancel()
+            pendingNotificationJob = null
+            currentNotifKey = null
+            voiceInputHelper?.stopListening()
+            EveState.clearNotifications()
+        }
+    }
+
+    /**
+     * الاستماع الذكي لكلمة "تجاهلي"
+     */
+    private fun listenForDismissCommand() {
+        voiceInputHelper?.startListening(
+            languageTag = "ar-TN",
+            onResult = { spokenText ->
+                val lower = spokenText.lowercase()
+                if (lower.contains("تجاهل") || lower.contains("تجاهلي") || lower.contains("بعدين") || lower.contains("لاحق") || lower.contains("اسكت")) {
+                    speakCleanText("تم التجاهل سيدي")
+                    EveState.clearNotifications()
+                } else {
+                    EveState.clearNotifications()
+                }
+            },
+            onError = {
+                // في حالة الصمت أو عدم التقاط كلام يعود السبات بهدوء
+                EveState.clearNotifications()
+            }
+        )
     }
 
     private fun setupFloatingBubble() {
@@ -171,7 +242,7 @@ class EveBubbleService : Service() {
                         val smartInsight = LocalScreenAnalyzer.analyze(snapshot)
 
                         withContext(Dispatchers.Main) {
-                            speakCleanText(smartInsight, TextToSpeech.QUEUE_ADD)
+                            speakCleanText(smartInsight)
                         }
 
                         delay(18000)
@@ -224,6 +295,8 @@ class EveBubbleService : Service() {
     override fun onDestroy() {
         super.onDestroy()
         stopContinuousScreenObservation()
+        pendingNotificationJob?.cancel()
+        voiceInputHelper?.destroy()
         tts?.stop()
         tts?.shutdown()
         overlayLifecycleOwner.handleDestroy()
@@ -233,7 +306,13 @@ class EveBubbleService : Service() {
     }
 
     companion object {
-        const val ACTION_TRIGGER_NOTIFICATION_PULSE = "ACTION_TRIGGER_NOTIFICATION_PULSE"
+        const val ACTION_NEW_NOTIFICATION = "ACTION_NEW_NOTIFICATION"
+        const val ACTION_CANCEL_NOTIFICATION = "ACTION_CANCEL_NOTIFICATION"
         const val ACTION_STOP_SERVICE = "ACTION_STOP_SERVICE"
+
+        const val EXTRA_SPEECH_TEXT = "EXTRA_SPEECH_TEXT"
+        const val EXTRA_NOTIF_KEY = "EXTRA_NOTIF_KEY"
+
+        private const val UTTERANCE_NOTIF_READ = "UTTERANCE_NOTIF_READ"
     }
 }

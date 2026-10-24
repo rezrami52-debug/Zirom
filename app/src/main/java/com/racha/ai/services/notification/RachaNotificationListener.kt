@@ -1,12 +1,13 @@
 package com.racha.ai.services.notification
 
 import android.app.Notification
+import android.content.Intent
 import android.service.notification.NotificationListenerService
 import android.service.notification.StatusBarNotification
 import android.util.Log
+import com.racha.ai.core.eve.EveBubbleService
 import com.racha.ai.data.repository.NotificationRepository
 import com.racha.ai.domain.model.AppNotification
-import com.racha.ai.services.tts.TextToSpeechHelper
 
 class RachaNotificationListener : NotificationListenerService() {
 
@@ -14,30 +15,22 @@ class RachaNotificationListener : NotificationListenerService() {
         private const val TAG = "RachaNotif"
     }
 
-    override fun onCreate() {
-        super.onCreate()
-        TextToSpeechHelper.initialize(applicationContext)
-    }
-
     override fun onNotificationPosted(sbn: StatusBarNotification?) {
         sbn ?: return
 
-        // تجاهل إشعاراتنا
+        // تجاهل إشعارات تطبيقنا
         if (sbn.packageName == packageName) return
 
-        // تجاهل الإشعارات الصامتة (مثل تشغيل الموسيقى)
+        // تجاهل الإشعارات المستمرة (مثل مشغلات الوسائط وعدادات التحميل)
         val notification = sbn.notification ?: return
         if (notification.flags and Notification.FLAG_ONGOING_EVENT != 0) return
 
         val extras = notification.extras ?: return
-
         val title = extras.getCharSequence(Notification.EXTRA_TITLE)?.toString() ?: ""
         val text = extras.getCharSequence(Notification.EXTRA_TEXT)?.toString() ?: ""
 
-        // تجاهل الإشعارات الفارغة
         if (title.isBlank() && text.isBlank()) return
 
-        // اسم التطبيق
         val appName = try {
             val appInfo = packageManager.getApplicationInfo(sbn.packageName, 0)
             packageManager.getApplicationLabel(appInfo).toString()
@@ -45,12 +38,7 @@ class RachaNotificationListener : NotificationListenerService() {
             sbn.packageName
         }
 
-        // تجاهل التطبيقات التي لا تهمّ (اختياري - يمكن تعديله لاحقاً)
-        val ignoredApps = setOf(
-            "com.android.systemui",
-            "android",
-            "com.miui.systemui"
-        )
+        val ignoredApps = setOf("com.android.systemui", "android", "com.miui.systemui")
         if (sbn.packageName in ignoredApps) return
 
         val appNotification = AppNotification(
@@ -61,27 +49,43 @@ class RachaNotificationListener : NotificationListenerService() {
             timestamp = sbn.postTime
         )
 
-        // 1. حفظ في Repository
+        // 1. حفظ في المستودع
         NotificationRepository.add(appNotification)
 
-        // 2. قراءة بصوت
+        // 2. بناء النص الصوتي
         val speechText = buildSpeechText(appName, title, text)
-        Log.d(TAG, "🔊 قراءة: $speechText")
-        TextToSpeechHelper.speak(speechText)
+        Log.d(TAG, "إرسال إشعار لـ EVE: $speechText")
+
+        // 3. إرسال أمر التنبيه الذكي لـ EVE
+        val eveIntent = Intent(this, EveBubbleService::class.java).apply {
+            action = EveBubbleService.ACTION_NEW_NOTIFICATION
+            putExtra(EveBubbleService.EXTRA_SPEECH_TEXT, speechText)
+            putExtra(EveBubbleService.EXTRA_NOTIF_KEY, sbn.key)
+        }
+        try {
+            startService(eveIntent)
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
     }
 
     override fun onNotificationRemoved(sbn: StatusBarNotification?) {
-        // لا نفعل شيئاً حالياً
+        sbn ?: return
+        // إذا قام المستخدم بمسح الإشعار يدوياً، نلغي تنبيه EVE
+        val cancelIntent = Intent(this, EveBubbleService::class.java).apply {
+            action = EveBubbleService.ACTION_CANCEL_NOTIFICATION
+            putExtra(EveBubbleService.EXTRA_NOTIF_KEY, sbn.key)
+        }
+        try {
+            startService(cancelIntent)
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
     }
 
-    /**
-     * بناء النص الصوتي للإشعار.
-     * التنسيق: "من [التطبيق]: [العنوان]. [النص]"
-     */
     private fun buildSpeechText(appName: String, title: String, text: String): String {
         val parts = mutableListOf<String>()
 
-        // اسم التطبيق (نترجم الأشهر)
         val localizedApp = when (appName.lowercase()) {
             "whatsapp" -> "واتساب"
             "telegram" -> "تيليجرام"
@@ -105,10 +109,5 @@ class RachaNotificationListener : NotificationListenerService() {
         }
 
         return parts.joinToString(". ")
-    }
-
-    override fun onDestroy() {
-        super.onDestroy()
-        // لا نُغلق TTS هنا - لأن Singleton يُستخدم في مكان آخر
     }
 }
