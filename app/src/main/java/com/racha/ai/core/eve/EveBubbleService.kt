@@ -16,6 +16,13 @@ import android.view.WindowManager
 import androidx.compose.ui.platform.ComposeView
 import androidx.core.app.NotificationCompat
 import com.racha.ai.core.overlay.OverlayLifecycleOwner
+import com.racha.ai.core.security.SecurePreferences
+import com.racha.ai.data.api.GeminiService
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 class EveBubbleService : Service() {
 
@@ -24,6 +31,7 @@ class EveBubbleService : Service() {
     private val overlayLifecycleOwner = OverlayLifecycleOwner()
     private lateinit var layoutParams: WindowManager.LayoutParams
     private var tts: TextToSpeech? = null
+    private val serviceScope = CoroutineScope(Dispatchers.Main + Job())
 
     override fun onBind(intent: Intent?): IBinder? = null
 
@@ -73,7 +81,9 @@ class EveBubbleService : Service() {
                 EveBubbleContent(
                     onToggleSleepWake = { isAwake ->
                         if (isAwake) {
-                            tts?.speak("أنا معك سيدي، جاهزة لمساعدتك", TextToSpeech.QUEUE_FLUSH, null, null)
+                            inspectScreenAndSpeak()
+                        } else {
+                            tts?.speak("في وضع السبات سيدي", TextToSpeech.QUEUE_FLUSH, null, null)
                         }
                     },
                     onOpenApp = { handleEveClick() },
@@ -95,6 +105,40 @@ class EveBubbleService : Service() {
         } catch (e: Exception) {
             e.printStackTrace()
             stopSelf()
+        }
+    }
+
+    /**
+     * فحص محتوى الشاشة وصياغة مبادرة صوتية ذكية
+     */
+    private fun inspectScreenAndSpeak() {
+        val accessibility = EveAccessibilityService.instance
+        if (accessibility == null) {
+            tts?.speak("سيدي، يرجى تفعيل إمكانية الوصول لـ Racha في الإعدادات لأتمكن من قراءة الشاشة معك", TextToSpeech.QUEUE_FLUSH, null, null)
+            return
+        }
+
+        tts?.speak("أنا معك، ألقي نظرة على شاشتك...", TextToSpeech.QUEUE_FLUSH, null, null)
+
+        serviceScope.launch(Dispatchers.IO) {
+            val snapshot = accessibility.captureCurrentScreen()
+            val securePrefs = SecurePreferences(this@EveBubbleService)
+            val apiKey = securePrefs.getApiKey()
+
+            if (apiKey.isNullOrBlank()) {
+                withContext(Dispatchers.Main) {
+                    tts?.speak("سيدي، يرجى تعيين مفتاح Gemini API في الإعدادات أولاً", TextToSpeech.QUEUE_FLUSH, null, null)
+                }
+                return@launch
+            }
+
+            if (snapshot != null && snapshot.visibleText.isNotBlank()) {
+                val gemini = GeminiService(apiKey)
+                val aiResponse = gemini.analyzeScreenContext(snapshot.appName, snapshot.visibleText)
+                withContext(Dispatchers.Main) {
+                    tts?.speak(aiResponse, TextToSpeech.QUEUE_FLUSH, null, null)
+                }
+            }
         }
     }
 
