@@ -10,6 +10,7 @@ import android.graphics.PixelFormat
 import android.os.Build
 import android.os.IBinder
 import android.speech.tts.TextToSpeech
+import android.speech.tts.Voice
 import java.util.Locale
 import android.view.Gravity
 import android.view.WindowManager
@@ -35,12 +36,53 @@ class EveBubbleService : Service() {
         super.onCreate()
         windowManager = getSystemService(Context.WINDOW_SERVICE) as WindowManager
         startForegroundServiceNotification()
+        setupHighQualityArabicTts()
+        setupFloatingBubble()
+    }
+
+    /**
+     * إعداد صوت عربي أنثوي فائق الجودة متناسق مع شخصية EVE
+     */
+    private fun setupHighQualityArabicTts() {
         tts = TextToSpeech(this) { status ->
             if (status == TextToSpeech.SUCCESS) {
-                tts?.language = Locale("ar")
+                val arabicLocale = Locale("ar")
+                tts?.language = arabicLocale
+
+                // محاولة اختيار أفضل صوت عربي متاح في نظام الهاتف
+                try {
+                    val highQualityVoice = tts?.voices?.firstOrNull { voice ->
+                        voice.locale.language == "ar" && 
+                        !voice.isNetworkConnectionRequired &&
+                        (voice.quality == Voice.QUALITY_VERY_HIGH || voice.quality == Voice.QUALITY_HIGH || voice.name.contains("female", ignoreCase = true))
+                    }
+                    if (highQualityVoice != null) {
+                        tts?.voice = highQualityVoice
+                    }
+                } catch (e: Exception) {
+                    e.printStackTrace()
+                }
+
+                // ضبط نبرة الصوت وسرعته ليصبح ناعماً كصوت EVE وليس صوت آلة خشن
+                tts?.setPitch(1.08f)      // نبرة أنثوية أرق قليلاً
+                tts?.setSpeechRate(0.92f) // سرعة هادئة ومتزنة تمنع التلعثم في مخارج الحروف
             }
         }
-        setupFloatingBubble()
+    }
+
+    /**
+     * تنظيف النص العربي من الإيموجي والرموز قبل النطق لتفادي التلعثم
+     */
+    private fun speakCleanText(text: String, queueMode: Int = TextToSpeech.QUEUE_FLUSH) {
+        val clean = text
+            .replace(Regex("[\\p{So}\\p{Cn}]"), "") // إزالة كل الإيموجي والرموز
+            .replace(Regex("[\\*\\_\\#\\`\\~]"), "") // إزالة علامات Markdown
+            .replace("  ", " ")
+            .trim()
+
+        if (clean.isNotBlank()) {
+            tts?.speak(clean, queueMode, null, "EVE_SPEECH_${System.currentTimeMillis()}")
+        }
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -80,7 +122,7 @@ class EveBubbleService : Service() {
                             startContinuousScreenObservation()
                         } else {
                             stopContinuousScreenObservation()
-                            tts?.speak("في وضع السبات سيدي", TextToSpeech.QUEUE_FLUSH, null, null)
+                            speakCleanText("في وضع السبات سيدي")
                         }
                     },
                     onOpenApp = { handleEveClick() },
@@ -106,39 +148,32 @@ class EveBubbleService : Service() {
         }
     }
 
-    /**
-     * حلقة المراقبة الحية المستمرة مع المحلل المحلي بدون إنترنت وبلا كوتا
-     */
     private fun startContinuousScreenObservation() {
         val accessibility = EveAccessibilityService.instance
         if (accessibility == null) {
-            tts?.speak("سيدي، يرجى تفعيل إمكانية الوصول لـ Racha في الإعدادات لأتمكن من قراءة الشاشة معك", TextToSpeech.QUEUE_FLUSH, null, null)
+            speakCleanText("سيدي، يرجى تفعيل إمكانية الوصول لـ Racha في الإعدادات لأتمكن من قراءة الشاشة معك")
             return
         }
 
-        tts?.speak("أنا مستيقظة وأراقب معك الشاشة سيدي", TextToSpeech.QUEUE_FLUSH, null, null)
+        speakCleanText("أنا مستيقظة وأراقب معك الشاشة سيدي")
 
         screenObserverJob?.cancel()
         screenObserverJob = serviceScope.launch(Dispatchers.Default) {
             while (isActive) {
-                delay(6000) // فحص الشاشة كل 6 ثوانٍ
+                delay(6000)
 
                 val snapshot = accessibility.getLatestScreenSnapshot()
                 if (snapshot != null && snapshot.visibleText.length > 20) {
                     val currentHash = (snapshot.appName + snapshot.visibleText.take(120)).hashCode()
 
-                    // إذا ظهر محتوى جديد لم تتحدث عنه EVE من قبل
                     if (currentHash != lastSpokenContentHash) {
                         lastSpokenContentHash = currentHash
-
-                        // تحليل محلي فوري فائق السرعة
                         val smartInsight = LocalScreenAnalyzer.analyze(snapshot)
 
                         withContext(Dispatchers.Main) {
-                            tts?.speak(smartInsight, TextToSpeech.QUEUE_ADD, null, null)
+                            speakCleanText(smartInsight, TextToSpeech.QUEUE_ADD)
                         }
 
-                        // راحة لمدة 18 ثانية بعد الكلام لعدم مقاطعة المستخدم بكثرة
                         delay(18000)
                     }
                 }
