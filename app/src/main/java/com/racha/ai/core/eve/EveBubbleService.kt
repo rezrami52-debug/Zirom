@@ -15,7 +15,6 @@ import android.view.Gravity
 import android.view.WindowManager
 import androidx.compose.ui.platform.ComposeView
 import androidx.core.app.NotificationCompat
-import androidx.compose.runtime.collectAsState
 import com.racha.ai.core.overlay.OverlayLifecycleOwner
 
 class EveBubbleService : Service() {
@@ -72,8 +71,12 @@ class EveBubbleService : Service() {
             overlayLifecycleOwner.attachToComposeView(this)
             setContent {
                 EveBubbleContent(
-                    isProcessing = EveState.status.collectAsState().value == EveStatus.THINKING,
-                    onClick = { handleEveClick() },
+                    onToggleSleepWake = { isAwake ->
+                        if (isAwake) {
+                            tts?.speak("أنا معك سيدي، جاهزة لمساعدتك", TextToSpeech.QUEUE_FLUSH, null, null)
+                        }
+                    },
+                    onOpenApp = { handleEveClick() },
                     onDismiss = {
                         composeView?.let { view ->
                             try { windowManager.removeView(view) } catch (e: Exception) { e.printStackTrace() }
