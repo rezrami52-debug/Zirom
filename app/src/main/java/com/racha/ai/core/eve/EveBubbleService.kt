@@ -18,11 +18,7 @@ import androidx.core.app.NotificationCompat
 import com.racha.ai.core.overlay.OverlayLifecycleOwner
 import com.racha.ai.core.security.SecurePreferences
 import com.racha.ai.data.api.GeminiService
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.Job
-import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
+import kotlinx.coroutines.*
 
 class EveBubbleService : Service() {
 
@@ -32,6 +28,8 @@ class EveBubbleService : Service() {
     private lateinit var layoutParams: WindowManager.LayoutParams
     private var tts: TextToSpeech? = null
     private val serviceScope = CoroutineScope(Dispatchers.Main + Job())
+    private var screenObserverJob: Job? = null
+    private var lastSpokenContentHash: Int = 0
 
     override fun onBind(intent: Intent?): IBinder? = null
 
@@ -81,13 +79,15 @@ class EveBubbleService : Service() {
                 EveBubbleContent(
                     onToggleSleepWake = { isAwake ->
                         if (isAwake) {
-                            inspectScreenAndSpeak()
+                            startContinuousScreenObservation()
                         } else {
+                            stopContinuousScreenObservation()
                             tts?.speak("في وضع السبات سيدي", TextToSpeech.QUEUE_FLUSH, null, null)
                         }
                     },
                     onOpenApp = { handleEveClick() },
                     onDismiss = {
+                        stopContinuousScreenObservation()
                         composeView?.let { view ->
                             try { windowManager.removeView(view) } catch (e: Exception) { e.printStackTrace() }
                             composeView = null
@@ -109,19 +109,19 @@ class EveBubbleService : Service() {
     }
 
     /**
-     * فحص محتوى الشاشة وصياغة مبادرة صوتية ذكية
+     * إطلاق حلقة المراقبة الحية أثناء استيقاظ EVE
      */
-    private fun inspectScreenAndSpeak() {
+    private fun startContinuousScreenObservation() {
         val accessibility = EveAccessibilityService.instance
         if (accessibility == null) {
             tts?.speak("سيدي، يرجى تفعيل إمكانية الوصول لـ Racha في الإعدادات لأتمكن من قراءة الشاشة معك", TextToSpeech.QUEUE_FLUSH, null, null)
             return
         }
 
-        tts?.speak("أنا معك، ألقي نظرة على شاشتك...", TextToSpeech.QUEUE_FLUSH, null, null)
+        tts?.speak("أنا مستيقظة وأراقب معك الشاشة سيدي", TextToSpeech.QUEUE_FLUSH, null, null)
 
-        serviceScope.launch(Dispatchers.IO) {
-            val snapshot = accessibility.captureCurrentScreen()
+        screenObserverJob?.cancel()
+        screenObserverJob = serviceScope.launch(Dispatchers.IO) {
             val securePrefs = SecurePreferences(this@EveBubbleService)
             val apiKey = securePrefs.getApiKey()
 
@@ -132,14 +132,41 @@ class EveBubbleService : Service() {
                 return@launch
             }
 
-            if (snapshot != null && snapshot.visibleText.isNotBlank()) {
-                val gemini = GeminiService(apiKey)
-                val aiResponse = gemini.analyzeScreenContext(snapshot.appName, snapshot.visibleText)
-                withContext(Dispatchers.Main) {
-                    tts?.speak(aiResponse, TextToSpeech.QUEUE_FLUSH, null, null)
+            val gemini = GeminiService(apiKey)
+
+            // فحص دوري كل 10 ثوانٍ طالما EVE مستيقظة
+            while (isActive) {
+                delay(6000) // انتظار 6 ثوانٍ بعد فتح التطبيق أو التمرير
+
+                val snapshot = accessibility.getLatestScreenSnapshot()
+                if (snapshot != null && snapshot.visibleText.length > 30) {
+                    val currentHash = (snapshot.appName + snapshot.visibleText.take(150)).hashCode()
+
+                    // إذا كان المحتوى جديداً ومختلفاً عما تحدثت عنه سابقاً
+                    if (currentHash != lastSpokenContentHash) {
+                        lastSpokenContentHash = currentHash
+                        
+                        try {
+                            val aiSuggestion = gemini.analyzeScreenContext(snapshot.appName, snapshot.visibleText)
+                            withContext(Dispatchers.Main) {
+                                tts?.speak(aiSuggestion, TextToSpeech.QUEUE_ADD, null, null)
+                            }
+                        } catch (e: Exception) {
+                            e.printStackTrace()
+                        }
+
+                        // راحة لمدة 20 ثانية بعد التحدث حتى لا تزعج المستخدم بكثرة الكلام
+                        delay(20000)
+                    }
                 }
             }
         }
+    }
+
+    private fun stopContinuousScreenObservation() {
+        screenObserverJob?.cancel()
+        screenObserverJob = null
+        lastSpokenContentHash = 0
     }
 
     private fun updatePosition(dx: Float, dy: Float) {
@@ -178,6 +205,7 @@ class EveBubbleService : Service() {
 
     override fun onDestroy() {
         super.onDestroy()
+        stopContinuousScreenObservation()
         tts?.stop()
         tts?.shutdown()
         overlayLifecycleOwner.handleDestroy()

@@ -12,7 +12,14 @@ class EveAccessibilityService : AccessibilityService() {
     }
 
     override fun onAccessibilityEvent(event: AccessibilityEvent?) {
-        // يتم تحديث نافذة النظام النشطة تلقائياً
+        if (event == null) return
+        val pkg = event.packageName?.toString() ?: return
+
+        // تجاهل نوافذ النظام وفقاعة Racha للحفاظ على تركيز التطبيق الحقيقي
+        if (pkg != packageName && pkg != "com.android.systemui") {
+            lastTargetPackage = pkg
+            updateCurrentScreenSnapshot()
+        }
     }
 
     override fun onInterrupt() {}
@@ -24,12 +31,11 @@ class EveAccessibilityService : AccessibilityService() {
         }
     }
 
-    /**
-     * استخراج اسم التطبيق والنصوص الظاهرة على الشاشة
-     */
-    fun captureCurrentScreen(): ScreenSnapshot? {
-        val rootNode = rootInActiveWindow ?: return null
-        val pkgName = rootNode.packageName?.toString() ?: ""
+    private fun updateCurrentScreenSnapshot() {
+        val rootNode = rootInActiveWindow ?: return
+        val pkgName = rootNode.packageName?.toString() ?: lastTargetPackage
+
+        if (pkgName == packageName || pkgName == "com.android.systemui") return
 
         val appName = try {
             val pm = packageManager
@@ -46,13 +52,20 @@ class EveAccessibilityService : AccessibilityService() {
             .filter { it.isNotBlank() && it.length > 2 }
             .distinct()
             .joinToString("\n")
-            .take(1500) // حصر النص لتسريع استجابة الذكاء الاصطناعي
+            .take(2000)
 
-        return ScreenSnapshot(
-            packageName = pkgName,
-            appName = appName,
-            visibleText = fullText
-        )
+        if (fullText.isNotBlank()) {
+            latestSnapshot = ScreenSnapshot(
+                packageName = pkgName,
+                appName = appName,
+                visibleText = fullText
+            )
+        }
+    }
+
+    fun getLatestScreenSnapshot(): ScreenSnapshot? {
+        updateCurrentScreenSnapshot()
+        return latestSnapshot
     }
 
     private fun extractTextFromNode(node: AccessibilityNodeInfo?, list: MutableList<String>) {
@@ -69,6 +82,9 @@ class EveAccessibilityService : AccessibilityService() {
     companion object {
         var instance: EveAccessibilityService? = null
             private set
+
+        private var lastTargetPackage: String = ""
+        private var latestSnapshot: ScreenSnapshot? = null
 
         fun isRunning(): Boolean = instance != null
     }

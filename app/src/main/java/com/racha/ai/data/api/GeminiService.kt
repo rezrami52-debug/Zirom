@@ -1,17 +1,17 @@
 package com.racha.ai.data.api
 
+import android.util.Log
 import com.google.ai.client.generativeai.GenerativeModel
 import com.google.ai.client.generativeai.type.content
 
 class GeminiService(private val apiKey: String) {
 
     private val jarvisSystemInstruction = """
-        You are J.A.R.V.I.S. and E.V.E., the highly intelligent, witty, loyal, and sophisticated AI assistant.
+        You are J.A.R.V.I.S. and E.V.E., a brilliant, proactive, and witty personal AI companion.
         Guidelines:
-        1. Address the user with respect as 'سيدي' (Sir) or 'صديقي' in a natural, polite, and calm tone.
-        2. Keep your answers concise, razor-sharp, and informative. Avoid unnecessary fluff.
-        3. Match the user's language: If they speak in Arabic, reply in polished, articulate Arabic with a touch of elegance.
-        4. If asked about system operations, speak as an integrated AI operating system.
+        1. Address the user with respect as 'سيدي' (Sir) or 'صديقي'.
+        2. Keep your answers brief (1 to 2 sentences max) so it can be spoken via TTS smoothly.
+        3. Match the user's language: Arabic, natural, elegant, and intelligent.
     """.trimIndent()
 
     private val generativeModel by lazy {
@@ -27,33 +27,37 @@ class GeminiService(private val apiKey: String) {
             val response = generativeModel.generateContent(prompt)
             response.text ?: "سيدي، لم أتلقَ بيانات صالحة من المعالج."
         } catch (e: Exception) {
+            Log.e("GeminiService", "API Error", e)
             throw e
         }
     }
 
     /**
-     * تحليل ما يشاهده المستخدم على الشاشة وصياغة مبادرة ذكية واستباقية
+     * تحليل المحتوى بدقة مع إلزام الذكاء باقتراح تعليق أو فكرة عملية
      */
     suspend fun analyzeScreenContext(appName: String, screenContent: String): String {
         val prompt = """
-            سيدي يتصفح الآن تطبيق '$appName'.
-            هذا النص والمحتوى الظاهر على شاشته الآن:
+            أنت EVE، المساعد الذكي الاستباقي. المستخدم يتصفح الآن تطبيق '$appName'.
+            هذا النص المستخرج من شاشته الآن:
             '''
             $screenContent
             '''
 
-            بصفتك JARVIS و EVE، تحدث معه استباقياً بجملة واحدة أو جملتين كحد أقصى بأسلوب ذكي، لماح، وودود:
-            - إذا كان يتصفح منشوراً لصديق أو صورة، شاركه الإعجاب واقترح عليه تعليقاً لطيفاً مناسباً.
-            - إذا كان يقرأ مقالاً أو خبراً أو يشاهد محتوى، علق بملاحظة ذكية أو فكرة سريعة.
-            - إذا كان يتصفح متجراً أو موقعاً، علق بما يفيده.
-            ابدأ تعليقك مباشرة وبشكل عفوي (مثال: "يبدو أنك تستمتع... صورة جميلة لمحمد، ما رأيك أن تعلق بـ...").
+            المطلوب منك بدقة:
+            1. ممنوع نهائياً أن تكتفي بقول "أنت تتصفح تطبيق كذا" أو "جولة ممتعة".
+            2. استخرج تفصيلاً مما يظهر على الشاشة (مثل: اسم صديق ناشر لمنشور، موضوع فيديو، مقال، أو منتج).
+            3. بادره مباشرة باقتراح حقيقي أو تعليق ذكي أو فكرة في جملة أو جملتين فقط باللغة العربية.
+               - مثال 1: "صورة رائعة نشرها محمد! ما رأيك أن أعلق له: 'إطلالة رائعة يا صديقي'؟"
+               - مثال 2: "هذا المقال يتحدث عن الذكاء الاصطناعي، هل ترغب في تلخيص أهم نقاطه لك؟"
+            تحدث بأسلوب عفوي بدون مقدمات.
         """.trimIndent()
 
         return try {
             val response = generativeModel.generateContent(prompt)
-            response.text ?: "سيدي، أرى ما تتصفحه في $appName، أنا هنا إن احتجت لأي مساعدة."
+            response.text ?: "سيدي، أرى تفاصيل مثيرة على شاشتك، هل ترغب في مساعدتي؟"
         } catch (e: Exception) {
-            "سيدي، رصدت تصفحك لـ $appName، تبدو جولة ممتعة."
+            Log.e("GeminiService", "Screen Analysis Error: ${e.message}", e)
+            "سيدي، أرى ما تقرأه على الشاشة، يبدو موضوعاً مثيراً للاهتمام."
         }
     }
 
