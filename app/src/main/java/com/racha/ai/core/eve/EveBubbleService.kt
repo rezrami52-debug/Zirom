@@ -11,7 +11,6 @@ import android.os.Build
 import android.os.IBinder
 import android.os.PowerManager
 import android.speech.tts.TextToSpeech
-import android.speech.tts.UtteranceProgressListener
 import android.speech.tts.Voice
 import android.view.Gravity
 import android.view.MotionEvent
@@ -36,12 +35,16 @@ class EveBubbleService : Service() {
     private val serviceScope = CoroutineScope(Dispatchers.Main + Job())
     private var voiceInputHelper: VoiceInputHelper? = null
 
-    // مشغل الموسيقى المدمج
+    // مشغل الوسائط
     private var exoPlayer: ExoPlayer? = null
 
-    // راصد تشغيل وإطفاء الشاشة للكلمة المفتاحية
+    // راصد تشغيل الشاشة للكلمة المفتاحية
     private var screenReceiver: BroadcastReceiver? = null
     private var isListeningWakeWord = false
+
+    // إدارة الإشعارات الذكية
+    private var pendingNotificationJob: Job? = null
+    private var currentNotifKey: String? = null
 
     override fun onBind(intent: Intent?): IBinder? = null
 
@@ -79,6 +82,43 @@ class EveBubbleService : Service() {
         if (clean.isNotBlank()) tts?.speak(clean, TextToSpeech.QUEUE_FLUSH, null, "EVE_MSG")
     }
 
+    override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        when (intent?.action) {
+            ACTION_TRIGGER_NOTIFICATION_PULSE -> EveState.addNotification()
+            ACTION_NEW_NOTIFICATION -> {
+                val speechText = intent.getStringExtra(EXTRA_SPEECH_TEXT) ?: ""
+                val notifKey = intent.getStringExtra(EXTRA_NOTIF_KEY)
+                handleNewNotification(speechText, notifKey)
+            }
+            ACTION_CANCEL_NOTIFICATION -> {
+                val notifKey = intent.getStringExtra(EXTRA_NOTIF_KEY)
+                handleCancelNotification(notifKey)
+            }
+            ACTION_STOP_SERVICE -> stopSelf()
+        }
+        return START_STICKY
+    }
+
+    private fun handleNewNotification(speechText: String, notifKey: String?) {
+        currentNotifKey = notifKey
+        EveState.addNotification()
+
+        pendingNotificationJob?.cancel()
+        pendingNotificationJob = serviceScope.launch(Dispatchers.Main) {
+            delay(15000)
+            speakCleanText("سيدي، وصلك إشعار: $speechText")
+        }
+    }
+
+    private fun handleCancelNotification(notifKey: String?) {
+        if (notifKey == null || notifKey == currentNotifKey) {
+            pendingNotificationJob?.cancel()
+            pendingNotificationJob = null
+            currentNotifKey = null
+            EveState.clearNotifications()
+        }
+    }
+
     @SuppressLint("ClickableViewAccessibility")
     private fun setupFloatingBubble() {
         val layoutType = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
@@ -88,7 +128,6 @@ class EveBubbleService : Service() {
             WindowManager.LayoutParams.TYPE_PHONE
         }
 
-        // خاصية FLAG_WATCH_OUTSIDE_TOUCH تلتقط أي نقرة على شاشة الهاتف بعيداً عن EVE!
         layoutParams = WindowManager.LayoutParams(
             WindowManager.LayoutParams.WRAP_CONTENT,
             WindowManager.LayoutParams.WRAP_CONTENT,
@@ -106,7 +145,6 @@ class EveBubbleService : Service() {
         composeView = ComposeView(this).apply {
             overlayLifecycleOwner.attachToComposeView(this)
 
-            // رصد النقر في أي مكان خارج EVE: تعود للسبات وتختفي أزرار التحكم مع استمرار الموسيقى
             setOnTouchListener { _, event ->
                 if (event.action == MotionEvent.ACTION_OUTSIDE) {
                     handleTapOutside()
@@ -143,12 +181,9 @@ class EveBubbleService : Service() {
         }
     }
 
-    /**
-     * عند النقر خارج EVE: تختفي الأزرار وتعود للسبات والموسيقى تعمل
-     */
     private fun handleTapOutside() {
         EveState.closeShelf()
-        EveState.setMood(EveMood.SLEEPING) // تغلق عينيها وتعود للسبات
+        EveState.setMood(EveMood.SLEEPING)
     }
 
     private fun playSelectedMedia(item: MediaItemData) {
@@ -162,7 +197,6 @@ class EveBubbleService : Service() {
             EveState.closeShelf()
             speakCleanText("جاري تشغيل ${item.title}")
         } else {
-            // فتح الفيديو أو الصورة عبر مشغل النظام
             val intent = Intent(Intent.ACTION_VIEW).apply {
                 setDataAndType(item.uri, if (item.type == "VIDEO") "video/*" else "image/*")
                 addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_GRANT_READ_URI_PERMISSION)
@@ -194,9 +228,6 @@ class EveBubbleService : Service() {
         speakCleanText("الأغنية السابقة")
     }
 
-    /**
-     * الاستماع لكلمة النداء (EVE / Racha) طالما شاشة الهاتف مضاءة
-     */
     private fun setupScreenStateReceiver() {
         screenReceiver = object : BroadcastReceiver() {
             override fun onReceive(context: Context?, intent: Intent?) {
@@ -223,7 +254,6 @@ class EveBubbleService : Service() {
             languageTag = "ar",
             onResult = { text ->
                 val lower = text.lowercase()
-                // عند سماع EVE أو Racha تفتح عينيها فوراً
                 if (lower.contains("eve") || lower.contains("ايف") || lower.contains("إيف") || lower.contains("racha") || lower.contains("راشا") || lower.contains("رشا")) {
                     EveState.setMood(EveMood.AWAKE_SMILING)
                     speakCleanText("أنا معك سيدي، ماذا تطلب؟")
@@ -234,7 +264,6 @@ class EveBubbleService : Service() {
                 } else if (lower.contains("موسيقى") || lower.contains("اغاني")) {
                     EveState.openShelf(MediaShelfType.MUSIC)
                 }
-                // إعادة حلقة الاستماع طالما الشاشة مضاءة
                 isListeningWakeWord = false
                 startListeningForWakeWord()
             },
@@ -284,6 +313,7 @@ class EveBubbleService : Service() {
     override fun onDestroy() {
         super.onDestroy()
         screenReceiver?.let { unregisterReceiver(it) }
+        pendingNotificationJob?.cancel()
         exoPlayer?.release()
         voiceInputHelper?.destroy()
         tts?.stop()
@@ -292,5 +322,14 @@ class EveBubbleService : Service() {
         composeView?.let {
             try { windowManager.removeView(it) } catch (e: Exception) { e.printStackTrace() }
         }
+    }
+
+    companion object {
+        const val ACTION_TRIGGER_NOTIFICATION_PULSE = "ACTION_TRIGGER_NOTIFICATION_PULSE"
+        const val ACTION_STOP_SERVICE = "ACTION_STOP_SERVICE"
+        const val ACTION_NEW_NOTIFICATION = "ACTION_NEW_NOTIFICATION"
+        const val ACTION_CANCEL_NOTIFICATION = "ACTION_CANCEL_NOTIFICATION"
+        const val EXTRA_SPEECH_TEXT = "EXTRA_SPEECH_TEXT"
+        const val EXTRA_NOTIF_KEY = "EXTRA_NOTIF_KEY"
     }
 }
