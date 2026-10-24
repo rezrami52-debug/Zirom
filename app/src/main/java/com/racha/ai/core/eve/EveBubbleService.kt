@@ -16,8 +16,6 @@ import android.view.WindowManager
 import androidx.compose.ui.platform.ComposeView
 import androidx.core.app.NotificationCompat
 import com.racha.ai.core.overlay.OverlayLifecycleOwner
-import com.racha.ai.core.security.SecurePreferences
-import com.racha.ai.data.api.GeminiService
 import kotlinx.coroutines.*
 
 class EveBubbleService : Service() {
@@ -109,7 +107,7 @@ class EveBubbleService : Service() {
     }
 
     /**
-     * إطلاق حلقة المراقبة الحية أثناء استيقاظ EVE
+     * حلقة المراقبة الحية المستمرة مع المحلل المحلي بدون إنترنت وبلا كوتا
      */
     private fun startContinuousScreenObservation() {
         val accessibility = EveAccessibilityService.instance
@@ -121,42 +119,27 @@ class EveBubbleService : Service() {
         tts?.speak("أنا مستيقظة وأراقب معك الشاشة سيدي", TextToSpeech.QUEUE_FLUSH, null, null)
 
         screenObserverJob?.cancel()
-        screenObserverJob = serviceScope.launch(Dispatchers.IO) {
-            val securePrefs = SecurePreferences(this@EveBubbleService)
-            val apiKey = securePrefs.getApiKey()
-
-            if (apiKey.isNullOrBlank()) {
-                withContext(Dispatchers.Main) {
-                    tts?.speak("سيدي، يرجى تعيين مفتاح Gemini API في الإعدادات أولاً", TextToSpeech.QUEUE_FLUSH, null, null)
-                }
-                return@launch
-            }
-
-            val gemini = GeminiService(apiKey)
-
-            // فحص دوري كل 10 ثوانٍ طالما EVE مستيقظة
+        screenObserverJob = serviceScope.launch(Dispatchers.Default) {
             while (isActive) {
-                delay(6000) // انتظار 6 ثوانٍ بعد فتح التطبيق أو التمرير
+                delay(6000) // فحص الشاشة كل 6 ثوانٍ
 
                 val snapshot = accessibility.getLatestScreenSnapshot()
-                if (snapshot != null && snapshot.visibleText.length > 30) {
-                    val currentHash = (snapshot.appName + snapshot.visibleText.take(150)).hashCode()
+                if (snapshot != null && snapshot.visibleText.length > 20) {
+                    val currentHash = (snapshot.appName + snapshot.visibleText.take(120)).hashCode()
 
-                    // إذا كان المحتوى جديداً ومختلفاً عما تحدثت عنه سابقاً
+                    // إذا ظهر محتوى جديد لم تتحدث عنه EVE من قبل
                     if (currentHash != lastSpokenContentHash) {
                         lastSpokenContentHash = currentHash
-                        
-                        try {
-                            val aiSuggestion = gemini.analyzeScreenContext(snapshot.appName, snapshot.visibleText)
-                            withContext(Dispatchers.Main) {
-                                tts?.speak(aiSuggestion, TextToSpeech.QUEUE_ADD, null, null)
-                            }
-                        } catch (e: Exception) {
-                            e.printStackTrace()
+
+                        // تحليل محلي فوري فائق السرعة
+                        val smartInsight = LocalScreenAnalyzer.analyze(snapshot)
+
+                        withContext(Dispatchers.Main) {
+                            tts?.speak(smartInsight, TextToSpeech.QUEUE_ADD, null, null)
                         }
 
-                        // راحة لمدة 20 ثانية بعد التحدث حتى لا تزعج المستخدم بكثرة الكلام
-                        delay(20000)
+                        // راحة لمدة 18 ثانية بعد الكلام لعدم مقاطعة المستخدم بكثرة
+                        delay(18000)
                     }
                 }
             }
