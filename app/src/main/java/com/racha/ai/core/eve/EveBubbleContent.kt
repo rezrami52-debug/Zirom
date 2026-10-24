@@ -75,14 +75,35 @@ fun EveBubbleContent(
         label = "eyeBlink"
     )
 
+    var totalDragY by remember { mutableFloatStateOf(0f) }
+    var totalDragX by remember { mutableFloatStateOf(0f) }
+    val dismissThreshold = 180f
+
     Box(
         modifier = modifier
             .size(width = 80.dp, height = 105.dp)
             .offset { IntOffset(0, hoverY.roundToInt()) }
             .pointerInput(Unit) {
                 detectDragGestures(
+                    onDragStart = {
+                        totalDragY = 0f
+                        totalDragX = 0f
+                    },
+                    onDragEnd = {
+                        if (totalDragY > dismissThreshold && totalDragY > kotlin.math.abs(totalDragX) * 1.2f) {
+                            onDismiss()
+                        }
+                        totalDragY = 0f
+                        totalDragX = 0f
+                    },
+                    onDragCancel = {
+                        totalDragY = 0f
+                        totalDragX = 0f
+                    },
                     onDrag = { change, dragAmount ->
                         change.consume()
+                        totalDragY += dragAmount.y
+                        totalDragX += dragAmount.x
                         onDrag(dragAmount.x, dragAmount.y)
                     }
                 )
@@ -98,7 +119,7 @@ fun EveBubbleContent(
                         }
                     },
                     onLongPress = {
-                        onDismiss() // الضغط المطول يغلق الفقاعة
+                        onDismiss()
                     }
                 )
             },
@@ -181,7 +202,6 @@ fun EveBubbleContent(
             val rightEyeX = visorLeft + visorWidth * 0.78f
 
             if (isHappy) {
-                // عيون مبتسمة مقوسة (Happy Crescent Eyes)
                 val happyLeft = Path().apply {
                     moveTo(leftEyeX - eyeWidth * 0.5f, eyeCenterY + 4f)
                     quadraticBezierTo(leftEyeX, eyeCenterY - 10f, leftEyeX + eyeWidth * 0.5f, eyeCenterY + 4f)
@@ -193,7 +213,6 @@ fun EveBubbleContent(
                 drawPath(happyLeft, color = cyanGlow, style = Stroke(width = 5f, cap = StrokeCap.Round))
                 drawPath(happyRight, color = cyanGlow, style = Stroke(width = 5f, cap = StrokeCap.Round))
             } else {
-                // العيون الطبيعية الكبسولية المتوهجة
                 // العين اليسرى
                 drawRoundRect(
                     brush = Brush.radialGradient(

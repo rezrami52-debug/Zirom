@@ -74,7 +74,13 @@ class EveBubbleService : Service() {
                 EveBubbleContent(
                     isProcessing = EveState.status.collectAsState().value == EveStatus.THINKING,
                     onClick = { handleEveClick() },
-                    onDismiss = { stopSelf() },
+                    onDismiss = {
+                        composeView?.let { view ->
+                            try { windowManager.removeView(view) } catch (e: Exception) { e.printStackTrace() }
+                            composeView = null
+                        }
+                        stopSelf()
+                    },
                     onDrag = { dx, dy -> updatePosition(dx, dy) }
                 )
             }

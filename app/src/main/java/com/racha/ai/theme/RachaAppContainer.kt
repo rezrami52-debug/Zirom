@@ -28,7 +28,7 @@ fun RachaAppContainer(
     val screenWidthPx = with(density) { configuration.screenWidthDp.dp.roundToPx() }
     val screenHeightPx = with(density) { configuration.screenHeightDp.dp.roundToPx() }
 
-    val backgroundBitmap = remember(themeState.customBackgroundPath) {
+    val backgroundBitmap = remember(themeState.customBackgroundPath, themeState.bgTimestamp) {
         themeState.customBackgroundPath?.let { path ->
             val file = File(path)
             if (file.exists()) {

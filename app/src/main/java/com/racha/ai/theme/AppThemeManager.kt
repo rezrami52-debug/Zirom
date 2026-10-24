@@ -17,7 +17,8 @@ data class CustomThemeConfig(
     val glowColor: Color = Color(0xFF00E5FF),
     val elementsAlpha: Float = 0.95f,
     val glowIntensity: Float = 0.7f,
-    val customBackgroundPath: String? = null
+    val customBackgroundPath: String? = null,
+    val bgTimestamp: Long = 0L
 )
 
 class AppThemeManager(private val context: Context) {
@@ -34,7 +35,8 @@ class AppThemeManager(private val context: Context) {
             glowColor = Color(prefs.getInt("glow_color", Color(0xFF00E5FF).toArgb())),
             elementsAlpha = prefs.getFloat("elements_alpha", 0.95f),
             glowIntensity = prefs.getFloat("glow_intensity", 0.7f),
-            customBackgroundPath = prefs.getString("bg_image_path", null)
+            customBackgroundPath = prefs.getString("bg_image_path", null),
+            bgTimestamp = prefs.getLong("bg_timestamp", 0L)
         )
     }
 
@@ -69,9 +71,17 @@ class AppThemeManager(private val context: Context) {
             val file = File(context.filesDir, "custom_background.jpg")
             val outputStream = FileOutputStream(file)
             inputStream?.use { input -> outputStream.use { output -> input.copyTo(output) } }
-            prefs.edit().putString("bg_image_path", file.absolutePath).apply()
-            // إجبار التحديث عبر إنشاء كائن جديد
-            _themeState.value = _themeState.value.copy(customBackgroundPath = file.absolutePath)
+
+            val now = System.currentTimeMillis()
+            prefs.edit()
+                .putString("bg_image_path", file.absolutePath)
+                .putLong("bg_timestamp", now)
+                .apply()
+
+            _themeState.value = _themeState.value.copy(
+                customBackgroundPath = file.absolutePath,
+                bgTimestamp = now
+            )
         } catch (e: Exception) {
             e.printStackTrace()
         }
@@ -80,7 +90,10 @@ class AppThemeManager(private val context: Context) {
     fun clearBackgroundImage() {
         val file = File(context.filesDir, "custom_background.jpg")
         if (file.exists()) file.delete()
-        prefs.edit().remove("bg_image_path").apply()
-        _themeState.value = _themeState.value.copy(customBackgroundPath = null)
+        prefs.edit().remove("bg_image_path").remove("bg_timestamp").apply()
+        _themeState.value = _themeState.value.copy(
+            customBackgroundPath = null,
+            bgTimestamp = 0L
+        )
     }
 }
