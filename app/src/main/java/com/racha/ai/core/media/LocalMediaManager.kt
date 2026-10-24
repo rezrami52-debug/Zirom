@@ -27,7 +27,7 @@ class LocalMediaManager(private val context: Context) {
         cursor?.use {
             val idCol = it.getColumnIndexOrThrow(MediaStore.Audio.Media._ID)
             val titleCol = it.getColumnIndexOrThrow(MediaStore.Audio.Media.TITLE)
-            while (it.moveToNext() && list.size < 40) {
+            while (it.moveToNext()) {
                 val id = it.getLong(idCol)
                 val title = it.getString(titleCol)
                 val uri = ContentUris.withAppendedId(MediaStore.Audio.Media.EXTERNAL_CONTENT_URI, id)
@@ -50,7 +50,7 @@ class LocalMediaManager(private val context: Context) {
         cursor?.use {
             val idCol = it.getColumnIndexOrThrow(MediaStore.Video.Media._ID)
             val titleCol = it.getColumnIndexOrThrow(MediaStore.Video.Media.TITLE)
-            while (it.moveToNext() && list.size < 40) {
+            while (it.moveToNext()) {
                 val id = it.getLong(idCol)
                 val title = it.getString(titleCol)
                 val uri = ContentUris.withAppendedId(MediaStore.Video.Media.EXTERNAL_CONTENT_URI, id)
@@ -73,7 +73,7 @@ class LocalMediaManager(private val context: Context) {
         cursor?.use {
             val idCol = it.getColumnIndexOrThrow(MediaStore.Images.Media._ID)
             val nameCol = it.getColumnIndexOrThrow(MediaStore.Images.Media.DISPLAY_NAME)
-            while (it.moveToNext() && list.size < 40) {
+            while (it.moveToNext()) {
                 val id = it.getLong(idCol)
                 val name = it.getString(nameCol) ?: "صورة"
                 val uri = ContentUris.withAppendedId(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, id)
