@@ -47,7 +47,10 @@ fun RachaApp(
     RachaAppContainer(themeManager = themeManager) {
         when (currentScreen) {
             is Screen.Welcome -> WelcomeScreen(
-                onStartClick = { currentScreen = Screen.Chat }
+                onOpenChat = { currentScreen = Screen.Chat },
+                onOpenSettings = { currentScreen = Screen.Settings },
+                onOpenNotifications = { currentScreen = Screen.Notifications },
+                onOpenPrayer = { currentScreen = Screen.Prayer }
             )
 
             is Screen.Onboarding -> OnboardingScreen(
@@ -94,12 +97,13 @@ fun RachaApp(
                 onCaptured = { bitmap: Bitmap ->
                     currentScreen = Screen.Settings
                 },
-                onBack = { currentScreen = Screen.Settings }
+                onCancel = { currentScreen = Screen.Settings }
             )
 
             is Screen.BiometricLock -> BiometricLockScreen(
-                onUnlocked = { currentScreen = Screen.Chat },
-                onFailedAttemptsExceeded = {}
+                onSuccess = { currentScreen = Screen.Chat },
+                onCancel = { currentScreen = Screen.Chat },
+                onBypass = { currentScreen = Screen.Chat }
             )
 
             is Screen.SecurityLog -> SecurityLogScreen(onBack = { currentScreen = Screen.Settings })
