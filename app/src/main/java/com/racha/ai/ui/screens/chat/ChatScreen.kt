@@ -27,7 +27,6 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
@@ -49,7 +48,7 @@ import com.racha.ai.core.voice.VoiceInputHelper
 import com.racha.ai.data.repository.NotificationRepository
 import kotlinx.coroutines.launch
 
-@OptIn(ExperimentalMaterial3Api::class, ExperimentalPermissionsApi::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalPermissionsApi::class, ExperimentalLayoutApi::class)
 @Composable
 fun ChatScreen(
     onOpenSettings: () -> Unit = {},
@@ -77,11 +76,13 @@ fun ChatScreen(
     val userBubbleColor = themeState.userBubbleColor.copy(alpha = themeState.elementsAlpha)
     val aiBubbleColor = themeState.rachaBubbleColor.copy(alpha = themeState.elementsAlpha)
 
-    // زجاج داكن صلب بما يكفي لمنع اختراق نصوص أي خلفية
     val cardBackground = if (isDarkTheme) Color(0xFF0F172A).copy(alpha = 0.88f) else Color(0xFF1E293B).copy(alpha = 0.85f)
     val cardBorder = Brush.linearGradient(
         listOf(primaryGlow.copy(alpha = 0.6f), Color.White.copy(alpha = 0.1f))
     )
+
+    // رصد ظهور لوحة المفاتيح لضبط الواجهة
+    val isKeyboardOpen = WindowInsets.isImeVisible
 
     val cameraLauncher = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
         if (result.resultCode == android.app.Activity.RESULT_OK) viewModel.onSpecialToolCompleted(true, "📸 تم حفظ الصورة")
@@ -95,18 +96,22 @@ fun ChatScreen(
         if (state.messages.isNotEmpty()) listState.animateScrollToItem(state.messages.size - 1)
     }
 
-    Box(modifier = Modifier.fillMaxSize()) {
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .imePadding() // يرفع الشاشة كاملة فوق الكيبورد بدون تداخل
+    ) {
         Column(modifier = Modifier.fillMaxSize()) {
             
-            // 1. الشريط العلوي لأدوات EVE السريعة
+            // 1. أزرار EVE العلوية
             QuickActionBarRacha(primaryGlow)
 
-            // 2. الهيدر الرئيسي Racha AI
+            // 2. شريط Racha AI
             TopBarRacha(primaryGlow)
 
-            // 3. بطاقة الطقس ومواقيت الصلاة المعزولة زجاجياً
+            // 3. بطاقة الطقس والصلوات (تختفي مؤقتاً عند الكتابة لتوفير مساحة للرسائل)
             val currentWeather = weatherState.weather
-            if (currentWeather != null) {
+            if (currentWeather != null && !isKeyboardOpen) {
                 WeatherCardRacha(currentWeather, cardBackground, cardBorder, primaryGlow)
             }
 
@@ -124,7 +129,7 @@ fun ChatScreen(
                 }
             }
 
-            // 5. شريط الإدخال
+            // 5. حقل الإدخال الذكي (فوق لوحة المفاتيح مباشرة)
             InputBarRacha(
                 text = state.inputText,
                 onValueChange = viewModel::onInputChange,
@@ -145,19 +150,21 @@ fun ChatScreen(
                 glow = primaryGlow
             )
 
-            // 6. شريط التنقل السفلي العائم (Floating Cyber Dock)
-            BottomNavRacha(
-                glow = primaryGlow,
-                unreadCount = unreadCount,
-                onOpenPrayer = onOpenPrayer,
-                onOpenNotifications = onOpenNotifications,
-                onOpenSettings = onOpenSettings
-            )
+            // 6. شريط التنقل السفلي العائم (يختفي فقط أثناء ظهور الكيبورد حتى لا يحجب الرؤية)
+            if (!isKeyboardOpen) {
+                BottomNavRacha(
+                    glow = primaryGlow,
+                    unreadCount = unreadCount,
+                    onOpenPrayer = onOpenPrayer,
+                    onOpenNotifications = onOpenNotifications,
+                    onOpenSettings = onOpenSettings
+                )
+            }
         }
     }
 }
 
-// ---------------- المكونات المصممة باحترافية ----------------
+// ---------------- باقي المكونات المصممة ----------------
 
 @Composable
 fun QuickActionBarRacha(glow: Color) {
@@ -165,7 +172,7 @@ fun QuickActionBarRacha(glow: Color) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 6.dp),
+            .padding(horizontal = 16.dp, vertical = 4.dp),
         horizontalArrangement = Arrangement.End,
         verticalAlignment = Alignment.CenterVertically
     ) {
@@ -212,7 +219,7 @@ fun TopBarRacha(glow: Color) {
     Surface(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 4.dp),
+            .padding(horizontal = 16.dp, vertical = 2.dp),
         shape = RoundedCornerShape(20.dp),
         color = Color(0xFF0F172A).copy(alpha = 0.75f),
         border = BorderStroke(1.dp, Brush.horizontalGradient(listOf(glow.copy(alpha = 0.5f), Color.White.copy(alpha = 0.1f))))
@@ -220,12 +227,12 @@ fun TopBarRacha(glow: Color) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 16.dp, vertical = 10.dp),
+                .padding(horizontal = 16.dp, vertical = 8.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             Box(
                 modifier = Modifier
-                    .size(42.dp)
+                    .size(38.dp)
                     .clip(CircleShape)
                     .background(Brush.radialGradient(listOf(glow.copy(alpha = 0.35f), Color.Transparent)))
                     .border(2.dp, glow, CircleShape),
@@ -234,20 +241,14 @@ fun TopBarRacha(glow: Color) {
                 Image(
                     painter = painterResource(id = R.drawable.ic_racha_avatar),
                     contentDescription = "EVE Avatar",
-                    modifier = Modifier.fillMaxSize().padding(4.dp),
+                    modifier = Modifier.fillMaxSize().padding(3.dp),
                     contentScale = ContentScale.Crop
                 )
             }
-            Spacer(modifier = Modifier.width(14.dp))
+            Spacer(modifier = Modifier.width(12.dp))
             Column {
-                Text(
-                    "Racha AI",
-                    color = Color.White,
-                    fontSize = 20.sp,
-                    fontWeight = FontWeight.ExtraBold,
-                    letterSpacing = 0.5.sp
-                )
-                Text("المساعد التكتيكي النشط", color = glow.copy(alpha = 0.85f), fontSize = 11.sp)
+                Text("Racha AI", color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.ExtraBold)
+                Text("المساعد التكتيكي النشط", color = glow.copy(alpha = 0.85f), fontSize = 10.sp)
             }
         }
     }
@@ -263,42 +264,36 @@ fun WeatherCardRacha(
     Surface(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 6.dp),
+            .padding(horizontal = 16.dp, vertical = 4.dp),
         shape = RoundedCornerShape(20.dp),
         color = cardBg,
         border = BorderStroke(1.dp, cardBorder),
         shadowElevation = 8.dp
     ) {
-        Column(modifier = Modifier.padding(14.dp)) {
+        Column(modifier = Modifier.padding(12.dp)) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Column {
-                    Text("مساء الخير 🌤️", color = Color.White, fontSize = 15.sp, fontWeight = FontWeight.Bold)
-                    Text(weather.cityName ?: "موقعك الحالي", color = Color(0xFF94A3B8), fontSize = 12.sp)
+                    Text("مساء الخير 🌤️", color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.Bold)
+                    Text(weather.cityName ?: "موقعك الحالي", color = Color(0xFF94A3B8), fontSize = 11.sp)
                 }
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(
-                        "${weather.temperature}°C",
-                        color = Color.White,
-                        fontSize = 30.sp,
-                        fontWeight = FontWeight.Bold
-                    )
-                    Spacer(modifier = Modifier.width(12.dp))
+                    Text("${weather.temperature}°C", color = Color.White, fontSize = 26.sp, fontWeight = FontWeight.Bold)
+                    Spacer(modifier = Modifier.width(10.dp))
                     Column(horizontalAlignment = Alignment.End) {
-                        Text("💧 ${weather.humidity}%", color = Color(0xFF38BDF8), fontSize = 11.sp, fontWeight = FontWeight.Medium)
-                        Text("💨 ${weather.windSpeed} كم/س", color = Color(0xFFE2E8F0), fontSize = 11.sp, fontWeight = FontWeight.Medium)
+                        Text("💧 ${weather.humidity}%", color = Color(0xFF38BDF8), fontSize = 10.sp, fontWeight = FontWeight.Medium)
+                        Text("💨 ${weather.windSpeed} كم/س", color = Color(0xFFE2E8F0), fontSize = 10.sp, fontWeight = FontWeight.Medium)
                     }
                 }
             }
 
-            Spacer(modifier = Modifier.height(12.dp))
+            Spacer(modifier = Modifier.height(8.dp))
             Divider(color = Color.White.copy(alpha = 0.12f), thickness = 1.dp)
-            Spacer(modifier = Modifier.height(10.dp))
+            Spacer(modifier = Modifier.height(6.dp))
 
-            // مواقيت الصلاة بتصميم نيون أنيق
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                 PrayerTimeItem("الفجر", "05:12", glow)
                 PrayerTimeItem("الظهر", "12:30", glow)
@@ -313,9 +308,9 @@ fun WeatherCardRacha(
 @Composable
 fun PrayerTimeItem(name: String, time: String, glow: Color) {
     Column(horizontalAlignment = Alignment.CenterHorizontally) {
-        Text(name, fontSize = 11.sp, color = Color(0xFF94A3B8))
+        Text(name, fontSize = 10.sp, color = Color(0xFF94A3B8))
         Spacer(modifier = Modifier.height(2.dp))
-        Text(time, fontSize = 13.sp, fontWeight = FontWeight.Bold, color = glow)
+        Text(time, fontSize = 12.sp, fontWeight = FontWeight.Bold, color = glow)
     }
 }
 
@@ -340,10 +335,7 @@ fun MessageBubbleRacha(
                 bottomEnd = if (isUser) 4.dp else 18.dp
             ),
             color = if (isUser) userColor else Color(0xFF1E293B).copy(alpha = 0.92f),
-            border = BorderStroke(
-                width = 1.dp,
-                color = if (isUser) glow.copy(alpha = 0.5f) else Color.White.copy(alpha = 0.15f)
-            ),
+            border = BorderStroke(1.dp, if (isUser) glow.copy(alpha = 0.5f) else Color.White.copy(alpha = 0.15f)),
             shadowElevation = 4.dp,
             modifier = Modifier.widthIn(max = 280.dp)
         ) {
@@ -371,16 +363,16 @@ fun InputBarRacha(
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 8.dp),
+            .padding(horizontal = 16.dp, vertical = 6.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         Surface(
             modifier = Modifier.weight(1f),
             shape = RoundedCornerShape(26.dp),
-            color = Color(0xFF0F172A).copy(alpha = 0.85f),
+            color = Color(0xFF0F172A).copy(alpha = 0.88f),
             border = BorderStroke(1.dp, glow.copy(alpha = 0.4f))
         ) {
-            Box(modifier = Modifier.padding(horizontal = 20.dp, vertical = 14.dp)) {
+            Box(modifier = Modifier.padding(horizontal = 20.dp, vertical = 12.dp)) {
                 BasicTextField(
                     value = text,
                     onValueChange = onValueChange,
@@ -397,25 +389,24 @@ fun InputBarRacha(
             }
         }
 
-        Spacer(modifier = Modifier.width(10.dp))
+        Spacer(modifier = Modifier.width(8.dp))
 
         Surface(
             onClick = onSend,
             shape = CircleShape,
             color = Color(0xFF0F172A).copy(alpha = 0.9f),
             border = BorderStroke(1.5.dp, glow),
-            shadowElevation = 8.dp,
-            modifier = Modifier.size(50.dp)
+            modifier = Modifier.size(48.dp)
         ) {
             Box(contentAlignment = Alignment.Center) {
                 if (isListening) {
-                    CircularProgressIndicator(color = glow, modifier = Modifier.size(24.dp), strokeWidth = 2.dp)
+                    CircularProgressIndicator(color = glow, modifier = Modifier.size(22.dp), strokeWidth = 2.dp)
                 } else {
                     Icon(
                         imageVector = if (text.isNotBlank()) Icons.Default.Send else Icons.Default.Mic,
                         contentDescription = "Send",
                         tint = glow,
-                        modifier = Modifier.size(24.dp)
+                        modifier = Modifier.size(22.dp)
                     )
                 }
             }
@@ -434,7 +425,7 @@ fun BottomNavRacha(
     Surface(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 24.dp, vertical = 10.dp),
+            .padding(horizontal = 24.dp, vertical = 8.dp),
         shape = RoundedCornerShape(26.dp),
         color = Color(0xFF0F172A).copy(alpha = 0.92f),
         border = BorderStroke(1.dp, Brush.horizontalGradient(listOf(Color.White.copy(alpha = 0.15f), glow.copy(alpha = 0.4f), Color.White.copy(alpha = 0.15f)))),
@@ -443,7 +434,7 @@ fun BottomNavRacha(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(vertical = 10.dp),
+                .padding(vertical = 8.dp),
             horizontalArrangement = Arrangement.SpaceEvenly,
             verticalAlignment = Alignment.CenterVertically
         ) {

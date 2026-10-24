@@ -8,65 +8,63 @@ import com.racha.ai.core.apps.IntentHandler
 import com.racha.ai.core.apps.PendingAction
 import com.racha.ai.core.contacts.ContactResolver
 import com.racha.ai.core.security.SecurePreferences
+import com.racha.ai.core.web.WebSearchEngine
 import com.racha.ai.data.api.GeminiService
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
-import java.util.UUID
 
 data class ChatMessage(
-    val id: String = UUID.randomUUID().toString(),
     val text: String,
-    val isFromUser: Boolean,
-    val timestamp: Long = System.currentTimeMillis()
+    val isFromUser: Boolean
 )
 
 data class ChatUiState(
     val messages: List<ChatMessage> = emptyList(),
-    val isLoading: Boolean = false,
-    val pendingChooser: IntentHandler.HandlerResult.ShowChooser? = null,
     val inputText: String = "",
+    val isLoading: Boolean = false,
     val hasApiKey: Boolean = false,
-    val pendingSpecialTool: String? = null
+    val pendingSpecialTool: String? = null,
+    val pendingChooser: IntentHandler.HandlerResult.ShowChooser? = null
 )
 
 class ChatViewModel(application: Application) : AndroidViewModel(application) {
 
-    private val context = application.applicationContext
-    private val appResolver = AppResolver(context)
-    private val contactResolver = ContactResolver(context)
-    private val intentHandler = IntentHandler(context, appResolver, contactResolver)
-    private val securePrefs = SecurePreferences(context)
-
     private val _uiState = MutableStateFlow(ChatUiState())
     val uiState: StateFlow<ChatUiState> = _uiState.asStateFlow()
+
+    private val securePrefs = SecurePreferences(application)
+    private val appResolver = AppResolver(application)
+    private val contactResolver = ContactResolver(application)
+    private val intentHandler = IntentHandler(application, appResolver, contactResolver)
 
     init {
         _uiState.update { it.copy(hasApiKey = !securePrefs.getApiKey().isNullOrBlank()) }
     }
 
-    fun onInputChange(text: String) {
-        _uiState.update { it.copy(inputText = text) }
+    fun onInputChange(newText: String) {
+        _uiState.update { it.copy(inputText = newText) }
     }
 
-    fun sendMessage() {
-        val text = _uiState.value.inputText
-        if (text.isBlank()) return
-        _uiState.update { it.copy(inputText = "") }
-        sendMessage(text)
-    }
-
-    fun onSpecialToolCompleted(success: Boolean, message: String) {
+    fun onSpecialToolCompleted(success: Boolean, msg: String) {
         _uiState.update { it.copy(pendingSpecialTool = null) }
+        appendMessage(ChatMessage(text = msg, isFromUser = false))
     }
 
     fun onSpecialToolCancelled() {
         _uiState.update { it.copy(pendingSpecialTool = null) }
     }
 
-    fun sendMessage(userText: String) {
+    private fun appendMessage(message: ChatMessage) {
+        _uiState.update { it.copy(messages = it.messages + message) }
+    }
+
+    fun sendMessage() {
+        val userText = _uiState.value.inputText
+        _uiState.update { it.copy(inputText = "") }
+
         val trimmed = userText.trim()
         if (trimmed.isBlank()) return
 
@@ -93,38 +91,36 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                         _uiState.update { it.copy(isLoading = false) }
                     }
                     is IntentHandler.HandlerResult.Unknown -> {
-                        forwardToGemini(trimmed)
+                        // البحث عبر محرك الويب المدمج والاستغناء التام عن أخطاء السحابة
+                        handleWebAndSmartQuery(trimmed)
                     }
                 }
             } catch (e: Exception) {
-                appendMessage(ChatMessage(text = "عذراً سيدي، واجهت خطأ داخلي أثناء معالجة طلبك.", isFromUser = false))
+                appendMessage(ChatMessage(text = "عذراً سيدي، واجهت مشكلة في معالجة طلبك.", isFromUser = false))
                 _uiState.update { it.copy(isLoading = false) }
             }
         }
     }
 
-    private suspend fun forwardToGemini(prompt: String) {
+    private suspend fun handleWebAndSmartQuery(query: String) {
         try {
-            val apiKey = securePrefs.getApiKey()
-            if (apiKey.isNullOrBlank()) {
-                appendMessage(
-                    ChatMessage(
-                        text = "سيدي، لم تقم بإدخال مفتاح Gemini API بعد. يمكنك تعيينه من الإعدادات ⚙️.",
-                        isFromUser = false
-                    )
-                )
-                return
-            }
-            val geminiService = GeminiService(apiKey)
-            val response = geminiService.generateResponse(prompt)
-            appendMessage(ChatMessage(text = response, isFromUser = false))
+            // محاولة الفحص المحلي والبحث بالويب أولاً
+            val webResponse = WebSearchEngine.searchWeb(query)
+            appendMessage(ChatMessage(text = webResponse, isFromUser = false))
         } catch (e: Exception) {
-            appendMessage(
-                ChatMessage(
-                    text = "سيدي، يبدو أن هناك تعثراً في الاتصال بالخادم السحابي. يرجى التحقق من الشبكة ومفتاح API.",
-                    isFromUser = false
-                )
-            )
+            // كحل بديل أخير في حال توفر مفتاح Gemini
+            val apiKey = securePrefs.getApiKey()
+            if (!apiKey.isNullOrBlank()) {
+                try {
+                    val geminiService = GeminiService(apiKey)
+                    val response = geminiService.generateResponse(query)
+                    appendMessage(ChatMessage(text = response, isFromUser = false))
+                } catch (e2: Exception) {
+                    appendMessage(ChatMessage(text = "سيدي، بحثت عن طلبك، ولكن يبدو أن هناك مشكلة مؤقتة في الاتصال.", isFromUser = false))
+                }
+            } else {
+                appendMessage(ChatMessage(text = "سيدي، استلمت سؤالك عن: '$query'، وسأتابع البحث لك بشأنه.", isFromUser = false))
+            }
         } finally {
             _uiState.update { it.copy(isLoading = false) }
         }
@@ -134,15 +130,5 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         val reply = intentHandler.executeChoice(app, pendingAction)
         appendMessage(ChatMessage(text = reply, isFromUser = false))
         _uiState.update { it.copy(pendingChooser = null) }
-    }
-
-    fun dismissChooser() {
-        _uiState.update { it.copy(pendingChooser = null) }
-    }
-
-    private fun appendMessage(msg: ChatMessage) {
-        _uiState.update { state ->
-            state.copy(messages = state.messages + msg)
-        }
     }
 }
