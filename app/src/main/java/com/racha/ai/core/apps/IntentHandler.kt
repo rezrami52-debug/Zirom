@@ -37,7 +37,7 @@ class IntentHandler(
     suspend fun handle(text: String): HandlerResult {
         val intentType = IntentClassifier.classify(text)
         return when (intentType) {
-            // الأوامر المحلية الحياتية (تُنفذ فوراً بدون إنترنت)
+            // الأوامر المحلية الحياتية (بدون إنترنت وبلا كوتا)
             IntentClassifier.IntentType.GET_TIME -> handleGetTime()
             IntentClassifier.IntentType.GET_DATE -> handleGetDate()
             IntentClassifier.IntentType.GET_BATTERY -> handleGetBattery()
@@ -155,7 +155,7 @@ class IntentHandler(
         return HandlerResult.DirectReply("🕌 سيدي، يمكنك الاطلاع على مواقيت الصلاة والقبلة بدقة عبر التبويب المخصص في الأسفل أو البطاقة العلوية.")
     }
 
-    // --- معالجات أوامر النظام والتطبيقات السابقة ---
+    // --- معالجات أوامر النظام والتطبيقات الأصلية ---
 
     private suspend fun handleShowLocation(): HandlerResult {
         val location = LocationHelper.getCurrentLocation(context) ?: return HandlerResult.Error("⚠️ لا أستطيع الوصول لموقعك. تأكد من تفعيل GPS.")
@@ -242,25 +242,51 @@ class IntentHandler(
     private suspend fun handleListApps(): HandlerResult {
         val allApps = appResolver.getAllInstalledApps()
         if (allApps.isEmpty()) return HandlerResult.Error("⚠️ لم أتمكن من جلب قائمة التطبيقات.")
+        val totalCount = allApps.size
         val previewApps = allApps.take(30)
         val appsList = previewApps.joinToString("\n") { "• ${it.appName}" }
-        return HandlerResult.DirectReply("📱 لديك ${allApps.size} تطبيقاً مثبتاً. أهمها:\n$appsList")
+        val moreText = if (totalCount > 30) "\n\n... و ${totalCount - 30} تطبيق آخر" else ""
+        return HandlerResult.DirectReply("📱 لديك $totalCount تطبيق مثبت:\n\n$appsList$moreText")
     }
 
     private suspend fun handleSetAlarm(text: String): HandlerResult {
-        val result = setAlarmHandler.handle(text)
-        return HandlerResult.DirectReply(result)
+        val request = setAlarmHandler.parseAlarmRequest(text)
+            ?: return HandlerResult.Error("⚠️ لم أفهم وقت المنبه.\n\nمثال:\n• اضبط المنبه على الساعة 7 صباحاً\n• نبهني على الساعة 3 بعد الزوال")
+        val timeStr = setAlarmHandler.formatTime(request.hour, request.minute)
+        return if (setAlarmHandler.setAlarm(request)) HandlerResult.DirectReply("⏰ جاري ضبط المنبه على $timeStr")
+        else HandlerResult.Error("⚠️ فشل ضبط المنبه")
     }
 
-    private suspend fun handleToggleWifi(): HandlerResult {
+    fun executeChoice(app: AppResolver.InstalledApp, action: PendingAction): String {
+        return when (action.type) {
+            "MESSAGE" -> {
+                val details = action.contactDetails ?: ""
+                appResolver.openApp(app.packageName)
+                "✅ جاري فتح ${app.appName} لمراسلة:\n$details"
+            }
+            "MAP" -> {
+                if (action.lat != null && action.lon != null) {
+                    val ok = appResolver.openMapsWithCoords(app.packageName, action.lat, action.lon)
+                    if (ok) "🗺️ تم فتح ${app.appName}" else "⚠️ فشل فتح ${app.appName}"
+                } else "⚠️ لا توجد إحداثيات"
+            }
+            else -> {
+                if (appResolver.openApp(app.packageName)) "✅ تم فتح ${app.appName}" else "⚠️ فشل فتح ${app.appName}"
+            }
+        }
+    }
+
+    private fun handleToggleWifi(): HandlerResult {
+        val wifiManager = context.applicationContext.getSystemService(Context.WIFI_SERVICE) as? WifiManager
+            ?: return HandlerResult.Error("⚠️ لا أستطيع الوصول إلى إعدادات الواي فاي.")
         return try {
             val intent = Intent(Settings.ACTION_WIFI_SETTINGS).apply {
-                flags = Intent.FLAG_ACTIVITY_NEW_TASK
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
             }
             context.startActivity(intent)
-            HandlerResult.DirectReply("📶 فتحت لك إعدادات الواي فاي سيدي للتحكم بها.")
+            HandlerResult.DirectReply("📶 فتحت إعدادات الواي فاي. يمكنك إغلاقه من هناك.")
         } catch (e: Exception) {
-            HandlerResult.Error("⚠️ تعذر فتح إعدادات الواي فاي.")
+            HandlerResult.Error("⚠️ فشل فتح إعدادات الواي فاي.")
         }
     }
 
