@@ -9,6 +9,16 @@ enum class EveMood {
     SLEEPING, AWAKE_SMILING, OBSERVING_SCREEN, NOTIFICATION_ALERT, MEDIA_PLAYING
 }
 
+enum class MediaShelfType {
+    NONE, PHOTOS, VIDEOS, MUSIC
+}
+
+data class MediaPlaybackState(
+    val isPlaying: Boolean = false,
+    val title: String = "",
+    val artist: String = ""
+)
+
 data class EveCustomizationConfig(
     val bodyColor: Color = Color(0xFFF7F9FC),
     val eyeColor: Color = Color(0xFF00E5FF),
@@ -20,7 +30,9 @@ data class EveCustomizationConfig(
 
 data class EveUiState(
     val mood: EveMood = EveMood.SLEEPING,
-    val config: EveCustomizationConfig = EveCustomizationConfig()
+    val config: EveCustomizationConfig = EveCustomizationConfig(),
+    val playback: MediaPlaybackState = MediaPlaybackState(),
+    val shelfType: MediaShelfType = MediaShelfType.NONE
 )
 
 object EveState {
@@ -33,16 +45,6 @@ object EveState {
     private val _pendingNotifications = MutableStateFlow(0)
     val pendingNotifications: StateFlow<Int> = _pendingNotifications.asStateFlow()
 
-    private val _mediaUrl = MutableStateFlow<String?>(null)
-    val mediaUrl: StateFlow<String?> = _mediaUrl.asStateFlow()
-
-    private val _isVideo = MutableStateFlow(false)
-    val isVideo: StateFlow<Boolean> = _isVideo.asStateFlow()
-
-    /**
-     * تبديل حالة EVE بين السبات (العيون مغلقة) والاستيقاظ (العيون مفتوحة)
-     * @return true إذا أصبحت مستيقظة، false إذا دخلت السبات
-     */
     fun toggleSleepWake(): Boolean {
         val willWakeUp = _uiState.value.mood == EveMood.SLEEPING
         if (willWakeUp) {
@@ -64,23 +66,18 @@ object EveState {
         }
     }
 
-    fun updateConfig(config: EveCustomizationConfig) {
-        _uiState.value = _uiState.value.copy(config = config)
+    fun updatePlayback(isPlaying: Boolean, title: String, artist: String = "") {
+        _uiState.value = _uiState.value.copy(
+            playback = MediaPlaybackState(isPlaying = isPlaying, title = title, artist = artist)
+        )
     }
 
-    fun setStatus(newStatus: EveStatus) {
-        _status.value = newStatus
-        val mood = when (newStatus) {
-            EveStatus.IDLE -> EveMood.SLEEPING
-            EveStatus.NOTIFYING -> EveMood.NOTIFICATION_ALERT
-            EveStatus.AWAKE -> EveMood.AWAKE_SMILING
-            EveStatus.LISTENING -> EveMood.OBSERVING_SCREEN
-            EveStatus.THINKING -> EveMood.AWAKE_SMILING
-            EveStatus.SPEAKING -> EveMood.AWAKE_SMILING
-            EveStatus.PROJECTING -> EveMood.SLEEPING
-            EveStatus.MEDIA_PLAYING -> EveMood.MEDIA_PLAYING
-        }
-        _uiState.value = _uiState.value.copy(mood = mood)
+    fun openShelf(type: MediaShelfType) {
+        _uiState.value = _uiState.value.copy(shelfType = type)
+    }
+
+    fun closeShelf() {
+        _uiState.value = _uiState.value.copy(shelfType = MediaShelfType.NONE)
     }
 
     fun addNotification() {
@@ -93,20 +90,6 @@ object EveState {
         if (_status.value == EveStatus.NOTIFYING) {
             setMood(EveMood.SLEEPING)
         }
-    }
-
-    fun startMedia(url: String, video: Boolean) {
-        _mediaUrl.value = url
-        _isVideo.value = video
-        _status.value = EveStatus.MEDIA_PLAYING
-        _uiState.value = _uiState.value.copy(mood = EveMood.MEDIA_PLAYING)
-    }
-
-    fun stopMedia() {
-        _mediaUrl.value = null
-        _isVideo.value = false
-        _status.value = EveStatus.IDLE
-        _uiState.value = _uiState.value.copy(mood = EveMood.SLEEPING)
     }
 }
 
