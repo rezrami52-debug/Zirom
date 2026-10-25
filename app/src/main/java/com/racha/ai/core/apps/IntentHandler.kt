@@ -61,6 +61,25 @@ class IntentHandler(
         }
     }
 
+    fun executeChoice(app: AppResolver.InstalledApp, action: PendingAction): String {
+        return when (action.type) {
+            "MESSAGE" -> {
+                val details = action.contactDetails ?: ""
+                appResolver.openApp(app.packageName)
+                "✅ جاري فتح ${app.appName} لمراسلة:\n$details"
+            }
+            "MAP" -> {
+                if (action.lat != null && action.lon != null) {
+                    val ok = appResolver.openMapsWithCoords(app.packageName, action.lat, action.lon)
+                    if (ok) "🗺️ تم فتح ${app.appName}" else "⚠️ فشل فتح ${app.appName}"
+                } else "⚠️ لا توجد إحداثيات"
+            }
+            else -> {
+                if (appResolver.openApp(app.packageName)) "✅ تم فتح ${app.appName}" else "⚠️ فشل فتح ${app.appName}"
+            }
+        }
+    }
+
     private fun handleAdvancedCommands(text: String): HandlerResult {
         val lower = text.lowercase()
         return when {
@@ -156,6 +175,30 @@ class IntentHandler(
         }
     }
 
+    private fun handleSetRingerMode(text: String): HandlerResult {
+        val audioManager = context.getSystemService(Context.AUDIO_SERVICE) as AudioManager
+        val lowerText = text.lowercase()
+        return try {
+            when {
+                lowerText.contains("صامت") || lowerText.contains("silent") -> {
+                    audioManager.ringerMode = AudioManager.RINGER_MODE_SILENT
+                    HandlerResult.DirectReply("🔕 تم تحويل الهاتف إلى وضع الصامت.")
+                }
+                lowerText.contains("اهتزاز") || lowerText.contains("vibrate") -> {
+                    audioManager.ringerMode = AudioManager.RINGER_MODE_VIBRATE
+                    HandlerResult.DirectReply("📳 تم تحويل الهاتف إلى وضع الاهتزاز.")
+                }
+                lowerText.contains("عادي") || lowerText.contains("normal") || lowerText.contains("رنين") -> {
+                    audioManager.ringerMode = AudioManager.RINGER_MODE_NORMAL
+                    HandlerResult.DirectReply("🔔 تم تحويل الهاتف إلى الوضع العادي.")
+                }
+                else -> HandlerResult.Error("⚠️ لم أفهم وضع الصوت المطلوب. جرب: صامت، اهتزاز، عادي.")
+            }
+        } catch (e: Exception) {
+            HandlerResult.Error("⚠️ فشل تغيير وضع الصوت. تأكد من منح صلاحية 'عدم الإزعاج'.")
+        }
+    }
+
     private fun handleGreeting(): HandlerResult {
         val greetings = listOf(
             "أهلاً بك سيدي! أنا EVE، جاهزة دائماً في خدمتك 🫧",
@@ -210,8 +253,15 @@ class IntentHandler(
         val contactsInfo = contacts.joinToString("\n") { "👤 ${it.name}\n📞 ${it.phoneNumber}" }
         val messagingApps = appResolver.getMessagingApps()
         if (messagingApps.isEmpty()) return HandlerResult.Error("⚠️ لا يوجد تطبيق مراسلة مثبت.\n\n$contactsInfo")
-        appResolver.openApp(messagingApps[0].packageName)
-        return HandlerResult.DirectReply("✅ فتحت تطبيق المراسلة لـ $contactName")
+        if (messagingApps.size == 1) {
+            appResolver.openApp(messagingApps[0].packageName)
+            return HandlerResult.DirectReply("✅ وجدت:\n$contactsInfo\n\nتم فتح ${messagingApps[0].appName}")
+        }
+        return HandlerResult.ShowChooser(
+            title = "💬 اختر تطبيق المراسلة لـ '$contactName'",
+            apps = messagingApps,
+            pendingAction = PendingAction(type = "MESSAGE", contactName = contactName, contactDetails = contactsInfo)
+        )
     }
 
     private suspend fun handleMakeCall(text: String): HandlerResult {
