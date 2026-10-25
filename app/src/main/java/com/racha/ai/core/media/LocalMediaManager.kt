@@ -3,69 +3,54 @@ package com.racha.ai.core.media
 import android.content.ContentUris
 import android.content.Context
 import android.net.Uri
-import android.os.Build
 import android.provider.MediaStore
 
 data class MediaItemData(
     val id: Long,
     val title: String,
     val uri: Uri,
-    val type: String
+    val type: String,
+    val size: Long = 0L,
+    val duration: Long = 0L
 )
 
 class LocalMediaManager(private val context: Context) {
 
-    private fun getAudioUri(): Uri {
-        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-            MediaStore.Audio.Media.getContentUri(MediaStore.VOLUME_EXTERNAL)
-        } else {
-            MediaStore.Audio.Media.EXTERNAL_CONTENT_URI
-        }
-    }
-
-    private fun getVideoUri(): Uri {
-        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-            MediaStore.Video.Media.getContentUri(MediaStore.VOLUME_EXTERNAL)
-        } else {
-            MediaStore.Video.Media.EXTERNAL_CONTENT_URI
-        }
-    }
-
-    private fun getImageUri(): Uri {
-        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-            MediaStore.Images.Media.getContentUri(MediaStore.VOLUME_EXTERNAL)
-        } else {
-            MediaStore.Images.Media.EXTERNAL_CONTENT_URI
-        }
-    }
-
     fun getLocalAudios(): List<MediaItemData> {
         val list = mutableListOf<MediaItemData>()
+        val uri = MediaStore.Audio.Media.EXTERNAL_CONTENT_URI
         val projection = arrayOf(
             MediaStore.Audio.Media._ID,
             MediaStore.Audio.Media.TITLE,
-            MediaStore.Audio.Media.DISPLAY_NAME
+            MediaStore.Audio.Media.DISPLAY_NAME,
+            MediaStore.Audio.Media.SIZE,
+            MediaStore.Audio.Media.DURATION
         )
-        val audioUri = getAudioUri()
+
         try {
-            val cursor = context.contentResolver.query(
-                audioUri,
+            context.contentResolver.query(
+                uri,
                 projection,
                 null,
                 null,
-                "${MediaStore.Audio.Media.DATE_ADDED} DESC"
-            )
-            cursor?.use {
-                val idCol = it.getColumnIndexOrThrow(MediaStore.Audio.Media._ID)
-                val titleCol = it.getColumnIndex(MediaStore.Audio.Media.TITLE)
-                val nameCol = it.getColumnIndex(MediaStore.Audio.Media.DISPLAY_NAME)
-                while (it.moveToNext()) {
-                    val id = it.getLong(idCol)
-                    val rawTitle = if (titleCol != -1) it.getString(titleCol) else null
-                    val rawName = if (nameCol != -1) it.getString(nameCol) else null
+                "${MediaStore.Audio.Media.DATE_MODIFIED} DESC"
+            )?.use { cursor ->
+                val idCol = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media._ID)
+                val titleCol = cursor.getColumnIndex(MediaStore.Audio.Media.TITLE)
+                val nameCol = cursor.getColumnIndex(MediaStore.Audio.Media.DISPLAY_NAME)
+                val sizeCol = cursor.getColumnIndex(MediaStore.Audio.Media.SIZE)
+                val durCol = cursor.getColumnIndex(MediaStore.Audio.Media.DURATION)
+
+                while (cursor.moveToNext()) {
+                    val id = cursor.getLong(idCol)
+                    val rawTitle = if (titleCol != -1) cursor.getString(titleCol) else null
+                    val rawName = if (nameCol != -1) cursor.getString(nameCol) else null
                     val title = (rawTitle ?: rawName ?: "ملف صوتي").trim()
-                    val uri = ContentUris.withAppendedId(audioUri, id)
-                    list.add(MediaItemData(id, title, uri, "AUDIO"))
+                    val size = if (sizeCol != -1) cursor.getLong(sizeCol) else 0L
+                    val duration = if (durCol != -1) cursor.getLong(durCol) else 0L
+
+                    val contentUri = ContentUris.withAppendedId(uri, id)
+                    list.add(MediaItemData(id, title, contentUri, "AUDIO", size, duration))
                 }
             }
         } catch (e: Exception) {
@@ -76,31 +61,39 @@ class LocalMediaManager(private val context: Context) {
 
     fun getLocalVideos(): List<MediaItemData> {
         val list = mutableListOf<MediaItemData>()
+        val uri = MediaStore.Video.Media.EXTERNAL_CONTENT_URI
         val projection = arrayOf(
             MediaStore.Video.Media._ID,
             MediaStore.Video.Media.TITLE,
-            MediaStore.Video.Media.DISPLAY_NAME
+            MediaStore.Video.Media.DISPLAY_NAME,
+            MediaStore.Video.Media.SIZE,
+            MediaStore.Video.Media.DURATION
         )
-        val videoUri = getVideoUri()
+
         try {
-            val cursor = context.contentResolver.query(
-                videoUri,
+            context.contentResolver.query(
+                uri,
                 projection,
                 null,
                 null,
-                "${MediaStore.Video.Media.DATE_ADDED} DESC"
-            )
-            cursor?.use {
-                val idCol = it.getColumnIndexOrThrow(MediaStore.Video.Media._ID)
-                val titleCol = it.getColumnIndex(MediaStore.Video.Media.TITLE)
-                val nameCol = it.getColumnIndex(MediaStore.Video.Media.DISPLAY_NAME)
-                while (it.moveToNext()) {
-                    val id = it.getLong(idCol)
-                    val rawTitle = if (titleCol != -1) it.getString(titleCol) else null
-                    val rawName = if (nameCol != -1) it.getString(nameCol) else null
+                "${MediaStore.Video.Media.DATE_MODIFIED} DESC"
+            )?.use { cursor ->
+                val idCol = cursor.getColumnIndexOrThrow(MediaStore.Video.Media._ID)
+                val titleCol = cursor.getColumnIndex(MediaStore.Video.Media.TITLE)
+                val nameCol = cursor.getColumnIndex(MediaStore.Video.Media.DISPLAY_NAME)
+                val sizeCol = cursor.getColumnIndex(MediaStore.Video.Media.SIZE)
+                val durCol = cursor.getColumnIndex(MediaStore.Video.Media.DURATION)
+
+                while (cursor.moveToNext()) {
+                    val id = cursor.getLong(idCol)
+                    val rawTitle = if (titleCol != -1) cursor.getString(titleCol) else null
+                    val rawName = if (nameCol != -1) cursor.getString(nameCol) else null
                     val title = (rawTitle ?: rawName ?: "فيديو").trim()
-                    val uri = ContentUris.withAppendedId(videoUri, id)
-                    list.add(MediaItemData(id, title, uri, "VIDEO"))
+                    val size = if (sizeCol != -1) cursor.getLong(sizeCol) else 0L
+                    val duration = if (durCol != -1) cursor.getLong(durCol) else 0L
+
+                    val contentUri = ContentUris.withAppendedId(uri, id)
+                    list.add(MediaItemData(id, title, contentUri, "VIDEO", size, duration))
                 }
             }
         } catch (e: Exception) {
@@ -111,27 +104,32 @@ class LocalMediaManager(private val context: Context) {
 
     fun getLocalPhotos(): List<MediaItemData> {
         val list = mutableListOf<MediaItemData>()
+        val uri = MediaStore.Images.Media.EXTERNAL_CONTENT_URI
         val projection = arrayOf(
             MediaStore.Images.Media._ID,
-            MediaStore.Images.Media.DISPLAY_NAME
+            MediaStore.Images.Media.DISPLAY_NAME,
+            MediaStore.Images.Media.SIZE
         )
-        val imageUri = getImageUri()
+
         try {
-            val cursor = context.contentResolver.query(
-                imageUri,
+            context.contentResolver.query(
+                uri,
                 projection,
                 null,
                 null,
-                "${MediaStore.Images.Media.DATE_ADDED} DESC"
-            )
-            cursor?.use {
-                val idCol = it.getColumnIndexOrThrow(MediaStore.Images.Media._ID)
-                val nameCol = it.getColumnIndex(MediaStore.Images.Media.DISPLAY_NAME)
-                while (it.moveToNext()) {
-                    val id = it.getLong(idCol)
-                    val name = (if (nameCol != -1) it.getString(nameCol) else null) ?: "صورة"
-                    val uri = ContentUris.withAppendedId(imageUri, id)
-                    list.add(MediaItemData(id, name.trim(), uri, "PHOTO"))
+                "${MediaStore.Images.Media.DATE_MODIFIED} DESC"
+            )?.use { cursor ->
+                val idCol = cursor.getColumnIndexOrThrow(MediaStore.Images.Media._ID)
+                val nameCol = cursor.getColumnIndex(MediaStore.Images.Media.DISPLAY_NAME)
+                val sizeCol = cursor.getColumnIndex(MediaStore.Images.Media.SIZE)
+
+                while (cursor.moveToNext()) {
+                    val id = cursor.getLong(idCol)
+                    val name = (if (nameCol != -1) cursor.getString(nameCol) else null) ?: "صورة"
+                    val size = if (sizeCol != -1) cursor.getLong(sizeCol) else 0L
+
+                    val contentUri = ContentUris.withAppendedId(uri, id)
+                    list.add(MediaItemData(id, name.trim(), contentUri, "PHOTO", size))
                 }
             }
         } catch (e: Exception) {
