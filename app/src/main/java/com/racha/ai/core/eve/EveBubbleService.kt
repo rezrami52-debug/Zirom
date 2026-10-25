@@ -35,14 +35,10 @@ class EveBubbleService : Service() {
     private val serviceScope = CoroutineScope(Dispatchers.Main + Job())
     private var voiceInputHelper: VoiceInputHelper? = null
 
-    // مشغل الوسائط
     private var exoPlayer: ExoPlayer? = null
-
-    // راصد تشغيل الشاشة للكلمة المفتاحية
     private var screenReceiver: BroadcastReceiver? = null
     private var isListeningWakeWord = false
 
-    // إدارة الإشعارات الذكية
     private var pendingNotificationJob: Job? = null
     private var currentNotifKey: String? = null
 
@@ -265,12 +261,20 @@ class EveBubbleService : Service() {
                     EveState.openShelf(MediaShelfType.MUSIC)
                 }
                 isListeningWakeWord = false
-                startListeningForWakeWord()
+                serviceScope.launch {
+                    delay(500)
+                    startListeningForWakeWord()
+                }
             },
             onError = {
                 isListeningWakeWord = false
                 val pm = getSystemService(Context.POWER_SERVICE) as PowerManager
-                if (pm.isInteractive) startListeningForWakeWord()
+                if (pm.isInteractive) {
+                    serviceScope.launch {
+                        delay(600)
+                        startListeningForWakeWord()
+                    }
+                }
             }
         )
     }

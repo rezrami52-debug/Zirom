@@ -34,12 +34,15 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.racha.ai.core.media.LocalMediaManager
 import com.racha.ai.core.media.MediaItemData
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.withContext
 import kotlin.math.roundToInt
 
 @Composable
@@ -63,6 +66,22 @@ fun EveBubbleContent(
 
     val context = LocalContext.current
     val mediaManager = remember { LocalMediaManager(context) }
+
+    // تحميل الوسائط في الخلفية بدون تجميد الواجهة والأنيميشن
+    val items by produceState<List<MediaItemData>>(initialValue = emptyList(), shelfType) {
+        if (shelfType != MediaShelfType.NONE) {
+            value = withContext(Dispatchers.IO) {
+                when (shelfType) {
+                    MediaShelfType.MUSIC -> mediaManager.getLocalAudios()
+                    MediaShelfType.VIDEOS -> mediaManager.getLocalVideos()
+                    MediaShelfType.PHOTOS -> mediaManager.getLocalPhotos()
+                    else -> emptyList()
+                }
+            }
+        } else {
+            value = emptyList()
+        }
+    }
 
     // حركة الطفو
     val hoverDuration = if (isSleeping) 2800 else 1600
@@ -99,7 +118,6 @@ fun EveBubbleContent(
         label = "chestMarquee"
     )
 
-    // الرمش
     var isBlinking by remember { mutableStateOf(false) }
     LaunchedEffect(isSleeping) {
         if (!isSleeping) {
@@ -160,7 +178,6 @@ fun EveBubbleContent(
                     )
                 }
         ) {
-            // كبسولة EVE الرئيسية
             Box(
                 modifier = Modifier.size(width = 80.dp, height = 105.dp),
                 contentAlignment = Alignment.Center
@@ -195,7 +212,6 @@ fun EveBubbleContent(
                         style = Stroke(width = if (isNotifying) 2.5f else 1.5f)
                     )
 
-                    // قناع الوجه
                     val visorWidth = w * 0.64f
                     val visorHeight = h * 0.32f
                     val visorTop = h * 0.13f
@@ -210,7 +226,6 @@ fun EveBubbleContent(
                         cornerRadius = CornerRadius(visorWidth * 0.42f, visorHeight * 0.50f)
                     )
 
-                    // العيون
                     val eyeGlowColor = if (isNotifying) Color(0xFFFF1744) else Color(0xFF00E5FF)
                     val eyeCenterY = visorTop + visorHeight * 0.52f
                     val eyeWidth = visorWidth * 0.28f
@@ -245,7 +260,6 @@ fun EveBubbleContent(
                     }
                 }
 
-                // --- شريط الصدر النيوني الدائري (Chest Marquee HUD) ---
                 if (hasActiveMedia) {
                     Box(
                         modifier = Modifier
@@ -270,8 +284,6 @@ fun EveBubbleContent(
                 }
             }
 
-            // --- كبسولة أزرار التحكم السفلية (⏮️ ⏯️ ⏭️) ---
-            // تظهر فقط عندما تكون الموسيقى تعمل وتكون EVE مستيقظة
             AnimatedVisibility(
                 visible = hasActiveMedia && !isSleeping,
                 enter = fadeIn(),
@@ -310,26 +322,19 @@ fun EveBubbleContent(
             }
         }
 
-        // --- ثانياً: نافذة الهولوجرام الجانبية للوسائط (Holographic Media Shelf) ---
+        // --- ثانياً: نافذة الهولوجرام الجانبية للوسائط ---
         AnimatedVisibility(
             visible = shelfType != MediaShelfType.NONE,
             enter = fadeIn(),
             exit = fadeOut()
         ) {
-            val items = when (shelfType) {
-                MediaShelfType.MUSIC -> mediaManager.getLocalAudios()
-                MediaShelfType.VIDEOS -> mediaManager.getLocalVideos()
-                MediaShelfType.PHOTOS -> mediaManager.getLocalPhotos()
-                else -> emptyList()
-            }
-
             Surface(
                 modifier = Modifier
                     .padding(start = 10.dp)
-                    .width(180.dp)
-                    .height(260.dp),
+                    .width(200.dp)
+                    .height(280.dp),
                 shape = RoundedCornerShape(16.dp),
-                color = Color(0xFF080D1A).copy(alpha = 0.92f),
+                color = Color(0xFF080D1A).copy(alpha = 0.95f),
                 border = BorderStroke(1.5.dp, Color(0xFF00E5FF).copy(alpha = 0.7f)),
                 shadowElevation = 12.dp
             ) {
@@ -341,13 +346,13 @@ fun EveBubbleContent(
                     ) {
                         Text(
                             text = when (shelfType) {
-                                MediaShelfType.MUSIC -> "الموسيقى 🎶"
-                                MediaShelfType.VIDEOS -> "الفيديوهات 📽️"
-                                MediaShelfType.PHOTOS -> "الصور 🖼️"
+                                MediaShelfType.MUSIC -> "الموسيقى (${items.size}) 🎶"
+                                MediaShelfType.VIDEOS -> "الفيديوهات (${items.size}) 📽️"
+                                MediaShelfType.PHOTOS -> "الصور (${items.size}) 🖼️"
                                 else -> ""
                             },
                             color = Color(0xFF00E5FF),
-                            fontSize = 12.sp,
+                            fontSize = 11.sp,
                             fontWeight = FontWeight.Bold
                         )
 
@@ -356,39 +361,51 @@ fun EveBubbleContent(
                         }
                     }
 
-                    Divider(color = Color.White.copy(alpha = 0.15f), thickness = 1.dp)
+                    Divider(color = Color.White.copy(alpha = 0.15f), thickness = 1.dp, modifier = Modifier.padding(vertical = 4.dp))
 
-                    LazyColumn(
-                        modifier = Modifier.weight(1f).fillMaxWidth(),
-                        verticalArrangement = Arrangement.spacedBy(4.dp)
-                    ) {
-                        items(items) { item ->
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .clip(RoundedCornerShape(8.dp))
-                                    .clickable { onMediaItemSelected(item) }
-                                    .padding(vertical = 6.dp, horizontal = 4.dp),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Icon(
-                                    imageVector = when (item.type) {
-                                        "AUDIO" -> Icons.Default.MusicNote
-                                        "VIDEO" -> Icons.Default.PlayCircle
-                                        else -> Icons.Default.Image
-                                    },
-                                    contentDescription = null,
-                                    tint = Color(0xFF00E5FF),
-                                    modifier = Modifier.size(16.dp)
-                                )
-                                Spacer(modifier = Modifier.width(6.dp))
-                                Text(
-                                    text = item.title,
-                                    color = Color.White,
-                                    fontSize = 10.sp,
-                                    maxLines = 1,
-                                    fontWeight = FontWeight.Medium
-                                )
+                    if (items.isEmpty()) {
+                        Box(
+                            modifier = Modifier.weight(1f).fillMaxWidth(),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text("لا توجد ملفات أو جاري التحميل...", color = Color.Gray, fontSize = 10.sp)
+                        }
+                    } else {
+                        LazyColumn(
+                            modifier = Modifier.weight(1f).fillMaxWidth(),
+                            verticalArrangement = Arrangement.spacedBy(4.dp)
+                        ) {
+                            items(items) { item ->
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .clip(RoundedCornerShape(8.dp))
+                                        .clickable { onMediaItemSelected(item) }
+                                        .background(Color.White.copy(alpha = 0.05f))
+                                        .padding(vertical = 6.dp, horizontal = 6.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Icon(
+                                        imageVector = when (item.type) {
+                                            "AUDIO" -> Icons.Default.MusicNote
+                                            "VIDEO" -> Icons.Default.PlayCircle
+                                            else -> Icons.Default.Image
+                                        },
+                                        contentDescription = null,
+                                        tint = Color(0xFF00E5FF),
+                                        modifier = Modifier.size(16.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Text(
+                                        text = item.title,
+                                        color = Color.White,
+                                        fontSize = 10.sp,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis,
+                                        fontWeight = FontWeight.Medium,
+                                        modifier = Modifier.weight(1f)
+                                    )
+                                }
                             }
                         }
                     }
