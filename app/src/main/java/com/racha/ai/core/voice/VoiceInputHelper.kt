@@ -18,6 +18,7 @@ class VoiceInputHelper(private val context: Context) {
 
     private var recognizer: SpeechRecognizer? = null
     private val audioManager = context.getSystemService(Context.AUDIO_SERVICE) as AudioManager
+    private var isCurrentlyListening = false
 
     private fun muteSystemAudio(mute: Boolean) {
         try {
@@ -32,12 +33,12 @@ class VoiceInputHelper(private val context: Context) {
                 audioManager.setStreamMute(AudioManager.STREAM_SYSTEM, mute)
             }
         } catch (e: Exception) {
-            // تجاهل في حال عدم توفر الصلاحية
+            // تجاهل إن كانت الصلاحية غير متوفرة
         }
     }
 
     fun startListening(
-        languageTag: String = "ar-TN",
+        languageTag: String = "ar",
         onResult: (String) -> Unit,
         onError: (String) -> Unit,
         onPartialResult: (String) -> Unit = {},
@@ -45,18 +46,21 @@ class VoiceInputHelper(private val context: Context) {
         onEnd: () -> Unit = {}
     ) {
         if (!SpeechRecognizer.isRecognitionAvailable(context)) {
-            onError("التعرف على الصوت غير متاح على هذا الجهاز")
+            onError("التعرف على الصوت غير متاح")
             return
         }
 
-        recognizer?.destroy()
-        recognizer = SpeechRecognizer.createSpeechRecognizer(context)
+        if (isCurrentlyListening) {
+            return
+        }
+
+        if (recognizer == null) {
+            recognizer = SpeechRecognizer.createSpeechRecognizer(context)
+        }
 
         val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
             putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
             putExtra(RecognizerIntent.EXTRA_LANGUAGE, languageTag)
-            putExtra(RecognizerIntent.EXTRA_LANGUAGE_PREFERENCE, languageTag)
-            putExtra(RecognizerIntent.EXTRA_ONLY_RETURN_LANGUAGE_PREFERENCE, languageTag)
             putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true)
             putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 1)
             putExtra(RecognizerIntent.EXTRA_CALLING_PACKAGE, context.packageName)
@@ -65,51 +69,42 @@ class VoiceInputHelper(private val context: Context) {
 
         recognizer?.setRecognitionListener(object : RecognitionListener {
             override fun onReadyForSpeech(params: Bundle?) {
-                Log.d(TAG, "جاهز للاستماع")
-                // إعادة الصوت بعد بدء الاستماع الصامت
+                isCurrentlyListening = true
                 muteSystemAudio(false)
                 onReady()
             }
 
-            override fun onBeginningOfSpeech() {
-                Log.d(TAG, "بدأ الكلام")
-            }
-
+            override fun onBeginningOfSpeech() {}
             override fun onRmsChanged(rmsdB: Float) {}
             override fun onBufferReceived(buffer: ByteArray?) {}
 
             override fun onEndOfSpeech() {
-                Log.d(TAG, "انتهى الكلام")
+                isCurrentlyListening = false
                 onEnd()
             }
 
             override fun onError(error: Int) {
+                isCurrentlyListening = false
                 muteSystemAudio(false)
                 val message = when (error) {
-                    SpeechRecognizer.ERROR_AUDIO -> "خطأ في الميكروفون"
-                    SpeechRecognizer.ERROR_CLIENT -> "خطأ في التطبيق"
-                    SpeechRecognizer.ERROR_INSUFFICIENT_PERMISSIONS -> "صلاحية الميكروفون مفقودة"
-                    SpeechRecognizer.ERROR_NETWORK -> "مشكلة في الشبكة"
-                    SpeechRecognizer.ERROR_NETWORK_TIMEOUT -> "انتهت مهلة الشبكة"
-                    SpeechRecognizer.ERROR_NO_MATCH -> "لم أسمع بوضوح"
+                    SpeechRecognizer.ERROR_AUDIO -> "خطأ ميكروفون"
+                    SpeechRecognizer.ERROR_NO_MATCH -> "لم أسمع"
+                    SpeechRecognizer.ERROR_SPEECH_TIMEOUT -> "انتهت المهلة"
                     SpeechRecognizer.ERROR_RECOGNIZER_BUSY -> "المستمع مشغول"
-                    SpeechRecognizer.ERROR_SERVER -> "خطأ من الخادم"
-                    SpeechRecognizer.ERROR_SPEECH_TIMEOUT -> "لم يُسمَع شيء"
-                    else -> "خطأ غير معروف"
+                    else -> "خطأ ($error)"
                 }
-                Log.e(TAG, "خطأ في التعرف: $message ($error)")
                 onError(message)
             }
 
             override fun onResults(results: Bundle?) {
+                isCurrentlyListening = false
                 muteSystemAudio(false)
                 val matches = results?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
                 val text = matches?.firstOrNull() ?: ""
-                Log.d(TAG, "النتيجة: $text")
                 if (text.isNotBlank()) {
                     onResult(text)
                 } else {
-                    onError("لم أسمع بوضوح")
+                    onError("فارغ")
                 }
             }
 
@@ -124,13 +119,18 @@ class VoiceInputHelper(private val context: Context) {
             override fun onEvent(eventType: Int, params: Bundle?) {}
         })
 
-        // كتم صوت الصفارة قبل الاستدعاء
-        muteSystemAudio(true)
-        recognizer?.startListening(intent)
+        try {
+            muteSystemAudio(true)
+            recognizer?.startListening(intent)
+        } catch (e: Exception) {
+            isCurrentlyListening = false
+            onError(e.message ?: "فشل البدء")
+        }
     }
 
     fun stopListening() {
         try {
+            isCurrentlyListening = false
             muteSystemAudio(false)
             recognizer?.stopListening()
         } catch (e: Exception) {
@@ -140,6 +140,7 @@ class VoiceInputHelper(private val context: Context) {
 
     fun destroy() {
         try {
+            isCurrentlyListening = false
             muteSystemAudio(false)
             recognizer?.destroy()
             recognizer = null

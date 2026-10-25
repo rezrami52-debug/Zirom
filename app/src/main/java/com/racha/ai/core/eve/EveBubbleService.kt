@@ -22,6 +22,7 @@ import androidx.media3.exoplayer.ExoPlayer
 import com.racha.ai.core.media.MediaItemData
 import com.racha.ai.core.overlay.OverlayLifecycleOwner
 import com.racha.ai.core.voice.VoiceInputHelper
+import com.racha.ai.core.voice.VoiceprintManager
 import kotlinx.coroutines.*
 import java.util.Locale
 
@@ -34,10 +35,12 @@ class EveBubbleService : Service() {
     private var tts: TextToSpeech? = null
     private val serviceScope = CoroutineScope(Dispatchers.Main + Job())
     private var voiceInputHelper: VoiceInputHelper? = null
+    private lateinit var voiceprintManager: VoiceprintManager
 
     private var exoPlayer: ExoPlayer? = null
     private var screenReceiver: BroadcastReceiver? = null
     private var isListeningWakeWord = false
+    private var isHandlingAwake = false
 
     private var pendingNotificationJob: Job? = null
     private var currentNotifKey: String? = null
@@ -48,6 +51,7 @@ class EveBubbleService : Service() {
         super.onCreate()
         windowManager = getSystemService(Context.WINDOW_SERVICE) as WindowManager
         voiceInputHelper = VoiceInputHelper(this)
+        voiceprintManager = VoiceprintManager(this)
         exoPlayer = ExoPlayer.Builder(this).build()
 
         startForegroundServiceNotification()
@@ -68,7 +72,7 @@ class EveBubbleService : Service() {
                     if (highQualityVoice != null) tts?.voice = highQualityVoice
                 } catch (e: Exception) { e.printStackTrace() }
                 tts?.setPitch(1.08f)
-                tts?.setSpeechRate(0.92f)
+                tts?.setSpeechRate(0.95f)
             }
         }
     }
@@ -242,41 +246,95 @@ class EveBubbleService : Service() {
         }
     }
 
+    private fun isWakeWord(text: String): Boolean {
+        val l = text.lowercase()
+        return l.contains("eve") || l.contains("ايف") || l.contains("إيف") ||
+               l.contains("ايڤ") || l.contains("اف") || l.contains("racha") ||
+               l.contains("راشا") || l.contains("رشا") || l.contains("روشا")
+    }
+
+    private fun handleVoiceTrigger(text: String) {
+        if (isHandlingAwake) return
+        isHandlingAwake = true
+        voiceInputHelper?.stopListening()
+
+        serviceScope.launch(Dispatchers.Main) {
+            // التحقق من بصمة نبرة الصوت
+            val currentPitch = withContext(Dispatchers.IO) {
+                voiceprintManager.captureCurrentSpeakerPitch()
+            }
+
+            if (!voiceprintManager.isOwnerVoice(currentPitch)) {
+                // الصوت ليس صوت صاحب الهاتف -> العودة فوراً للسبات
+                EveState.setMood(EveMood.SLEEPING)
+                isHandlingAwake = false
+                delay(1000)
+                startListeningForWakeWord()
+                return@launch
+            }
+
+            // الصوت يطابق صاحب الهاتف -> استيقاظ وتنفيذ الأمر
+            val lower = text.lowercase()
+            if (lower.contains("سجلي صوتي") || lower.contains("احفظي بصمتي")) {
+                voiceprintManager.registerPitch(currentPitch)
+                EveState.setMood(EveMood.AWAKE_SMILING)
+                speakCleanText("تم حفظ وتحديث بصمة صوتك بنجاح سيدي")
+            } else if (lower.contains("فيديو") || lower.contains("فيديوهات")) {
+                EveState.openShelf(MediaShelfType.VIDEOS)
+                speakCleanText("تفضل الفيديوهات سيدي")
+            } else if (lower.contains("صور") || lower.contains("الصور")) {
+                EveState.openShelf(MediaShelfType.PHOTOS)
+                speakCleanText("تفضل ألبوم الصور")
+            } else if (lower.contains("موسيقى") || lower.contains("اغاني")) {
+                EveState.openShelf(MediaShelfType.MUSIC)
+                speakCleanText("تفضل قائمة الموسيقى")
+            } else {
+                EveState.setMood(EveMood.AWAKE_SMILING)
+                speakCleanText("أنا معك سيدي، ماذا تطلب؟")
+            }
+
+            delay(2500)
+            isHandlingAwake = false
+            startListeningForWakeWord()
+        }
+    }
+
     private fun startListeningForWakeWord() {
-        if (isListeningWakeWord) return
+        if (isListeningWakeWord || isHandlingAwake) return
         isListeningWakeWord = true
 
         voiceInputHelper?.startListening(
             languageTag = "ar",
-            onResult = { text ->
-                val lower = text.lowercase()
-                if (lower.contains("eve") || lower.contains("ايف") || lower.contains("إيف") || lower.contains("racha") || lower.contains("راشا") || lower.contains("رشا")) {
-                    EveState.setMood(EveMood.AWAKE_SMILING)
-                    speakCleanText("أنا معك سيدي، ماذا تطلب؟")
-                } else if (lower.contains("فيديو") || lower.contains("فيديوهات")) {
-                    EveState.openShelf(MediaShelfType.VIDEOS)
-                } else if (lower.contains("صور") || lower.contains("الصور")) {
-                    EveState.openShelf(MediaShelfType.PHOTOS)
-                } else if (lower.contains("موسيقى") || lower.contains("اغاني")) {
-                    EveState.openShelf(MediaShelfType.MUSIC)
+            onPartialResult = { partialText ->
+                if (isWakeWord(partialText)) {
+                    isListeningWakeWord = false
+                    handleVoiceTrigger(partialText)
                 }
-                isListeningWakeWord = false
-                serviceScope.launch {
-                    delay(500)
-                    startListeningForWakeWord()
+            },
+            onResult = { fullText ->
+                if (isWakeWord(fullText)) {
+                    isListeningWakeWord = false
+                    handleVoiceTrigger(fullText)
+                } else {
+                    isListeningWakeWord = false
+                    scheduleRestartListening(400)
                 }
             },
             onError = {
                 isListeningWakeWord = false
                 val pm = getSystemService(Context.POWER_SERVICE) as PowerManager
-                if (pm.isInteractive) {
-                    serviceScope.launch {
-                        delay(600)
-                        startListeningForWakeWord()
-                    }
+                if (pm.isInteractive && !isHandlingAwake) {
+                    scheduleRestartListening(500)
                 }
             }
         )
+    }
+
+    private fun scheduleRestartListening(delayMs: Long) {
+        serviceScope.launch {
+            delay(delayMs)
+            startListeningForWakeWord()
+        }
     }
 
     private fun stopListeningForWakeWord() {
@@ -307,7 +365,7 @@ class EveBubbleService : Service() {
         }
         val notification: Notification = NotificationCompat.Builder(this, channelId)
             .setContentTitle("Racha AI (EVE)")
-            .setContentText("المساعد التكتيكي النشط")
+            .setContentText("المساعد التكتيكي النشط - في الاستماع")
             .setSmallIcon(android.R.drawable.ic_dialog_info)
             .setPriority(NotificationCompat.PRIORITY_MIN)
             .build()
