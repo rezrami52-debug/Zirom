@@ -25,9 +25,14 @@ import com.racha.ai.core.apps.IntentHandler
 import com.racha.ai.core.contacts.ContactResolver
 import com.racha.ai.core.media.MediaItemData
 import com.racha.ai.core.overlay.OverlayLifecycleOwner
+import com.racha.ai.core.security.SecurePreferences
 import com.racha.ai.core.voice.VoiceInputHelper
 import com.racha.ai.core.voice.VoiceprintManager
+import com.racha.ai.data.api.GeminiService
 import kotlinx.coroutines.*
+import java.text.SimpleDateFormat
+import java.util.Calendar
+import java.util.Date
 import java.util.Locale
 
 class EveBubbleService : Service() {
@@ -41,12 +46,14 @@ class EveBubbleService : Service() {
     private var voiceInputHelper: VoiceInputHelper? = null
     private lateinit var voiceprintManager: VoiceprintManager
     private lateinit var intentHandler: IntentHandler
+    private lateinit var securePreferences: SecurePreferences
 
     private var exoPlayer: ExoPlayer? = null
     private var screenReceiver: BroadcastReceiver? = null
     private var batteryReceiver: BroadcastReceiver? = null
     private var hasAlertedFullCharge = false
     private var hasAlertedLowBattery = false
+    private var lastMorningBriefingDate: String = ""
 
     private var isListeningWakeWord = false
     private var isHandlingAwake = false
@@ -61,6 +68,7 @@ class EveBubbleService : Service() {
         windowManager = getSystemService(Context.WINDOW_SERVICE) as WindowManager
         voiceInputHelper = VoiceInputHelper(this)
         voiceprintManager = VoiceprintManager(this)
+        securePreferences = SecurePreferences(this)
         intentHandler = IntentHandler(this, AppResolver(this), ContactResolver(this))
         exoPlayer = ExoPlayer.Builder(this).build()
 
@@ -238,7 +246,10 @@ class EveBubbleService : Service() {
         screenReceiver = object : BroadcastReceiver() {
             override fun onReceive(context: Context?, intent: Intent?) {
                 when (intent?.action) {
-                    Intent.ACTION_SCREEN_ON -> startListeningForWakeWord()
+                    Intent.ACTION_SCREEN_ON -> {
+                        checkAndTriggerMorningBriefing()
+                        startListeningForWakeWord()
+                    }
                     Intent.ACTION_SCREEN_OFF -> stopListeningForWakeWord()
                 }
             }
@@ -249,6 +260,21 @@ class EveBubbleService : Service() {
         val powerManager = getSystemService(Context.POWER_SERVICE) as PowerManager
         if (powerManager.isInteractive) {
             startListeningForWakeWord()
+        }
+    }
+
+    private fun checkAndTriggerMorningBriefing() {
+        val cal = Calendar.getInstance()
+        val hour = cal.get(Calendar.HOUR_OF_DAY)
+        val todayStr = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(Date())
+
+        // يتم إلقاء التحية الصباحية مرة واحدة في اليوم بين 6 و 10 صباحاً
+        if (hour in 6..10 && lastMorningBriefingDate != todayStr) {
+            lastMorningBriefingDate = todayStr
+            serviceScope.launch {
+                delay(1200)
+                speakCleanText("صباح الخير سيدي! أتمنى لك يوماً موفقاً وممتعاً. كل الأنظمة تعمل بكفاءة تامة.")
+            }
         }
     }
 
@@ -323,6 +349,9 @@ class EveBubbleService : Service() {
             } else if (lower.contains("موسيقى") || lower.contains("اغاني")) {
                 EveState.openShelf(MediaShelfType.MUSIC)
                 speakCleanText("تفضل قائمة الموسيقى")
+            } else if (lower.contains("ماذا ترى") || lower.contains("شوفي الشاشة") || lower.contains("حللي الشاشة") || lower.contains("اقرأ الشاشة")) {
+                // ميزة الذكاء البصري التوليدي للشاشة عبر Gemini
+                handleScreenVisionQuery()
             } else {
                 val cleanCommand = text.replace(Regex("(?i)eve|racha|ايف|إيف|ايڤ|اف|راشا|رشا|روشا|يا "), "").trim()
 
@@ -331,7 +360,22 @@ class EveBubbleService : Service() {
                     when (result) {
                         is IntentHandler.HandlerResult.DirectReply -> speakCleanText(result.message)
                         is IntentHandler.HandlerResult.Error -> speakCleanText(result.message)
-                        else -> speakCleanText("أنا معك سيدي، ماذا تطلب؟")
+                        else -> {
+                            // الاستعانة بـ Gemini للإجابة عن الأسئلة العامة بدلاً من الرد الصامت
+                            val apiKey = securePreferences.getApiKey()
+                            if (!apiKey.isNullOrBlank()) {
+                                try {
+                                    val aiReply = withContext(Dispatchers.IO) {
+                                        GeminiService(apiKey).generateResponse(cleanCommand)
+                                    }
+                                    speakCleanText(aiReply)
+                                } catch (e: Exception) {
+                                    speakCleanText("أنا معك سيدي، ماذا تطلب؟")
+                                }
+                            } else {
+                                speakCleanText("أنا معك سيدي، ماذا تطلب؟")
+                            }
+                        }
                     }
                 } else {
                     speakCleanText("أنا معك سيدي، ماذا تطلب؟")
@@ -341,6 +385,29 @@ class EveBubbleService : Service() {
             delay(3000)
             isHandlingAwake = false
             startListeningForWakeWord()
+        }
+    }
+
+    private suspend fun handleScreenVisionQuery() {
+        val snapshot = EveAccessibilityService.instance?.getLatestScreenSnapshot()
+        if (snapshot == null || snapshot.visibleText.isBlank()) {
+            speakCleanText("سيدي، لم أتمكن من استخراج محتوى الشاشة حالياً.")
+            return
+        }
+
+        val apiKey = securePreferences.getApiKey()
+        if (apiKey.isNullOrBlank()) {
+            speakCleanText("أرى تطبيق ${snapshot.appName}: " + snapshot.visibleText.take(120))
+            return
+        }
+
+        try {
+            val aiAnalysis = withContext(Dispatchers.IO) {
+                GeminiService(apiKey).analyzeScreenContext(snapshot.appName, snapshot.visibleText)
+            }
+            speakCleanText(aiAnalysis)
+        } catch (e: Exception) {
+            speakCleanText("أرى تطبيق ${snapshot.appName} سيدي، ولكن تعذر تحليل المحتوى بالذكاء الاصطناعي.")
         }
     }
 

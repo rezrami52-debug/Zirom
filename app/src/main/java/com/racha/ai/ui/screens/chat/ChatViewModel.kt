@@ -41,18 +41,14 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
     private val intentHandler = IntentHandler(application, appResolver, contactResolver)
 
     init {
-        // تبدأ الواجهة دائماً بجلسة جديدة ونظيفة
-        _uiState.update { 
+        _uiState.update {
             it.copy(
                 messages = emptyList(),
                 hasApiKey = !securePrefs.getApiKey().isNullOrBlank()
-            ) 
+            )
         }
     }
 
-    /**
-     * بدء محادثة جديدة وتصفير الشاشة
-     */
     fun startNewChat() {
         _uiState.update { it.copy(messages = emptyList(), inputText = "") }
     }
@@ -104,7 +100,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                         _uiState.update { it.copy(isLoading = false) }
                     }
                     is IntentHandler.HandlerResult.Unknown -> {
-                        handleWebAndSmartQuery(trimmed)
+                        handleGeminiAndSmartQuery(trimmed)
                     }
                 }
             } catch (e: Exception) {
@@ -114,23 +110,27 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    private suspend fun handleWebAndSmartQuery(query: String) {
+    private suspend fun handleGeminiAndSmartQuery(query: String) {
+        val apiKey = securePrefs.getApiKey()
+        if (!apiKey.isNullOrBlank()) {
+            try {
+                // 1. الأولوية المطلقة لذكاء Gemini في التحليل والإجابة
+                val geminiService = GeminiService(apiKey)
+                val response = geminiService.generateResponse(query)
+                appendMessage(ChatMessage(text = response, isFromUser = false))
+                _uiState.update { it.copy(isLoading = false) }
+                return
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
+        }
+
+        // 2. البحث على الويب كخيار بديل فقط إذا تعذر Gemini
         try {
             val webResponse = WebSearchEngine.searchWeb(query)
             appendMessage(ChatMessage(text = webResponse, isFromUser = false))
         } catch (e: Exception) {
-            val apiKey = securePrefs.getApiKey()
-            if (!apiKey.isNullOrBlank()) {
-                try {
-                    val geminiService = GeminiService(apiKey)
-                    val response = geminiService.generateResponse(query)
-                    appendMessage(ChatMessage(text = response, isFromUser = false))
-                } catch (e2: Exception) {
-                    appendMessage(ChatMessage(text = "سيدي، تعذر جلب تفاصيل إضافية في الوقت الحالي.", isFromUser = false))
-                }
-            } else {
-                appendMessage(ChatMessage(text = "سيدي، تلقيت استفسارك وسأساعدك فيه فور توفر المعطيات.", isFromUser = false))
-            }
+            appendMessage(ChatMessage(text = "سيدي، تفضل بأمرك وسأكون جاهزة دائماً لمساعدتك.", isFromUser = false))
         } finally {
             _uiState.update { it.copy(isLoading = false) }
         }
