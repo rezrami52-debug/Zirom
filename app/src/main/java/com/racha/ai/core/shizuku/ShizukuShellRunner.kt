@@ -22,14 +22,32 @@ object ShizukuShellRunner {
         }
     }
 
-    fun setWifiEnabled(enable: Boolean) {
+    fun setWifiEnabled(enable: Boolean): Boolean {
         val state = if (enable) "enable" else "disable"
-        execCommand("svc wifi $state")
+        val res = execCommand("svc wifi $state")
+        return !res.contains("فشل")
     }
 
-    fun setMobileDataEnabled(enable: Boolean) {
+    fun setMobileDataEnabled(enable: Boolean): Boolean {
         val state = if (enable) "enable" else "disable"
-        execCommand("svc data $state")
+        val res = execCommand("svc data $state")
+        return !res.contains("فشل")
+    }
+
+    fun setBluetoothEnabled(enable: Boolean): Boolean {
+        val cmd = if (enable) "cmd bluetooth_manager enable" else "cmd bluetooth_manager disable"
+        val res = execCommand(cmd)
+        return !res.contains("فشل")
+    }
+
+    fun lockScreen(): Boolean {
+        val res = execCommand("input keyevent 26")
+        return !res.contains("فشل")
+    }
+
+    fun takeScreenshot(path: String = "/sdcard/Pictures/racha_screen.png"): Boolean {
+        val res = execCommand("screencap -p $path")
+        return !res.contains("فشل")
     }
 
     fun grantPermission(packageName: String, permission: String): Boolean {

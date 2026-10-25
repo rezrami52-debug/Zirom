@@ -19,6 +19,9 @@ import androidx.compose.ui.platform.ComposeView
 import androidx.core.app.NotificationCompat
 import androidx.media3.common.MediaItem
 import androidx.media3.exoplayer.ExoPlayer
+import com.racha.ai.core.apps.AppResolver
+import com.racha.ai.core.apps.IntentHandler
+import com.racha.ai.core.contacts.ContactResolver
 import com.racha.ai.core.media.MediaItemData
 import com.racha.ai.core.overlay.OverlayLifecycleOwner
 import com.racha.ai.core.voice.VoiceInputHelper
@@ -36,6 +39,7 @@ class EveBubbleService : Service() {
     private val serviceScope = CoroutineScope(Dispatchers.Main + Job())
     private var voiceInputHelper: VoiceInputHelper? = null
     private lateinit var voiceprintManager: VoiceprintManager
+    private lateinit var intentHandler: IntentHandler
 
     private var exoPlayer: ExoPlayer? = null
     private var screenReceiver: BroadcastReceiver? = null
@@ -52,6 +56,7 @@ class EveBubbleService : Service() {
         windowManager = getSystemService(Context.WINDOW_SERVICE) as WindowManager
         voiceInputHelper = VoiceInputHelper(this)
         voiceprintManager = VoiceprintManager(this)
+        intentHandler = IntentHandler(this, AppResolver(this), ContactResolver(this))
         exoPlayer = ExoPlayer.Builder(this).build()
 
         startForegroundServiceNotification()
@@ -220,13 +225,8 @@ class EveBubbleService : Service() {
         }
     }
 
-    private fun skipNext() {
-        speakCleanText("الأغنية التالية")
-    }
-
-    private fun skipPrev() {
-        speakCleanText("الأغنية السابقة")
-    }
+    private fun skipNext() { speakCleanText("الأغنية التالية") }
+    private fun skipPrev() { speakCleanText("الأغنية السابقة") }
 
     private fun setupScreenStateReceiver() {
         screenReceiver = object : BroadcastReceiver() {
@@ -259,13 +259,13 @@ class EveBubbleService : Service() {
         voiceInputHelper?.stopListening()
 
         serviceScope.launch(Dispatchers.Main) {
-            // التحقق من بصمة نبرة الصوت
+            // التحقق من بصمة نبرة صوت المتحدث
             val currentPitch = withContext(Dispatchers.IO) {
                 voiceprintManager.captureCurrentSpeakerPitch()
             }
 
             if (!voiceprintManager.isOwnerVoice(currentPitch)) {
-                // الصوت ليس صوت صاحب الهاتف -> العودة فوراً للسبات
+                // ليس صوت صاحب الهاتف -> سبات فوري
                 EveState.setMood(EveMood.SLEEPING)
                 isHandlingAwake = false
                 delay(1000)
@@ -273,13 +273,16 @@ class EveBubbleService : Service() {
                 return@launch
             }
 
-            // الصوت يطابق صاحب الهاتف -> استيقاظ وتنفيذ الأمر
+            EveState.setMood(EveMood.AWAKE_SMILING)
+
             val lower = text.lowercase()
+            // 1. فحص أوامر البصمة السريعة
             if (lower.contains("سجلي صوتي") || lower.contains("احفظي بصمتي")) {
                 voiceprintManager.registerPitch(currentPitch)
-                EveState.setMood(EveMood.AWAKE_SMILING)
                 speakCleanText("تم حفظ وتحديث بصمة صوتك بنجاح سيدي")
-            } else if (lower.contains("فيديو") || lower.contains("فيديوهات")) {
+            }
+            // 2. فحص رفوف الوسائط
+            else if (lower.contains("فيديو") || lower.contains("فيديوهات")) {
                 EveState.openShelf(MediaShelfType.VIDEOS)
                 speakCleanText("تفضل الفيديوهات سيدي")
             } else if (lower.contains("صور") || lower.contains("الصور")) {
@@ -288,12 +291,25 @@ class EveBubbleService : Service() {
             } else if (lower.contains("موسيقى") || lower.contains("اغاني")) {
                 EveState.openShelf(MediaShelfType.MUSIC)
                 speakCleanText("تفضل قائمة الموسيقى")
-            } else {
-                EveState.setMood(EveMood.AWAKE_SMILING)
-                speakCleanText("أنا معك سيدي، ماذا تطلب؟")
+            }
+            // 3. تنفيذ أي أمر في الهاتف عبر IntentHandler المربوط بـ Shizuku
+            else {
+                // إزالة كلمة النداء من النص لمعالجة الأمر الصافي
+                val cleanCommand = text.replace(Regex("(?i)eve|racha|ايف|إيف|ايڤ|اف|راشا|رشا|روشا|يا "), "").trim()
+
+                if (cleanCommand.length > 2) {
+                    val result = withContext(Dispatchers.IO) { intentHandler.handle(cleanCommand) }
+                    when (result) {
+                        is IntentHandler.HandlerResult.DirectReply -> speakCleanText(result.message)
+                        is IntentHandler.HandlerResult.Error -> speakCleanText(result.message)
+                        else -> speakCleanText("أنا معك سيدي، ماذا تطلب؟")
+                    }
+                } else {
+                    speakCleanText("أنا معك سيدي، ماذا تطلب؟")
+                }
             }
 
-            delay(2500)
+            delay(3000)
             isHandlingAwake = false
             startListeningForWakeWord()
         }

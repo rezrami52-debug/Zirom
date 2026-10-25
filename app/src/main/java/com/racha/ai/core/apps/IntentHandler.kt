@@ -7,12 +7,13 @@ import android.hardware.camera2.CameraCharacteristics
 import android.hardware.camera2.CameraManager
 import android.media.AudioManager
 import android.net.Uri
-import android.net.wifi.WifiManager
 import android.os.BatteryManager
 import android.provider.MediaStore
 import android.provider.Settings
 import android.util.Log
 import com.racha.ai.core.contacts.ContactResolver
+import com.racha.ai.core.eve.EveAccessibilityService
+import com.racha.ai.core.shizuku.ShizukuShellRunner
 import com.racha.ai.services.location.LocationHelper
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -37,17 +38,16 @@ class IntentHandler(
     suspend fun handle(text: String): HandlerResult {
         val intentType = IntentClassifier.classify(text)
         return when (intentType) {
-            // الأوامر المحلية الحياتية (بدون إنترنت وبلا كوتا)
             IntentClassifier.IntentType.GET_TIME -> handleGetTime()
             IntentClassifier.IntentType.GET_DATE -> handleGetDate()
             IntentClassifier.IntentType.GET_BATTERY -> handleGetBattery()
             IntentClassifier.IntentType.TOGGLE_FLASHLIGHT -> handleToggleFlashlight(text)
-            IntentClassifier.IntentType.TOGGLE_BLUETOOTH -> handleToggleBluetooth()
+            IntentClassifier.IntentType.TOGGLE_BLUETOOTH -> handleToggleBluetooth(text)
+            IntentClassifier.IntentType.TOGGLE_WIFI -> handleToggleWifi(text)
+            IntentClassifier.IntentType.SET_RINGER -> handleSetRingerMode(text)
             IntentClassifier.IntentType.GREETING -> handleGreeting()
             IntentClassifier.IntentType.SMALL_TALK -> handleSmallTalk(text)
             IntentClassifier.IntentType.PRAYER_TIMES -> handlePrayerTimes()
-
-            // أوامر النظام والتطبيقات
             IntentClassifier.IntentType.SHOW_LOCATION -> handleShowLocation()
             IntentClassifier.IntentType.OPEN_MAP -> handleOpenMap()
             IntentClassifier.IntentType.SEND_MESSAGE -> handleSendMessage(text)
@@ -56,14 +56,33 @@ class IntentHandler(
             IntentClassifier.IntentType.OPEN_CAMERA -> handleOpenCamera()
             IntentClassifier.IntentType.LIST_APPS -> handleListApps()
             IntentClassifier.IntentType.SET_ALARM -> handleSetAlarm(text)
-            IntentClassifier.IntentType.TOGGLE_WIFI -> handleToggleWifi()
-            IntentClassifier.IntentType.SET_RINGER -> handleSetRingerMode(text)
             IntentClassifier.IntentType.CORRECTION -> HandlerResult.NeedsCorrection(text)
-            else -> HandlerResult.Unknown
+            else -> handleAdvancedCommands(text)
         }
     }
 
-    // --- معالجات الأوامر المحلية الفورية ---
+    private fun handleAdvancedCommands(text: String): HandlerResult {
+        val lower = text.lowercase()
+        return when {
+            lower.contains("اقفل الشاشة") || lower.contains("قفل الشاشة") || lower.contains("اطفي الشاشة") -> {
+                ShizukuShellRunner.lockScreen()
+                HandlerResult.DirectReply("سيدي، تم إغلاق الشاشة.")
+            }
+            lower.contains("صورة للشاشة") || lower.contains("سكرين شوت") || lower.contains("لقطة شاشة") -> {
+                ShizukuShellRunner.takeScreenshot()
+                HandlerResult.DirectReply("تم التقاط صورة الشاشة وحفظها بنجاح سيدي.")
+            }
+            lower.contains("ماذا ترى") || lower.contains("اقرأ الشاشة") || lower.contains("اقرا الشاشة") -> {
+                val snapshot = EveAccessibilityService.instance?.getLatestScreenSnapshot()
+                if (snapshot != null && snapshot.visibleText.isNotBlank()) {
+                    HandlerResult.DirectReply("أرى تطبيق ${snapshot.appName}:\n" + snapshot.visibleText.take(180))
+                } else {
+                    HandlerResult.DirectReply("سيدي، لا أستطيع قراءة الشاشة حالياً. تأكد من تفعيل خدمة إمكانية الوصول.")
+                }
+            }
+            else -> HandlerResult.Unknown
+        }
+    }
 
     private fun handleGetTime(): HandlerResult {
         val sdf = SimpleDateFormat("HH:mm", Locale.getDefault())
@@ -111,15 +130,29 @@ class IntentHandler(
         }
     }
 
-    private fun handleToggleBluetooth(): HandlerResult {
-        return try {
-            val intent = Intent(Settings.ACTION_BLUETOOTH_SETTINGS).apply {
-                flags = Intent.FLAG_ACTIVITY_NEW_TASK
-            }
+    private fun handleToggleWifi(text: String): HandlerResult {
+        val lower = text.lowercase()
+        val enable = !(lower.contains("اطفئ") || lower.contains("اطفي") || lower.contains("إطفاء") || lower.contains("اغلق") || lower.contains("اقفل") || lower.contains("off"))
+        val success = ShizukuShellRunner.setWifiEnabled(enable)
+        return if (success) {
+            HandlerResult.DirectReply(if (enable) "📶 تم تشغيل الواي فاي مباشرة سيدي." else "📶 تم إيقاف الواي فاي مباشرة سيدي.")
+        } else {
+            val intent = Intent(Settings.ACTION_WIFI_SETTINGS).apply { addFlags(Intent.FLAG_ACTIVITY_NEW_TASK) }
             context.startActivity(intent)
-            HandlerResult.DirectReply("📶 فتحت لك إعدادات البلوتوث سيدي للتحكم به.")
-        } catch (e: Exception) {
-            HandlerResult.Error("⚠️ تعذر فتح إعدادات البلوتوث.")
+            HandlerResult.DirectReply("📶 فتحت لك إعدادات الواي فاي سيدي.")
+        }
+    }
+
+    private fun handleToggleBluetooth(text: String): HandlerResult {
+        val lower = text.lowercase()
+        val enable = !(lower.contains("اطفئ") || lower.contains("اطفي") || lower.contains("إطفاء") || lower.contains("اغلق") || lower.contains("اقفل") || lower.contains("off"))
+        val success = ShizukuShellRunner.setBluetoothEnabled(enable)
+        return if (success) {
+            HandlerResult.DirectReply(if (enable) "📶 تم تشغيل البلوتوث سيدي." else "📶 تم إيقاف البلوتوث سيدي.")
+        } else {
+            val intent = Intent(Settings.ACTION_BLUETOOTH_SETTINGS).apply { addFlags(Intent.FLAG_ACTIVITY_NEW_TASK) }
+            context.startActivity(intent)
+            HandlerResult.DirectReply("📶 فتحت لك إعدادات البلوتوث سيدي.")
         }
     }
 
@@ -140,7 +173,7 @@ class IntentHandler(
                 HandlerResult.DirectReply("أنا في أتم الجاهزية والنشاط سيدي! شكراً لسؤالك، كيف يمكنني تسهيل يومك؟")
             }
             lower.contains("من انت") || lower.contains("من أنت") || lower.contains("عرف") || lower.contains("مين") -> {
-                HandlerResult.DirectReply("أنا EVE و Racha AI، مساعدك الشخصي والتكتيكي المتكامل، مستوحاة من روعة EVE وذكاء JARVIS.")
+                HandlerResult.DirectReply("أنا EVE و Racha AI، مساعدك الشخصي والتكتيكي المتكامل.")
             }
             lower.contains("شكر") || lower.contains("عافية") -> {
                 HandlerResult.DirectReply("العفو دائماً سيدي! أنا هنا في أي وقت تحتاجه.")
@@ -152,13 +185,11 @@ class IntentHandler(
     }
 
     private fun handlePrayerTimes(): HandlerResult {
-        return HandlerResult.DirectReply("🕌 سيدي، يمكنك الاطلاع على مواقيت الصلاة والقبلة بدقة عبر التبويب المخصص في الأسفل أو البطاقة العلوية.")
+        return HandlerResult.DirectReply("🕌 سيدي، يمكنك الاطلاع على مواقيت الصلاة والقبلة عبر التبويب المخصص بالأسفل.")
     }
 
-    // --- معالجات أوامر النظام والتطبيقات الأصلية ---
-
     private suspend fun handleShowLocation(): HandlerResult {
-        val location = LocationHelper.getCurrentLocation(context) ?: return HandlerResult.Error("⚠️ لا أستطيع الوصول لموقعك. تأكد من تفعيل GPS.")
+        val location = LocationHelper.getCurrentLocation(context) ?: return HandlerResult.Error("⚠️ لا أستطيع الوصول لموقعك.")
         val city = location.cityName ?: "منطقتك"
         return HandlerResult.DirectReply("📍 أنت في: $city\nالإحداثيات: (${location.latitude}, ${location.longitude})")
     }
@@ -167,9 +198,9 @@ class IntentHandler(
         val location = LocationHelper.getCurrentLocation(context) ?: return HandlerResult.Error("⚠️ لا أستطيع الوصول لموقعك.")
         val mapApps = appResolver.getMapApps()
         if (mapApps.isEmpty()) return HandlerResult.Error("⚠️ لا يوجد تطبيق خرائط مثبت.")
-        val preferredApp = mapApps.find { it.packageName == "com.google.android.apps.maps" || it.packageName == "com.google.earth" } ?: mapApps.first()
+        val preferredApp = mapApps.find { it.packageName == "com.google.android.apps.maps" } ?: mapApps.first()
         val success = appResolver.openMapsWithCoords(preferredApp.packageName, location.latitude, location.longitude)
-        return if (success) HandlerResult.DirectReply("🗺️ تم فتح ${preferredApp.appName}") else HandlerResult.Error("⚠️ فشل فتح الخريطة")
+        return if (success) HandlerResult.DirectReply("🗺️ تم فتح الخريطة سيدي.") else HandlerResult.Error("⚠️ فشل فتح الخريطة")
     }
 
     private suspend fun handleSendMessage(text: String): HandlerResult {
@@ -179,15 +210,8 @@ class IntentHandler(
         val contactsInfo = contacts.joinToString("\n") { "👤 ${it.name}\n📞 ${it.phoneNumber}" }
         val messagingApps = appResolver.getMessagingApps()
         if (messagingApps.isEmpty()) return HandlerResult.Error("⚠️ لا يوجد تطبيق مراسلة مثبت.\n\n$contactsInfo")
-        if (messagingApps.size == 1) {
-            appResolver.openApp(messagingApps[0].packageName)
-            return HandlerResult.DirectReply("✅ وجدت:\n$contactsInfo\n\nتم فتح ${messagingApps[0].appName}")
-        }
-        return HandlerResult.ShowChooser(
-            title = "💬 اختر تطبيق المراسلة لـ '$contactName'",
-            apps = messagingApps,
-            pendingAction = PendingAction(type = "MESSAGE", contactName = contactName, contactDetails = contactsInfo)
-        )
+        appResolver.openApp(messagingApps[0].packageName)
+        return HandlerResult.DirectReply("✅ فتحت تطبيق المراسلة لـ $contactName")
     }
 
     private suspend fun handleMakeCall(text: String): HandlerResult {
@@ -198,11 +222,9 @@ class IntentHandler(
         if (contactName != null) {
             val contacts = contactResolver.searchContact(contactName)
             if (contacts.isEmpty()) return HandlerResult.Error("⚠️ لم أجد جهة اتصال باسم '$contactName'.")
-            if (contacts.size == 1) return makePhoneCall(contacts[0].phoneNumber)
-            val contactsInfo = contacts.joinToString("\n") { "👤 ${it.name} - 📞 ${it.phoneNumber}" }
-            return HandlerResult.DirectReply("وجدت عدة جهات اتصال:\n$contactsInfo\n\nحدد من تريد.")
+            return makePhoneCall(contacts[0].phoneNumber)
         }
-        return HandlerResult.Error("⚠️ أدخل اسم جهة الاتصال أو الرقم مباشرة")
+        return HandlerResult.Error("⚠️ حدد اسم جهة الاتصال أو الرقم للاتصال.")
     }
 
     private fun makePhoneCall(phoneNumber: String): HandlerResult {
@@ -223,11 +245,11 @@ class IntentHandler(
         val browserApps = appResolver.getBrowserApps()
         if (browserApps.isEmpty()) return HandlerResult.Error("⚠️ لا يوجد متصفح مثبت.")
         appResolver.openApp(browserApps.first().packageName)
-        return HandlerResult.DirectReply("🌐 تم فتح ${browserApps.first().appName}")
+        return HandlerResult.DirectReply("🌐 تم فتح المتصفح سيدي.")
     }
 
     private suspend fun handleOpenCamera(): HandlerResult {
-        return HandlerResult.DirectReply("📷 جاري فتح الكاميرا...").also {
+        return HandlerResult.DirectReply("📷 تم فتح الكاميرا سيدي.").also {
             try {
                 val intent = Intent(MediaStore.INTENT_ACTION_STILL_IMAGE_CAMERA).apply {
                     addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
@@ -241,77 +263,15 @@ class IntentHandler(
 
     private suspend fun handleListApps(): HandlerResult {
         val allApps = appResolver.getAllInstalledApps()
-        if (allApps.isEmpty()) return HandlerResult.Error("⚠️ لم أتمكن من جلب قائمة التطبيقات.")
-        val totalCount = allApps.size
-        val previewApps = allApps.take(30)
-        val appsList = previewApps.joinToString("\n") { "• ${it.appName}" }
-        val moreText = if (totalCount > 30) "\n\n... و ${totalCount - 30} تطبيق آخر" else ""
-        return HandlerResult.DirectReply("📱 لديك $totalCount تطبيق مثبت:\n\n$appsList$moreText")
+        return HandlerResult.DirectReply("📱 لديك ${allApps.size} تطبيق مثبت في هاتفك سيدي.")
     }
 
     private suspend fun handleSetAlarm(text: String): HandlerResult {
         val request = setAlarmHandler.parseAlarmRequest(text)
-            ?: return HandlerResult.Error("⚠️ لم أفهم وقت المنبه.\n\nمثال:\n• اضبط المنبه على الساعة 7 صباحاً\n• نبهني على الساعة 3 بعد الزوال")
+            ?: return HandlerResult.Error("⚠️ لم أفهم وقت المنبه بدقة.")
         val timeStr = setAlarmHandler.formatTime(request.hour, request.minute)
-        return if (setAlarmHandler.setAlarm(request)) HandlerResult.DirectReply("⏰ جاري ضبط المنبه على $timeStr")
+        return if (setAlarmHandler.setAlarm(request)) HandlerResult.DirectReply("⏰ تم ضبط المنبه على الساعة $timeStr سيدي.")
         else HandlerResult.Error("⚠️ فشل ضبط المنبه")
-    }
-
-    fun executeChoice(app: AppResolver.InstalledApp, action: PendingAction): String {
-        return when (action.type) {
-            "MESSAGE" -> {
-                val details = action.contactDetails ?: ""
-                appResolver.openApp(app.packageName)
-                "✅ جاري فتح ${app.appName} لمراسلة:\n$details"
-            }
-            "MAP" -> {
-                if (action.lat != null && action.lon != null) {
-                    val ok = appResolver.openMapsWithCoords(app.packageName, action.lat, action.lon)
-                    if (ok) "🗺️ تم فتح ${app.appName}" else "⚠️ فشل فتح ${app.appName}"
-                } else "⚠️ لا توجد إحداثيات"
-            }
-            else -> {
-                if (appResolver.openApp(app.packageName)) "✅ تم فتح ${app.appName}" else "⚠️ فشل فتح ${app.appName}"
-            }
-        }
-    }
-
-    private fun handleToggleWifi(): HandlerResult {
-        val wifiManager = context.applicationContext.getSystemService(Context.WIFI_SERVICE) as? WifiManager
-            ?: return HandlerResult.Error("⚠️ لا أستطيع الوصول إلى إعدادات الواي فاي.")
-        return try {
-            val intent = Intent(Settings.ACTION_WIFI_SETTINGS).apply {
-                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-            }
-            context.startActivity(intent)
-            HandlerResult.DirectReply("📶 فتحت إعدادات الواي فاي. يمكنك إغلاقه من هناك.")
-        } catch (e: Exception) {
-            HandlerResult.Error("⚠️ فشل فتح إعدادات الواي فاي.")
-        }
-    }
-
-    private suspend fun handleSetRingerMode(text: String): HandlerResult {
-        val audioManager = context.getSystemService(Context.AUDIO_SERVICE) as AudioManager
-        val lowerText = text.lowercase()
-        return try {
-            when {
-                lowerText.contains("صامت") || lowerText.contains("silent") -> {
-                    audioManager.ringerMode = AudioManager.RINGER_MODE_SILENT
-                    HandlerResult.DirectReply("🔕 تم تحويل الهاتف إلى وضع الصامت.")
-                }
-                lowerText.contains("اهتزاز") || lowerText.contains("vibrate") -> {
-                    audioManager.ringerMode = AudioManager.RINGER_MODE_VIBRATE
-                    HandlerResult.DirectReply("📳 تم تحويل الهاتف إلى وضع الاهتزاز.")
-                }
-                lowerText.contains("عادي") || lowerText.contains("normal") || lowerText.contains("رنين") -> {
-                    audioManager.ringerMode = AudioManager.RINGER_MODE_NORMAL
-                    HandlerResult.DirectReply("🔔 تم تحويل الهاتف إلى الوضع العادي.")
-                }
-                else -> HandlerResult.Error("⚠️ لم أفهم وضع الصوت المطلوب. جرب: صامت، اهتزاز، عادي.")
-            }
-        } catch (e: Exception) {
-            HandlerResult.Error("⚠️ فشل تغيير وضع الصوت. تأكد من منح صلاحية 'عدم الإزعاج' (Do Not Disturb).")
-        }
     }
 
     private fun extractName(text: String): String? {

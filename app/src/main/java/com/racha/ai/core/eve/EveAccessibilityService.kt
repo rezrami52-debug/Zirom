@@ -1,6 +1,7 @@
 package com.racha.ai.core.eve
 
 import android.accessibilityservice.AccessibilityService
+import android.os.Bundle
 import android.view.accessibility.AccessibilityEvent
 import android.view.accessibility.AccessibilityNodeInfo
 
@@ -15,7 +16,6 @@ class EveAccessibilityService : AccessibilityService() {
         if (event == null) return
         val pkg = event.packageName?.toString() ?: return
 
-        // تجاهل نوافذ النظام وفقاعة Racha للحفاظ على تركيز التطبيق الحقيقي
         if (pkg != packageName && pkg != "com.android.systemui") {
             lastTargetPackage = pkg
             updateCurrentScreenSnapshot()
@@ -78,6 +78,38 @@ class EveAccessibilityService : AccessibilityService() {
             extractTextFromNode(node.getChild(i), list)
         }
     }
+
+    // --- قدرات التحكم والنقر التلقائي ---
+
+    fun clickNodeByText(targetText: String): Boolean {
+        val root = rootInActiveWindow ?: return false
+        val nodes = root.findAccessibilityNodeInfosByText(targetText)
+        for (node in nodes) {
+            if (node.isClickable) {
+                return node.performAction(AccessibilityNodeInfo.ACTION_CLICK)
+            }
+            var parent = node.parent
+            while (parent != null) {
+                if (parent.isClickable) {
+                    return parent.performAction(AccessibilityNodeInfo.ACTION_CLICK)
+                }
+                parent = parent.parent
+            }
+        }
+        return false
+    }
+
+    fun typeTextIntoFocusedField(text: String): Boolean {
+        val root = rootInActiveWindow ?: return false
+        val focusedNode = root.findFocus(AccessibilityNodeInfo.FOCUS_INPUT) ?: return false
+        val arguments = Bundle().apply {
+            putCharSequence(AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE, text)
+        }
+        return focusedNode.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT, arguments)
+    }
+
+    fun pressBack(): Boolean = performGlobalAction(GLOBAL_ACTION_BACK)
+    fun pressHome(): Boolean = performGlobalAction(GLOBAL_ACTION_HOME)
 
     companion object {
         var instance: EveAccessibilityService? = null
