@@ -8,6 +8,7 @@ object IntentClassifier {
         OPEN_APP, LIST_APPS, SET_ALARM, TOGGLE_WIFI, SET_RINGER,
         GET_TIME, GET_DATE, GET_BATTERY, TOGGLE_FLASHLIGHT,
         TOGGLE_BLUETOOTH, GREETING, SMALL_TALK, PRAYER_TIMES,
+        FIND_MY_PHONE, MOSQUE_MODE, MACRO_SLEEP, MACRO_CINEMA, MACRO_WORK,
         CORRECTION, UNKNOWN
     }
 
@@ -17,31 +18,38 @@ object IntentClassifier {
         if (isCorrection(text)) return IntentType.CORRECTION
         if (isSetAlarm(text)) return IntentType.SET_ALARM
 
-        // 1. الوقت والساعة
-        if (isTimeQuery(lower)) return IntentType.GET_TIME
+        // 1. ميزة أين هاتفي / وينك
+        if (isFindPhoneQuery(lower)) return IntentType.FIND_MY_PHONE
 
-        // 2. التاريخ واليوم
+        // 2. أوامر الماكرو المركبة
+        if (lower.contains("وضع المسجد") || lower.contains("صلاة المسجد") || lower.contains("وقت المسجد")) return IntentType.MOSQUE_MODE
+        if (lower.contains("وضع النوم") || lower.contains("وقت النوم") || lower.contains("حان وقت النوم") || lower.contains("تصبح على خير") || lower.contains("نرقد")) return IntentType.MACRO_SLEEP
+        if (lower.contains("وضع السينما") || lower.contains("وضع الفيلم") || lower.contains("نتفرج")) return IntentType.MACRO_CINEMA
+        if (lower.contains("وضع العمل") || lower.contains("وضع الدراسة") || lower.contains("وضع التركيز") || lower.contains("نحب نركز")) return IntentType.MACRO_WORK
+
+        // 3. الوقت والتاريخ
+        if (isTimeQuery(lower)) return IntentType.GET_TIME
         if (isDateQuery(lower)) return IntentType.GET_DATE
 
-        // 3. البطارية والشحن
+        // 4. البطارية والشحن
         if (isBatteryQuery(lower)) return IntentType.GET_BATTERY
 
-        // 4. الكشاف / الفلاش
+        // 5. الكشاف / الفلاش
         if (isFlashlightQuery(lower)) return IntentType.TOGGLE_FLASHLIGHT
 
-        // 5. البلوتوث
+        // 6. البلوتوث
         if (isBluetoothQuery(lower)) return IntentType.TOGGLE_BLUETOOTH
 
-        // 6. التحيات والترحيب الفوري
+        // 7. التحيات والترحيب
         if (isGreeting(lower)) return IntentType.GREETING
 
-        // 7. مواقيت الصلاة
+        // 8. مواقيت الصلاة
         if (isPrayerQuery(lower)) return IntentType.PRAYER_TIMES
 
-        // 8. الكلام العفوي والشكر وحالة المساعد
+        // 9. الكلام العفوي والشكر
         if (isSmallTalk(lower)) return IntentType.SMALL_TALK
 
-        // 9. الأوامر العادية
+        // 10. الأوامر العادية
         if (lower.contains("تطبيق") && (lower.contains("تفقد") || lower.contains("اعرض") || lower.contains("قائمة") || lower.contains("كل"))) return IntentType.LIST_APPS
         if (lower.contains("اين") && lower.contains("انا")) return IntentType.SHOW_LOCATION
         if ((lower.contains("خريطة") || lower.contains("موقعي") || lower.contains("earth") || lower.contains("maps")) && (lower.contains("اعرض") || lower.contains("افتح") || lower.contains("ارني") || lower.contains("موقعي"))) return IntentType.OPEN_MAP
@@ -53,10 +61,15 @@ object IntentClassifier {
         if (lower.contains("موسيقى") || lower.contains("اغنية") || lower.contains("spotify")) return IntentType.PLAY_MUSIC
         if (lower.contains("افتح") && (lower.contains("تطبيق") || lower.length > 5)) return IntentType.OPEN_APP
 
-        if (lower.contains("واي فاي") || lower.contains("wifi") || lower.contains("wi-fi")) return IntentType.TOGGLE_WIFI
+        if (lower.contains("واي فاي") || lower.contains("wifi") || lower.contains("wi-fi") || lower.contains("ويفي")) return IntentType.TOGGLE_WIFI
         if ((lower.contains("صامت") || lower.contains("اهتزاز") || lower.contains("عادي") || lower.contains("رنين")) && (lower.contains("وضع") || lower.contains("حول") || lower.contains("غير"))) return IntentType.SET_RINGER
 
         return IntentType.UNKNOWN
+    }
+
+    private fun isFindPhoneQuery(lower: String): Boolean {
+        val findWords = listOf("وينك", "وين تليفوني", "وين هاتفي", "أين هاتفي", "اين هاتفي", "أين أنت", "اين انت", "find my phone", "وينك يا تلفوني", "وينك يا فون")
+        return findWords.any { lower.contains(it) }
     }
 
     private fun isCorrection(text: String): Boolean {
@@ -101,7 +114,7 @@ object IntentClassifier {
     }
 
     private fun isSmallTalk(lower: String): Boolean {
-        val smallTalk = listOf("كيفك", "شلونك", "كيف حالك", "شحالك", "شنحوالك", "من انت", "من أنت", "عرفني بنفسك", "شكرا", "شكراً", "يعطيك العافية", "مين انت", "بخير")
+        val smallTalk = listOf("كيفك", "شلونك", "كيف حالك", "شحالك", "شنحوالك", "how are you", "من انت", "من أنت", "عرفني بنفسك", "شكرا", "شكراً", "يعطيك العافية", "مين انت", "بخير", "هل انتي", "هل انت")
         return smallTalk.any { lower.contains(it) }
     }
 

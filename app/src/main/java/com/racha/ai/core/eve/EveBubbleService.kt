@@ -7,6 +7,7 @@ import android.app.NotificationManager
 import android.app.Service
 import android.content.*
 import android.graphics.PixelFormat
+import android.os.BatteryManager
 import android.os.Build
 import android.os.IBinder
 import android.os.PowerManager
@@ -43,6 +44,10 @@ class EveBubbleService : Service() {
 
     private var exoPlayer: ExoPlayer? = null
     private var screenReceiver: BroadcastReceiver? = null
+    private var batteryReceiver: BroadcastReceiver? = null
+    private var hasAlertedFullCharge = false
+    private var hasAlertedLowBattery = false
+
     private var isListeningWakeWord = false
     private var isHandlingAwake = false
 
@@ -63,6 +68,7 @@ class EveBubbleService : Service() {
         setupHighQualityArabicTts()
         setupFloatingBubble()
         setupScreenStateReceiver()
+        setupBatteryGuardianReceiver()
     }
 
     private fun setupHighQualityArabicTts() {
@@ -246,11 +252,42 @@ class EveBubbleService : Service() {
         }
     }
 
+    private fun setupBatteryGuardianReceiver() {
+        batteryReceiver = object : BroadcastReceiver() {
+            override fun onReceive(context: Context?, intent: Intent?) {
+                if (intent?.action != Intent.ACTION_BATTERY_CHANGED) return
+                val level = intent.getIntExtra(BatteryManager.EXTRA_LEVEL, -1)
+                val scale = intent.getIntExtra(BatteryManager.EXTRA_SCALE, -1)
+                val status = intent.getIntExtra(BatteryManager.EXTRA_STATUS, -1)
+                val isCharging = status == BatteryManager.BATTERY_STATUS_CHARGING || status == BatteryManager.BATTERY_STATUS_FULL
+
+                if (level >= 0 && scale > 0) {
+                    val pct = (level * 100) / scale
+                    if (isCharging) {
+                        hasAlertedLowBattery = false
+                        if (pct >= 85 && !hasAlertedFullCharge) {
+                            hasAlertedFullCharge = true
+                            speakCleanText("سيدي، وصل الشحن إلى $pct بالمائة، يمكنك فصل الشاحن للحفاظ على سلامة البطارية.")
+                        }
+                    } else {
+                        hasAlertedFullCharge = false
+                        if (pct <= 15 && !hasAlertedLowBattery) {
+                            hasAlertedLowBattery = true
+                            speakCleanText("تنبيه سيدي، طاقة البطارية منخفضة ووصلت إلى $pct بالمائة.")
+                        }
+                    }
+                }
+            }
+        }
+        registerReceiver(batteryReceiver, IntentFilter(Intent.ACTION_BATTERY_CHANGED))
+    }
+
     private fun isWakeWord(text: String): Boolean {
         val l = text.lowercase()
         return l.contains("eve") || l.contains("ايف") || l.contains("إيف") ||
                l.contains("ايڤ") || l.contains("اف") || l.contains("racha") ||
-               l.contains("راشا") || l.contains("رشا") || l.contains("روشا")
+               l.contains("راشا") || l.contains("رشا") || l.contains("روشا") ||
+               l.contains("وينك") || l.contains("أين هاتفي") || l.contains("اين هاتفي")
     }
 
     private fun handleVoiceTrigger(text: String) {
@@ -259,13 +296,11 @@ class EveBubbleService : Service() {
         voiceInputHelper?.stopListening()
 
         serviceScope.launch(Dispatchers.Main) {
-            // التحقق من بصمة نبرة صوت المتحدث
             val currentPitch = withContext(Dispatchers.IO) {
                 voiceprintManager.captureCurrentSpeakerPitch()
             }
 
             if (!voiceprintManager.isOwnerVoice(currentPitch)) {
-                // ليس صوت صاحب الهاتف -> سبات فوري
                 EveState.setMood(EveMood.SLEEPING)
                 isHandlingAwake = false
                 delay(1000)
@@ -276,13 +311,10 @@ class EveBubbleService : Service() {
             EveState.setMood(EveMood.AWAKE_SMILING)
 
             val lower = text.lowercase()
-            // 1. فحص أوامر البصمة السريعة
             if (lower.contains("سجلي صوتي") || lower.contains("احفظي بصمتي")) {
                 voiceprintManager.registerPitch(currentPitch)
                 speakCleanText("تم حفظ وتحديث بصمة صوتك بنجاح سيدي")
-            }
-            // 2. فحص رفوف الوسائط
-            else if (lower.contains("فيديو") || lower.contains("فيديوهات")) {
+            } else if (lower.contains("فيديو") || lower.contains("فيديوهات")) {
                 EveState.openShelf(MediaShelfType.VIDEOS)
                 speakCleanText("تفضل الفيديوهات سيدي")
             } else if (lower.contains("صور") || lower.contains("الصور")) {
@@ -291,10 +323,7 @@ class EveBubbleService : Service() {
             } else if (lower.contains("موسيقى") || lower.contains("اغاني")) {
                 EveState.openShelf(MediaShelfType.MUSIC)
                 speakCleanText("تفضل قائمة الموسيقى")
-            }
-            // 3. تنفيذ أي أمر في الهاتف عبر IntentHandler المربوط بـ Shizuku
-            else {
-                // إزالة كلمة النداء من النص لمعالجة الأمر الصافي
+            } else {
                 val cleanCommand = text.replace(Regex("(?i)eve|racha|ايف|إيف|ايڤ|اف|راشا|رشا|روشا|يا "), "").trim()
 
                 if (cleanCommand.length > 2) {
@@ -391,6 +420,7 @@ class EveBubbleService : Service() {
     override fun onDestroy() {
         super.onDestroy()
         screenReceiver?.let { unregisterReceiver(it) }
+        batteryReceiver?.let { unregisterReceiver(it) }
         pendingNotificationJob?.cancel()
         exoPlayer?.release()
         voiceInputHelper?.destroy()

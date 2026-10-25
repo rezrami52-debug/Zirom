@@ -15,6 +15,10 @@ import com.racha.ai.core.contacts.ContactResolver
 import com.racha.ai.core.eve.EveAccessibilityService
 import com.racha.ai.core.shizuku.ShizukuShellRunner
 import com.racha.ai.services.location.LocationHelper
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -38,6 +42,12 @@ class IntentHandler(
     suspend fun handle(text: String): HandlerResult {
         val intentType = IntentClassifier.classify(text)
         return when (intentType) {
+            IntentClassifier.IntentType.FIND_MY_PHONE -> handleFindMyPhone()
+            IntentClassifier.IntentType.MOSQUE_MODE -> handleMosqueMode()
+            IntentClassifier.IntentType.MACRO_SLEEP -> handleMacroSleep()
+            IntentClassifier.IntentType.MACRO_CINEMA -> handleMacroCinema()
+            IntentClassifier.IntentType.MACRO_WORK -> handleMacroWork()
+
             IntentClassifier.IntentType.GET_TIME -> handleGetTime()
             IntentClassifier.IntentType.GET_DATE -> handleGetDate()
             IntentClassifier.IntentType.GET_BATTERY -> handleGetBattery()
@@ -59,6 +69,71 @@ class IntentHandler(
             IntentClassifier.IntentType.CORRECTION -> HandlerResult.NeedsCorrection(text)
             else -> handleAdvancedCommands(text)
         }
+    }
+
+    private suspend fun handleFindMyPhone(): HandlerResult {
+        val audioManager = context.getSystemService(Context.AUDIO_SERVICE) as AudioManager
+        audioManager.ringerMode = AudioManager.RINGER_MODE_NORMAL
+        audioManager.setStreamVolume(AudioManager.STREAM_MUSIC, audioManager.getStreamMaxVolume(AudioManager.STREAM_MUSIC), 0)
+        audioManager.setStreamVolume(AudioManager.STREAM_RING, audioManager.getStreamMaxVolume(AudioManager.STREAM_RING), 0)
+
+        try {
+            val cameraManager = context.getSystemService(Context.CAMERA_SERVICE) as CameraManager
+            val cameraId = cameraManager.cameraIdList.firstOrNull { id ->
+                val chars = cameraManager.getCameraCharacteristics(id)
+                chars.get(CameraCharacteristics.FLASH_INFO_AVAILABLE) == true
+            }
+            if (cameraId != null) {
+                CoroutineScope(Dispatchers.IO).launch {
+                    repeat(6) {
+                        cameraManager.setTorchMode(cameraId, true)
+                        delay(200)
+                        cameraManager.setTorchMode(cameraId, false)
+                        delay(200)
+                    }
+                }
+            }
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+        return HandlerResult.DirectReply("📢 أنا هنا سيدي! أنا هنا بجانبك!")
+    }
+
+    private fun handleMosqueMode(): HandlerResult {
+        val audioManager = context.getSystemService(Context.AUDIO_SERVICE) as AudioManager
+        audioManager.ringerMode = AudioManager.RINGER_MODE_SILENT
+
+        // إعادة تشغيل الرنين تلقائياً بعد 25 دقيقة
+        CoroutineScope(Dispatchers.IO).launch {
+            delay(25 * 60 * 1000L)
+            audioManager.ringerMode = AudioManager.RINGER_MODE_NORMAL
+        }
+        return HandlerResult.DirectReply("🕌 تم تفعيل وضع المسجد سيدي، الهاتف في وضع الصامت لمدة 25 دقيقة وسيعود تلقائياً بعدها.")
+    }
+
+    private fun handleMacroSleep(): HandlerResult {
+        val audioManager = context.getSystemService(Context.AUDIO_SERVICE) as AudioManager
+        audioManager.ringerMode = AudioManager.RINGER_MODE_SILENT
+        ShizukuShellRunner.setWifiEnabled(false)
+        ShizukuShellRunner.setBluetoothEnabled(false)
+
+        CoroutineScope(Dispatchers.IO).launch {
+            delay(2000)
+            ShizukuShellRunner.lockScreen()
+        }
+        return HandlerResult.DirectReply("🌙 تم تفعيل وضع النوم سيدي، تم إغلاق الاتصالات ووضع الهاتف على الصامت. أحلاماً سعيدة.")
+    }
+
+    private fun handleMacroCinema(): HandlerResult {
+        val audioManager = context.getSystemService(Context.AUDIO_SERVICE) as AudioManager
+        audioManager.ringerMode = AudioManager.RINGER_MODE_SILENT
+        return HandlerResult.DirectReply("🍿 تم تفعيل وضع السينما سيدي، الهاتف في وضع الصامت. مشاهدة ممتعة.")
+    }
+
+    private fun handleMacroWork(): HandlerResult {
+        val audioManager = context.getSystemService(Context.AUDIO_SERVICE) as AudioManager
+        audioManager.ringerMode = AudioManager.RINGER_MODE_VIBRATE
+        return HandlerResult.DirectReply("💼 تم تفعيل وضع التركيز سيدي، الهاتف في وضع الاهتزاز، فلنبدأ العمل بنشاط.")
     }
 
     fun executeChoice(app: AppResolver.InstalledApp, action: PendingAction): String {
@@ -212,11 +287,11 @@ class IntentHandler(
     private fun handleSmallTalk(text: String): HandlerResult {
         val lower = text.lowercase()
         return when {
-            lower.contains("كيف") || lower.contains("شلونك") || lower.contains("شنحوالك") -> {
+            lower.contains("كيف") || lower.contains("شلونك") || lower.contains("شنحوالك") || lower.contains("how are you") -> {
                 HandlerResult.DirectReply("أنا في أتم الجاهزية والنشاط سيدي! شكراً لسؤالك، كيف يمكنني تسهيل يومك؟")
             }
-            lower.contains("من انت") || lower.contains("من أنت") || lower.contains("عرف") || lower.contains("مين") -> {
-                HandlerResult.DirectReply("أنا EVE و Racha AI، مساعدك الشخصي والتكتيكي المتكامل.")
+            lower.contains("من انت") || lower.contains("من أنت") || lower.contains("عرف") || lower.contains("مين") || lower.contains("هل انت") -> {
+                HandlerResult.DirectReply("أنا EVE و Racha AI، مساعدك التكتيكي الشخصي الذكي، أجمع بين ذكاء EVE وقوة JARVIS في هاتفك سيدي.")
             }
             lower.contains("شكر") || lower.contains("عافية") -> {
                 HandlerResult.DirectReply("العفو دائماً سيدي! أنا هنا في أي وقت تحتاجه.")
