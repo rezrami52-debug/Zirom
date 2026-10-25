@@ -1,7 +1,7 @@
-package com.racha.ai.ui.navigation
-
+package com.racha.ai.ui.navigation                      
 import android.graphics.Bitmap
-import androidx.compose.runtime.*
+import androidx.activity.compose.BackHandler
+import androidx.compose.runtime.*                       
 import androidx.compose.ui.platform.LocalContext
 import com.racha.ai.core.faceauth.BiometricLockScreen
 import com.racha.ai.core.faceauth.FaceCaptureScreen
@@ -9,15 +9,15 @@ import com.racha.ai.data.repository.ChatMemoryRepository
 import com.racha.ai.theme.AppThemeManager
 import com.racha.ai.theme.RachaAppContainer
 import com.racha.ai.ui.screens.CustomizationScreen
-import com.racha.ai.ui.screens.SettingsScreen
+import com.racha.ai.ui.screens.SettingsScreen           
 import com.racha.ai.ui.screens.WelcomeScreen
-import com.racha.ai.ui.screens.chat.ChatHistoryScreen
+import com.racha.ai.ui.screens.chat.ChatHistoryScreen   
 import com.racha.ai.ui.screens.chat.ChatScreen
 import com.racha.ai.ui.screens.notifications.NotificationsScreen
 import com.racha.ai.ui.screens.onboarding.OnboardingScreen
-import com.racha.ai.ui.screens.prayer.PrayerScreen
+import com.racha.ai.ui.screens.prayer.PrayerScreen      
 import com.racha.ai.ui.screens.profile.ProfileScreen
-import com.racha.ai.ui.screens.routine.RoutineScreen
+import com.racha.ai.ui.screens.routine.RoutineScreen    
 import com.racha.ai.ui.screens.security.SecurityLogScreen
 
 sealed class Screen {
@@ -43,6 +43,17 @@ fun RachaApp(
     val context = LocalContext.current
     val themeManager = remember { AppThemeManager(context) }
     var currentScreen by remember { mutableStateOf<Screen>(Screen.Chat) }
+
+    // معالجة زر الرجوع الفيزيائي للهاتف
+    BackHandler(enabled = currentScreen != Screen.Chat) {
+        currentScreen = when (currentScreen) {
+            is Screen.Customization,
+            is Screen.Profile,
+            is Screen.FaceEnrollment,
+            is Screen.SecurityLog -> Screen.Settings
+            else -> Screen.Chat
+        }
+    }
 
     RachaAppContainer(themeManager = themeManager) {
         when (currentScreen) {
