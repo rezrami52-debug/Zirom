@@ -7,9 +7,6 @@ import java.io.InputStreamReader
 
 object ShizukuShellRunner {
 
-    /**
-     * هل خدمة Shizuku نشطة وتطبيق رشا يملك الصلاحية؟
-     */
     fun isAvailable(): Boolean {
         return try {
             Shizuku.pingBinder() && Shizuku.checkSelfPermission() == PackageManager.PERMISSION_GRANTED
@@ -18,9 +15,6 @@ object ShizukuShellRunner {
         }
     }
 
-    /**
-     * طلب الصلاحية من خادم Shizuku برمجياً
-     */
     fun requestPermission(requestCode: Int = 1001) {
         try {
             if (Shizuku.pingBinder() && Shizuku.checkSelfPermission() != PackageManager.PERMISSION_GRANTED) {
@@ -31,9 +25,6 @@ object ShizukuShellRunner {
         }
     }
 
-    /**
-     * تنفيذ أمر ADB Shell عبر Shizuku باستخدام Reflection لتجاوز قيود الحماية في Kotlin
-     */
     fun execCommand(command: String): String {
         return try {
             if (isAvailable()) {
@@ -78,8 +69,6 @@ object ShizukuShellRunner {
             "فشل التنفيذ: ${e.localizedMessage}"
         }
     }
-
-    // --- أوامر النظام والشبكة التكتيكية ---
 
     fun setWifiEnabled(enable: Boolean): Boolean {
         val state = if (enable) "enable" else "disable"
