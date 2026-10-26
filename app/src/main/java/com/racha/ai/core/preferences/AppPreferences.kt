@@ -39,6 +39,7 @@ class AppPreferences(context: Context) {
         prefs.edit().putString(KEY_LANGUAGE, lang).apply()
     }
 
+    // ===== الأمن ومصيدة المتسلل =====
     fun getIntruderThreshold(): Int = prefs.getInt(KEY_INTRUDER_THRESHOLD, 5)
     fun setIntruderThreshold(value: Int) {
         prefs.edit().putInt(KEY_INTRUDER_THRESHOLD, value.coerceIn(1, 10)).apply()
@@ -54,6 +55,7 @@ class AppPreferences(context: Context) {
         prefs.edit().putInt(KEY_INTRUDER_RETENTION_DAYS, days.coerceIn(1, 30)).apply()
     }
 
+    // ===== حارس النوم =====
     fun isSleepGuardianEnabled(): Boolean = prefs.getBoolean(KEY_SLEEP_GUARDIAN_ENABLED, true)
     fun setSleepGuardianEnabled(enabled: Boolean) {
         prefs.edit().putBoolean(KEY_SLEEP_GUARDIAN_ENABLED, enabled).apply()
@@ -70,18 +72,61 @@ class AppPreferences(context: Context) {
     }
 
     // ===== LLM Provider =====
-    /**
-     * مزوّد LLM المختار:
-     * - "gemini": Gemini (سحابي)
-     * - "qwen": Qwen (محلي)
-     */
     fun getLLMProvider(): String = prefs.getString(KEY_LLM_PROVIDER, "gemini") ?: "gemini"
     fun setLLMProvider(provider: String) {
         prefs.edit().putString(KEY_LLM_PROVIDER, provider).apply()
     }
 
+    // ===== صوت EVE والحوار المستمر =====
+    fun isContinuousChatEnabled(): Boolean = prefs.getBoolean(KEY_CONTINUOUS_CHAT, true)
+    fun setContinuousChatEnabled(enabled: Boolean) {
+        prefs.edit().putBoolean(KEY_CONTINUOUS_CHAT, enabled).apply()
+    }
 
-    // ===== التخصيص (Customization) =====
+    fun getTtsSpeed(): Float = prefs.getFloat(KEY_TTS_SPEED, 0.95f)
+    fun setTtsSpeed(speed: Float) {
+        prefs.edit().putFloat(KEY_TTS_SPEED, speed.coerceIn(0.6f, 1.4f)).apply()
+    }
+
+    fun getTtsPitch(): Float = prefs.getFloat(KEY_TTS_PITCH, 1.08f)
+    fun setTtsPitch(pitch: Float) {
+        prefs.edit().putFloat(KEY_TTS_PITCH, pitch.coerceIn(0.7f, 1.4f)).apply()
+    }
+
+    // ===== وضع المسجد والصلاة =====
+    fun isMosqueModeEnabled(): Boolean = prefs.getBoolean(KEY_MOSQUE_MODE, true)
+    fun setMosqueModeEnabled(enabled: Boolean) {
+        prefs.edit().putBoolean(KEY_MOSQUE_MODE, enabled).apply()
+    }
+
+    fun getMosqueDuration(): Int = prefs.getInt(KEY_MOSQUE_DURATION, 25)
+    fun setMosqueDuration(duration: Int) {
+        prefs.edit().putInt(KEY_MOSQUE_DURATION, duration.coerceIn(10, 45)).apply()
+    }
+
+    // ===== ميزة أين هاتفي =====
+    fun isFindPhoneStrobeEnabled(): Boolean = prefs.getBoolean(KEY_FIND_PHONE_STROBE, true)
+    fun setFindPhoneStrobeEnabled(enabled: Boolean) {
+        prefs.edit().putBoolean(KEY_FIND_PHONE_STROBE, enabled).apply()
+    }
+
+    fun isFindPhoneMaxVolumeEnabled(): Boolean = prefs.getBoolean(KEY_FIND_PHONE_MAX_VOL, true)
+    fun setFindPhoneMaxVolumeEnabled(enabled: Boolean) {
+        prefs.edit().putBoolean(KEY_FIND_PHONE_MAX_VOL, enabled).apply()
+    }
+
+    // ===== الفقاعة العائمة =====
+    fun isEdgeSnapEnabled(): Boolean = prefs.getBoolean(KEY_EDGE_SNAP, true)
+    fun setEdgeSnapEnabled(enabled: Boolean) {
+        prefs.edit().putBoolean(KEY_EDGE_SNAP, enabled).apply()
+    }
+
+    fun getIdleBubbleAlpha(): Float = prefs.getFloat(KEY_IDLE_BUBBLE_ALPHA, 0.95f)
+    fun setIdleBubbleAlpha(alpha: Float) {
+        prefs.edit().putFloat(KEY_IDLE_BUBBLE_ALPHA, alpha.coerceIn(0.2f, 1f)).apply()
+    }
+
+    // ===== التخصيص =====
     fun getUserBubbleColor(): Int = prefs.getInt(KEY_USER_BUBBLE_COLOR, 0xFF0EA5E9.toInt())
     fun setUserBubbleColor(color: Int) { prefs.edit().putInt(KEY_USER_BUBBLE_COLOR, color).apply() }
 
@@ -112,6 +157,16 @@ class AppPreferences(context: Context) {
         private const val KEY_SLEEP_GUARDIAN_START_HOUR = "sleep_guardian_start_hour"
         private const val KEY_SLEEP_GUARDIAN_LAST_SENT = "sleep_guardian_last_sent"
         private const val KEY_LLM_PROVIDER = "llm_provider"
+
+        private const val KEY_CONTINUOUS_CHAT = "continuous_chat_enabled"
+        private const val KEY_TTS_SPEED = "tts_speed"
+        private const val KEY_TTS_PITCH = "tts_pitch"
+        private const val KEY_MOSQUE_MODE = "mosque_mode_enabled"
+        private const val KEY_MOSQUE_DURATION = "mosque_duration"
+        private const val KEY_FIND_PHONE_STROBE = "find_phone_strobe"
+        private const val KEY_FIND_PHONE_MAX_VOL = "find_phone_max_vol"
+        private const val KEY_EDGE_SNAP = "edge_snap_enabled"
+        private const val KEY_IDLE_BUBBLE_ALPHA = "idle_bubble_alpha"
 
         private const val KEY_USER_BUBBLE_COLOR = "user_bubble_color"
         private const val KEY_AI_BUBBLE_COLOR = "ai_bubble_color"

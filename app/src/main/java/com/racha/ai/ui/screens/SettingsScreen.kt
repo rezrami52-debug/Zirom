@@ -1,13 +1,16 @@
 package com.racha.ai.ui.screens
 
+import android.Manifest
+import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.net.Uri
-import androidx.compose.foundation.background
-import androidx.compose.foundation.border
+import android.os.Build
+import android.os.Environment
+import android.provider.Settings
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
@@ -16,19 +19,17 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.core.content.ContextCompat
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.racha.ai.core.eve.EveAccessibilityService
 import com.racha.ai.core.preferences.AppPreferences
+import com.racha.ai.core.shizuku.ShizukuShellRunner
 import com.racha.ai.theme.AppThemeManager
-import com.racha.ai.services.prayer.PrayerAlarmReceiver
-import com.racha.ai.services.routine.RoutineAlarmScheduler
-import com.racha.ai.services.weather.WeatherWorker
-import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -47,17 +48,25 @@ fun SettingsScreen(
     val themeState by themeManager.themeState.collectAsState()
     val cardBgColor = themeState.rachaBubbleColor.copy(alpha = themeState.elementsAlpha)
     val headerCardBgColor = themeState.glowColor.copy(alpha = themeState.elementsAlpha)
-    val scope = rememberCoroutineScope()
 
     var currentLanguage by remember { mutableStateOf(appPrefs.getLanguage()) }
     var showLanguageDialog by remember { mutableStateOf(false) }
-    var apiKeyInput by remember { mutableStateOf(state.apiKey) }
     var showApiKey by remember { mutableStateOf(false) }
+
+    // حالات الصلاحيات الحية
+    var isAccessibilityActive by remember { mutableStateOf(EveAccessibilityService.isRunning()) }
+    var isMediaPermissionGranted by remember { mutableStateOf(checkMediaPermission(context)) }
+    var isShizukuActive by remember { mutableStateOf(checkShizukuStatus()) }
+
+    // قيم الصوت والمسجد الحية
+    var ttsSpeed by remember { mutableFloatStateOf(appPrefs.getTtsSpeed()) }
+    var ttsPitch by remember { mutableFloatStateOf(appPrefs.getTtsPitch()) }
+    var mosqueDuration by remember { mutableIntStateOf(appPrefs.getMosqueDuration()) }
 
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("الإعدادات", fontWeight = FontWeight.Bold) },
+                title = { Text("لوحة التحكم والإعدادات", fontWeight = FontWeight.Bold) },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
                         Icon(Icons.Default.ArrowBack, contentDescription = "رجوع")
@@ -72,9 +81,9 @@ fun SettingsScreen(
                 .padding(padding)
                 .padding(16.dp)
                 .verticalScroll(rememberScrollState()),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
+            verticalArrangement = Arrangement.spacedBy(14.dp)
         ) {
-            // ✅ زر التخصيص
+            // 🎨 التخصيص
             Card(
                 modifier = Modifier.fillMaxWidth().clickable { onOpenCustomization() },
                 colors = CardDefaults.cardColors(containerColor = headerCardBgColor),
@@ -84,13 +93,13 @@ fun SettingsScreen(
                     Text("🎨", fontSize = 24.sp)
                     Spacer(modifier = Modifier.width(12.dp))
                     Column {
-                        Text("التخصيص", fontWeight = FontWeight.Bold, fontSize = 16.sp)
-                        Text("الألوان، الشفافية، التوهج", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f))
+                        Text("التخصيص والمظهر", fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                        Text("ألوان الفقاعات، الشفافية، التوهج", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f))
                     }
                 }
             }
 
-            // ===== الملف الشخصي =====
+            // 👤 الملف الشخصي
             Card(
                 modifier = Modifier.fillMaxWidth().clickable { onOpenProfile() },
                 colors = CardDefaults.cardColors(containerColor = cardBgColor),
@@ -101,22 +110,352 @@ fun SettingsScreen(
                     Spacer(modifier = Modifier.width(12.dp))
                     Column {
                         Text("ملفي الشخصي", fontWeight = FontWeight.Bold, fontSize = 16.sp)
-                        Text("أخبر Racha عن نفسك", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f))
+                        Text("أخبر Racha عن نفسك لتخصيص الحوار", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f))
                     }
                 }
             }
 
-            // ===== الأمان =====
+            // 🤖 محرك الذكاء الاصطناعي (AI Engine & API Key)
             Card(
                 modifier = Modifier.fillMaxWidth(),
                 colors = CardDefaults.cardColors(containerColor = cardBgColor),
                 shape = RoundedCornerShape(16.dp)
             ) {
                 Column(modifier = Modifier.padding(16.dp)) {
-                    Text("الأمان", fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text("🤖", fontSize = 20.sp)
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Column {
+                            Text("محرك الذكاء الاصطناعي", fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                            Text(viewModel.getProviderName(), fontSize = 12.sp, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.SemiBold)
+                        }
+                    }
+                    Spacer(modifier = Modifier.height(10.dp))
+
+                    OutlinedTextField(
+                        value = state.apiKey,
+                        onValueChange = { viewModel.onApiKeyChange(it) },
+                        modifier = Modifier.fillMaxWidth(),
+                        label = { Text("أدخل مفتاح الـ API (Groq أو Gemini)") },
+                        visualTransformation = if (showApiKey) androidx.compose.ui.text.input.VisualTransformation.None else androidx.compose.ui.text.input.PasswordVisualTransformation(),
+                        trailingIcon = {
+                            IconButton(onClick = { showApiKey = !showApiKey }) {
+                                Icon(if (showApiKey) Icons.Default.Visibility else Icons.Default.VisibilityOff, contentDescription = null)
+                            }
+                        }
+                    )
+
                     Spacer(modifier = Modifier.height(8.dp))
 
-                    // حماية Racha
+                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Button(
+                            onClick = { viewModel.testApiKeyConnection() },
+                            modifier = Modifier.weight(1f),
+                            enabled = !state.isTestingKey && state.apiKey.isNotBlank(),
+                            colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.secondary)
+                        ) {
+                            if (state.isTestingKey) {
+                                CircularProgressIndicator(modifier = Modifier.size(16.dp), color = Color.White, strokeWidth = 2.dp)
+                            } else {
+                                Text("فحص الاتصال ⚡", fontSize = 13.sp)
+                            }
+                        }
+
+                        Button(
+                            onClick = { viewModel.saveApiKey() },
+                            modifier = Modifier.weight(1f),
+                            enabled = state.apiKey.isNotBlank()
+                        ) {
+                            Text("حفظ المفتاح 💾", fontSize = 13.sp)
+                        }
+                    }
+
+                    if (state.testMessage != null) {
+                        Spacer(modifier = Modifier.height(6.dp))
+                        Text(
+                            text = state.testMessage!!,
+                            color = if (state.isTestSuccess == true) Color(0xFF00E676) else Color(0xFFFF5252),
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Medium
+                        )
+                    }
+
+                    if (state.saveMessage != null) {
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Text(
+                            text = state.saveMessage!!,
+                            color = if (state.isSaved) Color(0xFF00E676) else Color(0xFFFF5252),
+                            fontSize = 12.sp
+                        )
+                    }
+                }
+            }
+
+            // 🛠️ مركز الصلاحيات وحالة النظام
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                colors = CardDefaults.cardColors(containerColor = cardBgColor),
+                shape = RoundedCornerShape(16.dp)
+            ) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Text("مركز الصلاحيات وحالة النظام 🛠️", fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                    Spacer(modifier = Modifier.height(10.dp))
+
+                    // Shizuku
+                    Row(
+                        modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column {
+                            Text("خدمة Shizuku (التحكم العميق)", fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
+                            Text(if (isShizukuActive) "متصل وجاهز للعمل ✅" else "غير متصل ⚠️ (تحتاج تشغيله)", fontSize = 11.sp, color = if (isShizukuActive) Color(0xFF00E676) else Color.Gray)
+                        }
+                        Button(
+                            onClick = {
+                                val intent = context.packageManager.getLaunchIntentForPackage("moe.shizuku.privileged.api")
+                                if (intent != null) context.startActivity(intent)
+                                else openUrl(context, "https://shizuku.rikka.app")
+                            },
+                            contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp)
+                        ) {
+                            Text("فتح Shizuku", fontSize = 11.sp)
+                        }
+                    }
+
+                    Divider(modifier = Modifier.padding(vertical = 6.dp))
+
+                    // Accessibility
+                    Row(
+                        modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column {
+                            Text("إمكانية الوصول (Accessibility)", fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
+                            Text(if (isAccessibilityActive) "مفعلة وتعمل ✅" else "معطلة ⚠️ (تحتاج تفعيل)", fontSize = 11.sp, color = if (isAccessibilityActive) Color(0xFF00E676) else Color.Gray)
+                        }
+                        Button(
+                            onClick = {
+                                val intent = Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS).apply { addFlags(Intent.FLAG_ACTIVITY_NEW_TASK) }
+                                context.startActivity(intent)
+                            },
+                            contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp)
+                        ) {
+                            Text("تفعيل الخدمة", fontSize = 11.sp)
+                        }
+                    }
+
+                    Divider(modifier = Modifier.padding(vertical = 6.dp))
+
+                    // Media Files
+                    Row(
+                        modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column {
+                            Text("الوصول لكافة ملفات الوسائط", fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
+                            Text(if (isMediaPermissionGranted) "الصلاحية ممنوحة ✅" else "مطلوب لتشغيل الصور والفيديوهات ⚠️", fontSize = 11.sp, color = if (isMediaPermissionGranted) Color(0xFF00E676) else Color.Gray)
+                        }
+                        Button(
+                            onClick = {
+                                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                                    val intent = Intent(Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION).apply {
+                                        data = Uri.parse("package:${context.packageName}")
+                                        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                                    }
+                                    context.startActivity(intent)
+                                } else {
+                                    val intent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
+                                        data = Uri.parse("package:${context.packageName}")
+                                        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                                    }
+                                    context.startActivity(intent)
+                                }
+                            },
+                            contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp)
+                        ) {
+                            Text("منح الإذن", fontSize = 11.sp)
+                        }
+                    }
+                }
+            }
+
+            // 🗣️ صوت EVE والحوار المستمر
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                colors = CardDefaults.cardColors(containerColor = cardBgColor),
+                shape = RoundedCornerShape(16.dp)
+            ) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Text("صوت EVE وتجربة الحوار 🗣️", fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                    Spacer(modifier = Modifier.height(10.dp))
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text("الحوار المستمر التلقائي", fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
+                            Text("فتح المايك تلقائياً بعد كل رد لاستمرار الحديث دون لمس", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f))
+                        }
+                        Switch(
+                            checked = appPrefs.isContinuousChatEnabled(),
+                            onCheckedChange = { appPrefs.setContinuousChatEnabled(it) }
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.height(10.dp))
+
+                    Text("سرعة الكلام: ${String.format("%.2f", ttsSpeed)}x", fontSize = 13.sp, fontWeight = FontWeight.Medium)
+                    Slider(
+                        value = ttsSpeed,
+                        onValueChange = {
+                            ttsSpeed = it
+                            appPrefs.setTtsSpeed(it)
+                        },
+                        valueRange = 0.7f..1.3f
+                    )
+
+                    Text("نبرة الصوت: ${String.format("%.2f", ttsPitch)}x", fontSize = 13.sp, fontWeight = FontWeight.Medium)
+                    Slider(
+                        value = ttsPitch,
+                        onValueChange = {
+                            ttsPitch = it
+                            appPrefs.setTtsPitch(it)
+                        },
+                        valueRange = 0.8f..1.3f
+                    )
+                }
+            }
+
+            // 🫧 الفقاعة العائمة
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                colors = CardDefaults.cardColors(containerColor = cardBgColor),
+                shape = RoundedCornerShape(16.dp)
+            ) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Text("الفقاعة العائمة (EVE Bubble) 🫧", fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                    Spacer(modifier = Modifier.height(8.dp))
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text("الالتصاق التلقائي بالحافة", fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
+                            Text("قفز الفقاعة بنعومة لحافة الشاشة بعد سحبها", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f))
+                        }
+                        Switch(
+                            checked = appPrefs.isEdgeSnapEnabled(),
+                            onCheckedChange = { appPrefs.setEdgeSnapEnabled(it) }
+                        )
+                    }
+                }
+            }
+
+            // 🕌 وضع المسجد ومواقيت الصلاة
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                colors = CardDefaults.cardColors(containerColor = cardBgColor),
+                shape = RoundedCornerShape(16.dp)
+            ) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Text("وضع المسجد ومواقيت الصلاة 🕌", fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                    Spacer(modifier = Modifier.height(8.dp))
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text("وضع المسجد التلقائي", fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
+                            Text("تحويل الهاتف لوضع الصامت تلقائياً عند وقت الصلاة", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f))
+                        }
+                        Switch(
+                            checked = appPrefs.isMosqueModeEnabled(),
+                            onCheckedChange = { appPrefs.setMosqueModeEnabled(it) }
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.height(8.dp))
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text("مدة الصامت في المسجد", fontSize = 13.sp, fontWeight = FontWeight.Medium)
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            IconButton(onClick = {
+                                if (mosqueDuration > 15) {
+                                    mosqueDuration -= 5
+                                    appPrefs.setMosqueDuration(mosqueDuration)
+                                }
+                            }) { Icon(Icons.Default.Remove, contentDescription = null) }
+                            Text("$mosqueDuration دقيقة", fontSize = 14.sp, fontWeight = FontWeight.Bold)
+                            IconButton(onClick = {
+                                if (mosqueDuration < 45) {
+                                    mosqueDuration += 5
+                                    appPrefs.setMosqueDuration(mosqueDuration)
+                                }
+                            }) { Icon(Icons.Default.Add, contentDescription = null) }
+                        }
+                    }
+                }
+            }
+
+            // 📢 أين هاتفي
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                colors = CardDefaults.cardColors(containerColor = cardBgColor),
+                shape = RoundedCornerShape(16.dp)
+            ) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Text("ميزة أين هاتفي (Find My Phone) 📢", fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                    Spacer(modifier = Modifier.height(8.dp))
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text("وميض الفلاش (Strobe) عند النداء", fontSize = 13.sp)
+                        Switch(
+                            checked = appPrefs.isFindPhoneStrobeEnabled(),
+                            onCheckedChange = { appPrefs.setFindPhoneStrobeEnabled(it) }
+                        )
+                    }
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text("الرنين بأعلى صوت حتى في الصامت", fontSize = 13.sp)
+                        Switch(
+                            checked = appPrefs.isFindPhoneMaxVolumeEnabled(),
+                            onCheckedChange = { appPrefs.setFindPhoneMaxVolumeEnabled(it) }
+                        )
+                    }
+                }
+            }
+
+            // 🔒 الأمان ومصيدة المتسلل
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                colors = CardDefaults.cardColors(containerColor = cardBgColor),
+                shape = RoundedCornerShape(16.dp)
+            ) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Text("الأمان 🔒", fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                    Spacer(modifier = Modifier.height(8.dp))
+
                     Row(
                         modifier = Modifier.fillMaxWidth().clickable { onOpenFaceEnrollment() }.padding(vertical = 8.dp),
                         verticalAlignment = Alignment.CenterVertically
@@ -129,9 +468,8 @@ fun SettingsScreen(
                         }
                     }
 
-                    Divider()
+                    Divider(modifier = Modifier.padding(vertical = 4.dp))
 
-                    // التقاط صورة المتسلل
                     Row(
                         modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp),
                         verticalAlignment = Alignment.CenterVertically,
@@ -139,7 +477,7 @@ fun SettingsScreen(
                     ) {
                         Column(modifier = Modifier.weight(1f)) {
                             Text("التقاط صورة المتسلل", fontWeight = FontWeight.Bold)
-                            Text("صورة بعد عدد محاولات فاشلة", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f))
+                            Text("صورة سريّة بعد عدد محاولات فاشلة", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f))
                         }
                         Switch(
                             checked = appPrefs.isIntruderPhotoEnabled(),
@@ -147,9 +485,8 @@ fun SettingsScreen(
                         )
                     }
 
-                    Divider()
+                    Divider(modifier = Modifier.padding(vertical = 4.dp))
 
-                    // عدد المحاولات
                     Row(
                         modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp),
                         verticalAlignment = Alignment.CenterVertically,
@@ -167,9 +504,8 @@ fun SettingsScreen(
                         }
                     }
 
-                    Divider()
+                    Divider(modifier = Modifier.padding(vertical = 4.dp))
 
-                    // سجل المحاولات
                     Row(
                         modifier = Modifier.fillMaxWidth().clickable { onOpenSecurityLog() }.padding(vertical = 8.dp),
                         verticalAlignment = Alignment.CenterVertically
@@ -181,14 +517,14 @@ fun SettingsScreen(
                 }
             }
 
-            // ===== حارس النوم =====
+            // 🌙 حارس النوم
             Card(
                 modifier = Modifier.fillMaxWidth(),
                 colors = CardDefaults.cardColors(containerColor = cardBgColor),
                 shape = RoundedCornerShape(16.dp)
             ) {
                 Column(modifier = Modifier.padding(16.dp)) {
-                    Text("حارس النوم", fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                    Text("حارس النوم 🌙", fontWeight = FontWeight.Bold, fontSize = 16.sp)
                     Spacer(modifier = Modifier.height(8.dp))
 
                     Row(
@@ -198,7 +534,7 @@ fun SettingsScreen(
                     ) {
                         Column(modifier = Modifier.weight(1f)) {
                             Text("تذكير لطيف بالنوم", fontWeight = FontWeight.Bold)
-                            Text("إذا كنت مستيقظاً متأخراً", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f))
+                            Text("تنبيه هادئ إذا كنت مستيقظاً في وقت متأخر", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f))
                         }
                         Switch(
                             checked = appPrefs.isSleepGuardianEnabled(),
@@ -208,14 +544,14 @@ fun SettingsScreen(
                 }
             }
 
-            // ===== اللغة =====
+            // 🌐 اللغة
             Card(
                 modifier = Modifier.fillMaxWidth(),
                 colors = CardDefaults.cardColors(containerColor = cardBgColor),
                 shape = RoundedCornerShape(16.dp)
             ) {
                 Column(modifier = Modifier.padding(16.dp)) {
-                    Text("اللغة", fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                    Text("اللغة 🌐", fontWeight = FontWeight.Bold, fontSize = 16.sp)
                     Spacer(modifier = Modifier.height(8.dp))
                     Button(
                         onClick = { showLanguageDialog = true },
@@ -225,49 +561,9 @@ fun SettingsScreen(
                     }
                 }
             }
-
-            // ===== مفتاح API =====
-            Card(
-                modifier = Modifier.fillMaxWidth(),
-                colors = CardDefaults.cardColors(containerColor = cardBgColor),
-                shape = RoundedCornerShape(16.dp)
-            ) {
-                Column(modifier = Modifier.padding(16.dp)) {
-                    Text("مفتاح Gemini API", fontWeight = FontWeight.Bold, fontSize = 16.sp)
-                    Spacer(modifier = Modifier.height(8.dp))
-                    OutlinedTextField(
-                        value = state.apiKey,
-                        onValueChange = { viewModel.onApiKeyChange(it) },
-                        modifier = Modifier.fillMaxWidth(),
-                        label = { Text("أدخل المفتاح") },
-                        visualTransformation = if (showApiKey) androidx.compose.ui.text.input.VisualTransformation.None else androidx.compose.ui.text.input.PasswordVisualTransformation(),
-                        trailingIcon = {
-                            IconButton(onClick = { showApiKey = !showApiKey }) {
-                                Icon(if (showApiKey) Icons.Default.Visibility else Icons.Default.VisibilityOff, contentDescription = null)
-                            }
-                        }
-                    )
-                    Spacer(modifier = Modifier.height(8.dp))
-                    Button(
-                        onClick = { viewModel.saveApiKey() },
-                        modifier = Modifier.fillMaxWidth(),
-                        enabled = state.apiKey.isNotBlank()
-                    ) {
-                        Text("حفظ المفتاح")
-                    }
-                    if (state.saveMessage != null) {
-                        Text(
-                            text = state.saveMessage!!,
-                            color = if (state.isSaved) Color.Green else Color.Red,
-                            fontSize = 12.sp
-                        )
-                    }
-                }
-            }
-            }
         }
-    
-    // حوار اختيار اللغة
+    }
+
     if (showLanguageDialog) {
         AlertDialog(
             onDismissRequest = { showLanguageDialog = false },
@@ -295,12 +591,32 @@ fun SettingsScreen(
                 }
             },
             confirmButton = {
-                TextButton(onClick = { showLanguageDialog = false }) {
-                    Text("إلغاء")
-                }
+                TextButton(onClick = { showLanguageDialog = false }) { Text("إلغاء") }
             }
         )
     }
-
 }
 
+private fun checkShizukuStatus(): Boolean {
+    return try {
+        val res = ShizukuShellRunner.execCommand("echo ok")
+        res.contains("ok")
+    } catch (_: Exception) { false }
+}
+
+private fun checkMediaPermission(context: Context): Boolean {
+    return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+        Environment.isExternalStorageManager()
+    } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+        ContextCompat.checkSelfPermission(context, Manifest.permission.READ_MEDIA_IMAGES) == PackageManager.PERMISSION_GRANTED
+    } else {
+        ContextCompat.checkSelfPermission(context, Manifest.permission.READ_EXTERNAL_STORAGE) == PackageManager.PERMISSION_GRANTED
+    }
+}
+
+private fun openUrl(context: Context, url: String) {
+    try {
+        val intent = Intent(Intent.ACTION_VIEW, Uri.parse(url)).apply { addFlags(Intent.FLAG_ACTIVITY_NEW_TASK) }
+        context.startActivity(intent)
+    } catch (_: Exception) {}
+}
