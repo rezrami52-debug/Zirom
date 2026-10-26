@@ -32,6 +32,8 @@ import com.racha.ai.core.security.SecurePreferences
 import com.racha.ai.core.voice.VoiceInputHelper
 import com.racha.ai.data.api.GeminiService
 import kotlinx.coroutines.*
+import java.text.SimpleDateFormat
+import java.util.Date
 import java.util.Locale
 
 class EveBubbleService : Service() {
@@ -49,12 +51,17 @@ class EveBubbleService : Service() {
     private var exoPlayer: ExoPlayer? = null
     private var screenReceiver: BroadcastReceiver? = null
     private var batteryReceiver: BroadcastReceiver? = null
+    private var currentBatteryPct = 100
+    private var isPhoneCharging = false
     private var hasAlertedFullCharge = false
     private var hasAlertedLowBattery = false
 
     private var isHandlingAwake = false
     private var pendingNotificationJob: Job? = null
     private var currentNotifKey: String? = null
+
+    // سجل ذاكرة الحوار المتصل (Multi-turn Context Memory)
+    private val conversationHistory = mutableListOf<Pair<String, String>>()
 
     override fun onBind(intent: Intent?): IBinder? = null
 
@@ -187,6 +194,8 @@ class EveBubbleService : Service() {
                 EveBubbleContent(
                     onToggleSleepWake = { isAwake ->
                         if (isAwake) {
+                            // المقاطعة الفورية: إسكات أي كلام سابق فور النقر
+                            if (tts?.isSpeaking == true) tts?.stop()
                             triggerDirectVoiceListening()
                         } else {
                             speakCleanText("في وضع السبات سيدي")
@@ -214,39 +223,23 @@ class EveBubbleService : Service() {
         }
     }
 
-    /**
-     * الالتصاق الفيزيائي التلقائي بأقرب حافة للشاشة (يمين أو يسار) بنعومة
-     */
     private fun snapToNearestEdge() {
         val displayMetrics = resources.displayMetrics
         val screenWidth = displayMetrics.widthPixels
         val screenHeight = displayMetrics.heightPixels
         val bubbleWidth = composeView?.width ?: 200
 
-        val targetX = if (layoutParams.x + bubbleWidth / 2 < screenWidth / 2) {
-            20 // حافة اليسار
-        } else {
-            screenWidth - bubbleWidth - 20 // حافة اليمين
-        }
+        val targetX = if (layoutParams.x + bubbleWidth / 2 < screenWidth / 2) 20 else screenWidth - bubbleWidth - 20
+        layoutParams.y = layoutParams.y.coerceIn(100, screenHeight - 320)
 
-        // الحفاظ على الفقاعة داخل حدود الشاشة عمودياً
-        val minY = 100
-        val maxY = screenHeight - 320
-        layoutParams.y = layoutParams.y.coerceIn(minY, maxY)
-
-        val animator = ValueAnimator.ofInt(layoutParams.x, targetX).apply {
+        ValueAnimator.ofInt(layoutParams.x, targetX).apply {
             duration = 260
             interpolator = DecelerateInterpolator()
             addUpdateListener { animation ->
                 layoutParams.x = animation.animatedValue as Int
-                try {
-                    windowManager.updateViewLayout(composeView, layoutParams)
-                } catch (e: Exception) {
-                    e.printStackTrace()
-                }
+                try { windowManager.updateViewLayout(composeView, layoutParams) } catch (e: Exception) { e.printStackTrace() }
             }
-        }
-        animator.start()
+        }.start()
     }
 
     private fun handleTapOutside() {
@@ -297,6 +290,7 @@ class EveBubbleService : Service() {
             override fun onReceive(context: Context?, intent: Intent?) {
                 if (intent?.action == Intent.ACTION_SCREEN_OFF) {
                     stopListening()
+                    conversationHistory.clear()
                     EveState.setMood(EveMood.SLEEPING)
                 }
             }
@@ -312,21 +306,21 @@ class EveBubbleService : Service() {
                 val level = intent.getIntExtra(BatteryManager.EXTRA_LEVEL, -1)
                 val scale = intent.getIntExtra(BatteryManager.EXTRA_SCALE, -1)
                 val status = intent.getIntExtra(BatteryManager.EXTRA_STATUS, -1)
-                val isCharging = status == BatteryManager.BATTERY_STATUS_CHARGING || status == BatteryManager.BATTERY_STATUS_FULL
+                isPhoneCharging = status == BatteryManager.BATTERY_STATUS_CHARGING || status == BatteryManager.BATTERY_STATUS_FULL
 
                 if (level >= 0 && scale > 0) {
-                    val pct = (level * 100) / scale
-                    if (isCharging) {
+                    currentBatteryPct = (level * 100) / scale
+                    if (isPhoneCharging) {
                         hasAlertedLowBattery = false
-                        if (pct >= 85 && !hasAlertedFullCharge) {
+                        if (currentBatteryPct >= 85 && !hasAlertedFullCharge) {
                             hasAlertedFullCharge = true
-                            speakCleanText("سيدي، وصل الشحن إلى $pct بالمائة، يمكنك فصل الشاحن لحماية البطارية.")
+                            speakCleanText("سيدي، وصل الشحن إلى $currentBatteryPct بالمائة، يمكنك فصل الشاحن لحماية البطارية.")
                         }
                     } else {
                         hasAlertedFullCharge = false
-                        if (pct <= 15 && !hasAlertedLowBattery) {
+                        if (currentBatteryPct <= 15 && !hasAlertedLowBattery) {
                             hasAlertedLowBattery = true
-                            speakCleanText("تنبيه سيدي، طاقة البطارية منخفضة ووصلت إلى $pct بالمائة.")
+                            speakCleanText("تنبيه سيدي، طاقة البطارية منخفضة ووصلت إلى $currentBatteryPct بالمائة.")
                         }
                     }
                 }
@@ -353,11 +347,22 @@ class EveBubbleService : Service() {
         )
     }
 
+    /**
+     * استخراج معطيات الهاتف اللحظية لحقنها في عقل الذكاء الاصطناعي
+     */
+    private fun getLiveDeviceContext(): String {
+        val time = SimpleDateFormat("HH:mm", Locale.getDefault()).format(Date())
+        val chargingStr = if (isPhoneCharging) "قيد الشحن" else "يعمل على البطارية"
+        val activeApp = EveAccessibilityService.instance?.getLatestScreenSnapshot()?.appName ?: "الشاشة الرئيسية"
+        return "الوقت الآن: $time | البطارية: $currentBatteryPct% ($chargingStr) | التطبيق المفتوح: $activeApp | الموقع: سوسة، تونس."
+    }
+
     private fun processSpokenText(text: String) {
         serviceScope.launch(Dispatchers.Main) {
             val lower = text.lowercase().trim()
 
             if (lower.contains("نامي") || lower.contains("سبات") || lower.contains("تصبحين على خير") || lower.contains("يكفي") || lower.contains("اغلقي")) {
+                conversationHistory.clear()
                 EveState.setMood(EveMood.SLEEPING)
                 speakCleanText("في وضع السبات سيدي، أنا هنا متى احتجتني.", continueConversation = false)
                 return@launch
@@ -395,9 +400,21 @@ class EveBubbleService : Service() {
                             val apiKey = securePreferences.getApiKey()
                             if (!apiKey.isNullOrBlank()) {
                                 try {
+                                    val liveContext = getLiveDeviceContext()
+                                    val contextualPrompt = "[$liveContext]\nسؤال المستخدم: $cleanCommand"
+
                                     val aiReply = withContext(Dispatchers.IO) {
-                                        GeminiService(apiKey).generateResponse(cleanCommand)
+                                        GeminiService(apiKey).generateResponse(contextualPrompt)
                                     }
+
+                                    // حفظ الحوار في الذاكرة المتصلة
+                                    conversationHistory.add(Pair("user", cleanCommand))
+                                    conversationHistory.add(Pair("assistant", aiReply))
+                                    if (conversationHistory.size > 8) {
+                                        conversationHistory.removeAt(0)
+                                        conversationHistory.removeAt(0)
+                                    }
+
                                     speakCleanText(aiReply, continueConversation = true)
                                 } catch (e: Exception) {
                                     speakCleanText("أنا معك سيدي، تفضل بأمرك التالي.", continueConversation = true)
@@ -449,6 +466,7 @@ class EveBubbleService : Service() {
     }
 
     private fun handleEveClick() {
+        if (tts?.isSpeaking == true) tts?.stop()
         triggerDirectVoiceListening()
     }
 
