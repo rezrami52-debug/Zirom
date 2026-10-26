@@ -4,6 +4,10 @@ import android.accessibilityservice.AccessibilityService
 import android.os.Bundle
 import android.view.accessibility.AccessibilityEvent
 import android.view.accessibility.AccessibilityNodeInfo
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 
 class EveAccessibilityService : AccessibilityService() {
 
@@ -41,9 +45,7 @@ class EveAccessibilityService : AccessibilityService() {
             val pm = packageManager
             val appInfo = pm.getApplicationInfo(pkgName, 0)
             pm.getApplicationLabel(appInfo).toString()
-        } catch (e: Exception) {
-            pkgName
-        }
+        } catch (e: Exception) { pkgName }
 
         val extractedTexts = mutableListOf<String>()
         extractTextFromNode(rootNode, extractedTexts)
@@ -70,7 +72,6 @@ class EveAccessibilityService : AccessibilityService() {
 
     private fun extractTextFromNode(node: AccessibilityNodeInfo?, list: MutableList<String>) {
         if (node == null) return
-
         node.text?.toString()?.let { list.add(it) }
         node.contentDescription?.toString()?.let { list.add(it) }
 
@@ -79,12 +80,29 @@ class EveAccessibilityService : AccessibilityService() {
         }
     }
 
-    // --- قدرات التحكم والنقر التلقائي ---
+    /**
+     * البحث التلقائي عن زر الإرسال في واتساب والضغط عليه
+     */
+    fun clickWhatsAppSendButton() {
+        CoroutineScope(Dispatchers.IO).launch {
+            // انتظار فتح واتساب وتجهيز الرسالة
+            for (attempt in 0..10) {
+                delay(400)
+                val root = rootInActiveWindow ?: continue
+                val clicked = searchAndClickSend(root)
+                if (clicked) break
+            }
+        }
+    }
 
-    fun clickNodeByText(targetText: String): Boolean {
-        val root = rootInActiveWindow ?: return false
-        val nodes = root.findAccessibilityNodeInfosByText(targetText)
-        for (node in nodes) {
+    private fun searchAndClickSend(node: AccessibilityNodeInfo?): Boolean {
+        if (node == null) return false
+
+        val desc = node.contentDescription?.toString()?.lowercase() ?: ""
+        val text = node.text?.toString()?.lowercase() ?: ""
+        val viewId = node.viewIdResourceName?.lowercase() ?: ""
+
+        if (viewId.contains("send") || desc.contains("send") || desc.contains("إرسال") || text.contains("إرسال") || text.contains("send")) {
             if (node.isClickable) {
                 return node.performAction(AccessibilityNodeInfo.ACTION_CLICK)
             }
@@ -96,16 +114,11 @@ class EveAccessibilityService : AccessibilityService() {
                 parent = parent.parent
             }
         }
-        return false
-    }
 
-    fun typeTextIntoFocusedField(text: String): Boolean {
-        val root = rootInActiveWindow ?: return false
-        val focusedNode = root.findFocus(AccessibilityNodeInfo.FOCUS_INPUT) ?: return false
-        val arguments = Bundle().apply {
-            putCharSequence(AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE, text)
+        for (i in 0 until node.childCount) {
+            if (searchAndClickSend(node.getChild(i))) return true
         }
-        return focusedNode.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT, arguments)
+        return false
     }
 
     fun pressBack(): Boolean = performGlobalAction(GLOBAL_ACTION_BACK)
