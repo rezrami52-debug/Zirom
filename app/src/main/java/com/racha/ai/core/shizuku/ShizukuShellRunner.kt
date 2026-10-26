@@ -32,29 +32,40 @@ object ShizukuShellRunner {
     }
 
     /**
-     * تنفيذ أمر ADB Shell بصلاحيات عالية عبر Shizuku مباشرة
+     * تنفيذ أمر ADB Shell عبر Shizuku باستخدام Reflection لتجاوز قيود الحماية في Kotlin
      */
     fun execCommand(command: String): String {
         return try {
-            if (!Shizuku.pingBinder()) {
-                return "خطأ: خدمة Shizuku غير مشغلة حالياً على الهاتف."
-            }
-
-            // تنفيذ العملية عبر واجهة Shizuku الرسمية مع دعم التوافق
-            val process: Process = try {
-                Shizuku.newProcess(arrayOf("sh", "-c", command), null, null)
-            } catch (e: Throwable) {
-                val method = Shizuku::class.java.getDeclaredMethod(
+            if (isAvailable()) {
+                val clazz = Class.forName("rikka.shizuku.Shizuku")
+                val method = clazz.getDeclaredMethod(
                     "newProcess",
                     Array<String>::class.java,
                     Array<String>::class.java,
                     String::class.java
                 )
                 method.isAccessible = true
-                @Suppress("UNCHECKED_CAST")
-                method.invoke(null, arrayOf("sh", "-c", command), null, null) as Process
-            }
+                val process = method.invoke(null, arrayOf("sh", "-c", command), null, null) as Process
 
+                val reader = BufferedReader(InputStreamReader(process.inputStream))
+                val output = StringBuilder()
+                var line: String?
+                while (reader.readLine().also { line = it } != null) {
+                    output.append(line).append("\n")
+                }
+                val exitCode = process.waitFor()
+                if (exitCode == 0) output.toString().trim() else "فشل التنفيذ (كود $exitCode)"
+            } else {
+                runStandardExec(command)
+            }
+        } catch (e: Exception) {
+            runStandardExec(command)
+        }
+    }
+
+    private fun runStandardExec(command: String): String {
+        return try {
+            val process = Runtime.getRuntime().exec(arrayOf("sh", "-c", command))
             val reader = BufferedReader(InputStreamReader(process.inputStream))
             val output = StringBuilder()
             var line: String?
@@ -64,7 +75,6 @@ object ShizukuShellRunner {
             val exitCode = process.waitFor()
             if (exitCode == 0) output.toString().trim() else "فشل التنفيذ (كود $exitCode)"
         } catch (e: Exception) {
-            e.printStackTrace()
             "فشل التنفيذ: ${e.localizedMessage}"
         }
     }
