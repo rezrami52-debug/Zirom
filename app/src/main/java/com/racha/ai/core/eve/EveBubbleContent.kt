@@ -14,6 +14,7 @@ import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
@@ -54,11 +55,13 @@ fun EveBubbleContent(
     onMediaNext: () -> Unit = {},
     onMediaPrev: () -> Unit = {},
     onMediaItemSelected: (MediaItemData) -> Unit = {},
-    onDrag: (dx: Float, dy: Float) -> Unit = { _, _ -> }
+    onDrag: (dx: Float, dy: Float) -> Unit = { _, _ -> },
+    onDragEnd: () -> Unit = {}
 ) {
     val eveUiState by EveState.uiState.collectAsState()
     val isSleeping = eveUiState.mood == EveMood.SLEEPING
     val isNotifying = eveUiState.mood == EveMood.NOTIFICATION_ALERT
+    val isAwake = eveUiState.mood == EveMood.AWAKE_SMILING
     val playback = eveUiState.playback
     val hasActiveMedia = playback.title.isNotBlank()
     val shelfType = eveUiState.shelfType
@@ -91,6 +94,17 @@ fun EveBubbleContent(
             repeatMode = RepeatMode.Reverse
         ),
         label = "hoverY"
+    )
+
+    // نبض الهالة التكتيكية
+    val pulseGlow by infiniteTransition.animateFloat(
+        initialValue = 0.6f,
+        targetValue = 1.25f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(900, easing = LinearEasing),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "pulseGlow"
     )
 
     val eyeGlow by infiniteTransition.animateFloat(
@@ -133,7 +147,7 @@ fun EveBubbleContent(
 
     var totalDragY by remember { mutableFloatStateOf(0f) }
     var totalDragX by remember { mutableFloatStateOf(0f) }
-    val dismissThreshold = 180f
+    val dismissThreshold = 220f
 
     Row(
         verticalAlignment = Alignment.Top,
@@ -149,10 +163,15 @@ fun EveBubbleContent(
                         onDragEnd = {
                             if (totalDragY > dismissThreshold && totalDragY > kotlin.math.abs(totalDragX) * 1.2f) {
                                 onDismiss()
+                            } else {
+                                onDragEnd()
                             }
                             totalDragY = 0f; totalDragX = 0f
                         },
-                        onDragCancel = { totalDragY = 0f; totalDragX = 0f },
+                        onDragCancel = {
+                            onDragEnd()
+                            totalDragY = 0f; totalDragX = 0f
+                        },
                         onDrag = { change, dragAmount ->
                             change.consume()
                             totalDragY += dragAmount.y
@@ -164,13 +183,11 @@ fun EveBubbleContent(
                 .pointerInput(Unit) {
                     detectTapGestures(
                         onTap = {
-                            // النقرة دائماً تبدأ الاستماع فوراً دون تنويم إجباري
                             EveState.setMood(EveMood.AWAKE_SMILING)
                             onToggleSleepWake(true)
                         },
                         onDoubleTap = { onOpenApp() },
                         onLongPress = {
-                            // الضغطة المطولة تجعلها تنام
                             EveState.setMood(EveMood.SLEEPING)
                             onToggleSleepWake(false)
                         }
@@ -178,9 +195,26 @@ fun EveBubbleContent(
                 }
         ) {
             Box(
-                modifier = Modifier.size(width = 80.dp, height = 105.dp),
+                modifier = Modifier.size(width = 86.dp, height = 110.dp),
                 contentAlignment = Alignment.Center
             ) {
+                // هالة ضوئية دائرية تنبض حول EVE عند اليقظة أو الإشعارات
+                if (isAwake || isNotifying) {
+                    Box(
+                        modifier = Modifier
+                            .size(80.dp)
+                            .clip(CircleShape)
+                            .background(
+                                Brush.radialGradient(
+                                    listOf(
+                                        (if (isNotifying) Color(0xFFFF1744) else Color(0xFF00E5FF)).copy(alpha = 0.25f * pulseGlow),
+                                        Color.Transparent
+                                    )
+                                )
+                            )
+                    )
+                }
+
                 Canvas(modifier = Modifier.fillMaxSize()) {
                     val w = size.width
                     val h = size.height
@@ -204,11 +238,11 @@ fun EveBubbleContent(
                     )
 
                     drawRoundRect(
-                        color = if (isNotifying) Color(0xFFFF1744) else Color(0xFFC7D3E0),
+                        color = if (isNotifying) Color(0xFFFF1744) else Color(0xFF00E5FF).copy(alpha = 0.5f),
                         topLeft = Offset(w * 0.07f, h * 0.03f),
                         size = Size(w * 0.86f, h * 0.92f),
                         cornerRadius = CornerRadius(w * 0.43f, h * 0.46f),
-                        style = Stroke(width = if (isNotifying) 2.5f else 1.5f)
+                        style = Stroke(width = if (isNotifying || isAwake) 2.2f else 1.2f)
                     )
 
                     val visorWidth = w * 0.64f
@@ -263,12 +297,12 @@ fun EveBubbleContent(
                     Box(
                         modifier = Modifier
                             .align(Alignment.BottomCenter)
-                            .padding(bottom = 14.dp)
-                            .width(62.dp)
-                            .height(16.dp)
+                            .padding(bottom = 12.dp)
+                            .width(66.dp)
+                            .height(18.dp)
                             .clip(RoundedCornerShape(8.dp))
-                            .background(Color(0xFF080D1A).copy(alpha = 0.9f))
-                            .border(1.dp, Color(0xFF00E5FF).copy(alpha = 0.6f), RoundedCornerShape(8.dp)),
+                            .background(Color(0xFF080D1A).copy(alpha = 0.92f))
+                            .border(1.dp, Color(0xFF00E5FF).copy(alpha = 0.7f), RoundedCornerShape(8.dp)),
                         contentAlignment = Alignment.Center
                     ) {
                         Text(
@@ -329,7 +363,7 @@ fun EveBubbleContent(
             Surface(
                 modifier = Modifier
                     .padding(start = 10.dp)
-                    .width(220.dp)
+                    .width(230.dp)
                     .height(300.dp),
                 shape = RoundedCornerShape(16.dp),
                 color = Color(0xFF080D1A).copy(alpha = 0.95f),

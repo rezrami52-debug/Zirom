@@ -1,5 +1,6 @@
 package com.racha.ai.core.eve
 
+import android.animation.ValueAnimator
 import android.annotation.SuppressLint
 import android.app.Notification
 import android.app.NotificationChannel
@@ -17,6 +18,7 @@ import android.speech.tts.Voice
 import android.view.Gravity
 import android.view.MotionEvent
 import android.view.WindowManager
+import android.view.animation.DecelerateInterpolator
 import androidx.compose.ui.platform.ComposeView
 import androidx.core.app.NotificationCompat
 import androidx.media3.common.MediaItem
@@ -167,7 +169,7 @@ class EveBubbleService : Service() {
             PixelFormat.TRANSLUCENT
         ).apply {
             gravity = Gravity.TOP or Gravity.START
-            x = 80
+            x = 30
             y = 280
         }
 
@@ -197,7 +199,8 @@ class EveBubbleService : Service() {
                     onMediaNext = { skipNext() },
                     onMediaPrev = { skipPrev() },
                     onMediaItemSelected = { item -> playSelectedMedia(item) },
-                    onDrag = { dx, dy -> updatePosition(dx, dy) }
+                    onDrag = { dx, dy -> updatePosition(dx, dy) },
+                    onDragEnd = { snapToNearestEdge() }
                 )
             }
         }
@@ -209,6 +212,41 @@ class EveBubbleService : Service() {
             e.printStackTrace()
             stopSelf()
         }
+    }
+
+    /**
+     * الالتصاق الفيزيائي التلقائي بأقرب حافة للشاشة (يمين أو يسار) بنعومة
+     */
+    private fun snapToNearestEdge() {
+        val displayMetrics = resources.displayMetrics
+        val screenWidth = displayMetrics.widthPixels
+        val screenHeight = displayMetrics.heightPixels
+        val bubbleWidth = composeView?.width ?: 200
+
+        val targetX = if (layoutParams.x + bubbleWidth / 2 < screenWidth / 2) {
+            20 // حافة اليسار
+        } else {
+            screenWidth - bubbleWidth - 20 // حافة اليمين
+        }
+
+        // الحفاظ على الفقاعة داخل حدود الشاشة عمودياً
+        val minY = 100
+        val maxY = screenHeight - 320
+        layoutParams.y = layoutParams.y.coerceIn(minY, maxY)
+
+        val animator = ValueAnimator.ofInt(layoutParams.x, targetX).apply {
+            duration = 260
+            interpolator = DecelerateInterpolator()
+            addUpdateListener { animation ->
+                layoutParams.x = animation.animatedValue as Int
+                try {
+                    windowManager.updateViewLayout(composeView, layoutParams)
+                } catch (e: Exception) {
+                    e.printStackTrace()
+                }
+            }
+        }
+        animator.start()
     }
 
     private fun handleTapOutside() {
