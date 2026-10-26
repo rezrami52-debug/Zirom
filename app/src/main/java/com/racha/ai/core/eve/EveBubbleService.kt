@@ -90,7 +90,7 @@ class EveBubbleService : Service() {
                     override fun onDone(utteranceId: String?) {
                         if (utteranceId == "CONTINUE_CONVERSATION") {
                             serviceScope.launch(Dispatchers.Main) {
-                                delay(300)
+                                delay(350)
                                 triggerDirectVoiceListening()
                             }
                         }
@@ -132,7 +132,6 @@ class EveBubbleService : Service() {
     private fun handleNewNotification(speechText: String, notifKey: String?) {
         currentNotifKey = notifKey
         EveState.addNotification()
-
         pendingNotificationJob?.cancel()
         pendingNotificationJob = serviceScope.launch(Dispatchers.Main) {
             delay(15000)
@@ -186,7 +185,6 @@ class EveBubbleService : Service() {
                 EveBubbleContent(
                     onToggleSleepWake = { isAwake ->
                         if (isAwake) {
-                            speakCleanText("نعم سيدي، أنا أستمع إليك")
                             triggerDirectVoiceListening()
                         } else {
                             speakCleanText("في وضع السبات سيدي")
