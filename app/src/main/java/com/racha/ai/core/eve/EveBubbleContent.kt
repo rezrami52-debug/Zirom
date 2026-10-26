@@ -14,7 +14,6 @@ import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
@@ -67,7 +66,6 @@ fun EveBubbleContent(
     val context = LocalContext.current
     val mediaManager = remember { LocalMediaManager(context) }
 
-    // تحميل الوسائط في الخلفية بدون تجميد الواجهة والأنيميشن
     val items by produceState<List<MediaItemData>>(initialValue = emptyList(), shelfType) {
         if (shelfType != MediaShelfType.NONE) {
             value = withContext(Dispatchers.IO) {
@@ -83,7 +81,6 @@ fun EveBubbleContent(
         }
     }
 
-    // حركة الطفو
     val hoverDuration = if (isSleeping) 2800 else 1600
     val infiniteTransition = rememberInfiniteTransition(label = "EveAnimation")
     val hoverY by infiniteTransition.animateFloat(
@@ -96,7 +93,6 @@ fun EveBubbleContent(
         label = "hoverY"
     )
 
-    // وميض نيون العيون
     val eyeGlow by infiniteTransition.animateFloat(
         initialValue = if (isSleeping) 0.4f else 0.85f,
         targetValue = if (isSleeping) 0.6f else 1.25f,
@@ -107,7 +103,6 @@ fun EveBubbleContent(
         label = "eyeGlow"
     )
 
-    // تحريك شريط الصدر (Marquee Animation)
     val textOffset by infiniteTransition.animateFloat(
         initialValue = 60f,
         targetValue = -60f,
@@ -144,7 +139,6 @@ fun EveBubbleContent(
         verticalAlignment = Alignment.Top,
         horizontalArrangement = Arrangement.Start
     ) {
-        // --- أولاً: جسد EVE وعناصر التحكم السفلية ---
         Column(
             horizontalAlignment = Alignment.CenterHorizontally,
             modifier = modifier
@@ -170,11 +164,16 @@ fun EveBubbleContent(
                 .pointerInput(Unit) {
                     detectTapGestures(
                         onTap = {
-                            val isNowAwake = EveState.toggleSleepWake()
-                            onToggleSleepWake(isNowAwake)
+                            // النقرة دائماً تبدأ الاستماع فوراً دون تنويم إجباري
+                            EveState.setMood(EveMood.AWAKE_SMILING)
+                            onToggleSleepWake(true)
                         },
                         onDoubleTap = { onOpenApp() },
-                        onLongPress = { onDismiss() }
+                        onLongPress = {
+                            // الضغطة المطولة تجعلها تنام
+                            EveState.setMood(EveMood.SLEEPING)
+                            onToggleSleepWake(false)
+                        }
                     )
                 }
         ) {
@@ -322,7 +321,6 @@ fun EveBubbleContent(
             }
         }
 
-        // --- ثانياً: نافذة الهولوجرام الجانبية للوسائط ---
         AnimatedVisibility(
             visible = shelfType != MediaShelfType.NONE,
             enter = fadeIn(),
@@ -331,8 +329,8 @@ fun EveBubbleContent(
             Surface(
                 modifier = Modifier
                     .padding(start = 10.dp)
-                    .width(200.dp)
-                    .height(280.dp),
+                    .width(220.dp)
+                    .height(300.dp),
                 shape = RoundedCornerShape(16.dp),
                 color = Color(0xFF080D1A).copy(alpha = 0.95f),
                 border = BorderStroke(1.5.dp, Color(0xFF00E5FF).copy(alpha = 0.7f)),

@@ -9,9 +9,11 @@ import android.content.*
 import android.graphics.PixelFormat
 import android.os.BatteryManager
 import android.os.Build
+import android.os.Bundle
 import android.os.IBinder
 import android.os.PowerManager
 import android.speech.tts.TextToSpeech
+import android.speech.tts.UtteranceProgressListener
 import android.speech.tts.Voice
 import android.view.Gravity
 import android.view.MotionEvent
@@ -29,9 +31,6 @@ import com.racha.ai.core.security.SecurePreferences
 import com.racha.ai.core.voice.VoiceInputHelper
 import com.racha.ai.data.api.GeminiService
 import kotlinx.coroutines.*
-import java.text.SimpleDateFormat
-import java.util.Calendar
-import java.util.Date
 import java.util.Locale
 
 class EveBubbleService : Service() {
@@ -51,13 +50,9 @@ class EveBubbleService : Service() {
     private var batteryReceiver: BroadcastReceiver? = null
     private var hasAlertedFullCharge = false
     private var hasAlertedLowBattery = false
-    private var lastMorningBriefingDate: String = ""
 
-    private var isListeningWakeWord = false
     private var isHandlingAwake = false
-
-    private var pendingNotificationJob: Job? = null
-    private var currentNotifKey: String? = null
+    private var isContinuousListening = false
 
     override fun onBind(intent: Intent?): IBinder? = null
 
@@ -89,50 +84,41 @@ class EveBubbleService : Service() {
                 } catch (e: Exception) { e.printStackTrace() }
                 tts?.setPitch(1.08f)
                 tts?.setSpeechRate(0.95f)
+
+                // الاستماع التلقائي بعد انتهاء الرد الصوتي (الحوار المستمر)
+                tts?.setOnUtteranceProgressListener(object : UtteranceProgressListener() {
+                    override fun onStart(utteranceId: String?) {}
+                    override fun onDone(utteranceId: String?) {
+                        if (utteranceId == "CONTINUE_CONVERSATION") {
+                            serviceScope.launch(Dispatchers.Main) {
+                                delay(300)
+                                triggerDirectVoiceListening()
+                            }
+                        }
+                    }
+                    override fun onError(utteranceId: String?) {}
+                })
             }
         }
     }
 
-    private fun speakCleanText(text: String) {
+    private fun speakCleanText(text: String, continueConversation: Boolean = false) {
         val clean = text.replace(Regex("[\\p{So}\\p{Cn}\\*\\_\\#]"), "").trim()
-        if (clean.isNotBlank()) tts?.speak(clean, TextToSpeech.QUEUE_FLUSH, null, "EVE_MSG")
+        if (clean.isNotBlank()) {
+            val utteranceId = if (continueConversation) "CONTINUE_CONVERSATION" else "SINGLE_STATEMENT"
+            val params = Bundle().apply {
+                putString(TextToSpeech.Engine.KEY_PARAM_UTTERANCE_ID, utteranceId)
+            }
+            tts?.speak(clean, TextToSpeech.QUEUE_FLUSH, params, utteranceId)
+        }
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         when (intent?.action) {
             ACTION_TRIGGER_NOTIFICATION_PULSE -> EveState.addNotification()
-            ACTION_NEW_NOTIFICATION -> {
-                val speechText = intent.getStringExtra(EXTRA_SPEECH_TEXT) ?: ""
-                val notifKey = intent.getStringExtra(EXTRA_NOTIF_KEY)
-                handleNewNotification(speechText, notifKey)
-            }
-            ACTION_CANCEL_NOTIFICATION -> {
-                val notifKey = intent.getStringExtra(EXTRA_NOTIF_KEY)
-                handleCancelNotification(notifKey)
-            }
             ACTION_STOP_SERVICE -> stopSelf()
         }
         return START_STICKY
-    }
-
-    private fun handleNewNotification(speechText: String, notifKey: String?) {
-        currentNotifKey = notifKey
-        EveState.addNotification()
-
-        pendingNotificationJob?.cancel()
-        pendingNotificationJob = serviceScope.launch(Dispatchers.Main) {
-            delay(15000)
-            speakCleanText("سيدي، وصلك إشعار: $speechText")
-        }
-    }
-
-    private fun handleCancelNotification(notifKey: String?) {
-        if (notifKey == null || notifKey == currentNotifKey) {
-            pendingNotificationJob?.cancel()
-            pendingNotificationJob = null
-            currentNotifKey = null
-            EveState.clearNotifications()
-        }
     }
 
     @SuppressLint("ClickableViewAccessibility")
@@ -176,7 +162,7 @@ class EveBubbleService : Service() {
                             triggerDirectVoiceListening()
                         } else {
                             speakCleanText("في وضع السبات سيدي")
-                            stopListeningForWakeWord()
+                            stopListening()
                         }
                     },
                     onOpenApp = { handleEveClick() },
@@ -202,6 +188,7 @@ class EveBubbleService : Service() {
     private fun handleTapOutside() {
         EveState.closeShelf()
         EveState.setMood(EveMood.SLEEPING)
+        stopListening()
     }
 
     private fun playSelectedMedia(item: MediaItemData) {
@@ -244,28 +231,14 @@ class EveBubbleService : Service() {
     private fun setupScreenStateReceiver() {
         screenReceiver = object : BroadcastReceiver() {
             override fun onReceive(context: Context?, intent: Intent?) {
-                when (intent?.action) {
-                    Intent.ACTION_SCREEN_ON -> checkAndTriggerMorningBriefing()
-                    Intent.ACTION_SCREEN_OFF -> stopListeningForWakeWord()
+                if (intent?.action == Intent.ACTION_SCREEN_OFF) {
+                    stopListening()
+                    EveState.setMood(EveMood.SLEEPING)
                 }
             }
         }
-        val filter = IntentFilter(Intent.ACTION_SCREEN_ON).apply { addAction(Intent.ACTION_SCREEN_OFF) }
+        val filter = IntentFilter(Intent.ACTION_SCREEN_OFF)
         registerReceiver(screenReceiver, filter)
-    }
-
-    private fun checkAndTriggerMorningBriefing() {
-        val cal = Calendar.getInstance()
-        val hour = cal.get(Calendar.HOUR_OF_DAY)
-        val todayStr = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(Date())
-
-        if (hour in 6..10 && lastMorningBriefingDate != todayStr) {
-            lastMorningBriefingDate = todayStr
-            serviceScope.launch {
-                delay(1200)
-                speakCleanText("صباح الخير سيدي! أتمنى لك يوماً موفقاً وممتعاً. كل الأنظمة تعمل بكفاءة تامة.")
-            }
-        }
     }
 
     private fun setupBatteryGuardianReceiver() {
@@ -283,7 +256,7 @@ class EveBubbleService : Service() {
                         hasAlertedLowBattery = false
                         if (pct >= 85 && !hasAlertedFullCharge) {
                             hasAlertedFullCharge = true
-                            speakCleanText("سيدي، وصل الشحن إلى $pct بالمائة، يمكنك فصل الشاحن لحماية البطارية.")
+                            speakCleanText("سيدي، وصل الشحن إلى $pct بالمائة، يمكنك فصل الشاحن للحفاظ على سلامة البطارية.")
                         }
                     } else {
                         hasAlertedFullCharge = false
@@ -298,9 +271,6 @@ class EveBubbleService : Service() {
         registerReceiver(batteryReceiver, IntentFilter(Intent.ACTION_BATTERY_CHANGED))
     }
 
-    /**
-     * استماع مباشر ونظيف عند لمس الفقاعة أو الأمر الصوتي دون أي حلقة مفرغة
-     */
     fun triggerDirectVoiceListening() {
         if (isHandlingAwake) return
         isHandlingAwake = true
@@ -314,6 +284,7 @@ class EveBubbleService : Service() {
             },
             onError = {
                 isHandlingAwake = false
+                // عند الصمت أو انتهاء الحوار، تعود للسبات بسلام
                 EveState.setMood(EveMood.SLEEPING)
             }
         )
@@ -321,17 +292,30 @@ class EveBubbleService : Service() {
 
     private fun processSpokenText(text: String) {
         serviceScope.launch(Dispatchers.Main) {
-            val lower = text.lowercase()
+            val lower = text.lowercase().trim()
 
-            if (lower.contains("فيديو") || lower.contains("فيديوهات")) {
+            // 1. أوامر إنهاء الحوار والسبات
+            if (lower.contains("نامي") || lower.contains("سبات") || lower.contains("تصبحين على خير") || lower.contains("يكفي") || lower.contains("اغلقي")) {
+                EveState.setMood(EveMood.SLEEPING)
+                speakCleanText("في وضع السبات سيدي، أنا هنا متى احتجتني.", continueConversation = false)
+                return@launch
+            }
+
+            // 2. القاموس الموسع لاستعراض وعرض الوسائط
+            val isShow = lower.contains("استعرض") || lower.contains("استعرضي") || lower.contains("اعرض") ||
+                         lower.contains("اعرضي") || lower.contains("افتح") || lower.contains("افتحي") ||
+                         lower.contains("وريني") || lower.contains("أرني") || lower.contains("ارني") ||
+                         lower.contains("شوفي") || lower.contains("شوف") || lower.contains("هاتي") || lower.contains("هات")
+
+            if (isShow && (lower.contains("فيديو") || lower.contains("فيديوهات") || lower.contains("مقاطع") || lower.contains("مقطع"))) {
                 EveState.openShelf(MediaShelfType.VIDEOS)
-                speakCleanText("تفضل الفيديوهات سيدي")
-            } else if (lower.contains("صور") || lower.contains("الصور")) {
+                speakCleanText("تفضل مقاطع الفيديو سيدي", continueConversation = true)
+            } else if (isShow && (lower.contains("صور") || lower.contains("الصور") || lower.contains("صورة") || lower.contains("البوم") || lower.contains("ألبوم") || lower.contains("معرض"))) {
                 EveState.openShelf(MediaShelfType.PHOTOS)
-                speakCleanText("تفضل ألبوم الصور")
-            } else if (lower.contains("موسيقى") || lower.contains("اغاني")) {
+                speakCleanText("تفضل ألبوم الصور سيدي", continueConversation = true)
+            } else if (isShow && (lower.contains("موسيقى") || lower.contains("اغاني") || lower.contains("أغاني") || lower.contains("صوتيات") || lower.contains("اناشيد"))) {
                 EveState.openShelf(MediaShelfType.MUSIC)
-                speakCleanText("تفضل قائمة الموسيقى")
+                speakCleanText("تفضل قائمة الموسيقى سيدي", continueConversation = true)
             } else if (lower.contains("ماذا ترى") || lower.contains("شوفي الشاشة") || lower.contains("حللي الشاشة")) {
                 handleScreenVisionQuery()
             } else {
@@ -340,8 +324,12 @@ class EveBubbleService : Service() {
                 if (cleanCommand.length > 2) {
                     val result = withContext(Dispatchers.IO) { intentHandler.handle(cleanCommand) }
                     when (result) {
-                        is IntentHandler.HandlerResult.DirectReply -> speakCleanText(result.message)
-                        is IntentHandler.HandlerResult.Error -> speakCleanText(result.message)
+                        is IntentHandler.HandlerResult.DirectReply -> {
+                            speakCleanText(result.message, continueConversation = true)
+                        }
+                        is IntentHandler.HandlerResult.Error -> {
+                            speakCleanText(result.message, continueConversation = true)
+                        }
                         else -> {
                             val apiKey = securePreferences.getApiKey()
                             if (!apiKey.isNullOrBlank()) {
@@ -349,17 +337,17 @@ class EveBubbleService : Service() {
                                     val aiReply = withContext(Dispatchers.IO) {
                                         GeminiService(apiKey).generateResponse(cleanCommand)
                                     }
-                                    speakCleanText(aiReply)
+                                    speakCleanText(aiReply, continueConversation = true)
                                 } catch (e: Exception) {
-                                    speakCleanText("أنا معك سيدي، ماذا تطلب؟")
+                                    speakCleanText("أنا معك سيدي، تفضل بأمرك التالي.", continueConversation = true)
                                 }
                             } else {
-                                speakCleanText("أنا معك سيدي، ماذا تطلب؟")
+                                speakCleanText("أنا معك سيدي، تفضل بأمرك.", continueConversation = true)
                             }
                         }
                     }
                 } else {
-                    speakCleanText("أنا معك سيدي، ماذا تطلب؟")
+                    speakCleanText("أنا معك سيدي، تفضل بأمرك التالي.", continueConversation = true)
                 }
             }
         }
@@ -368,13 +356,13 @@ class EveBubbleService : Service() {
     private suspend fun handleScreenVisionQuery() {
         val snapshot = EveAccessibilityService.instance?.getLatestScreenSnapshot()
         if (snapshot == null || snapshot.visibleText.isBlank()) {
-            speakCleanText("سيدي، لم أتمكن من استخراج محتوى الشاشة حالياً.")
+            speakCleanText("سيدي، لم أتمكن من استخراج محتوى الشاشة حالياً.", continueConversation = true)
             return
         }
 
         val apiKey = securePreferences.getApiKey()
         if (apiKey.isNullOrBlank()) {
-            speakCleanText("أرى تطبيق ${snapshot.appName}: " + snapshot.visibleText.take(120))
+            speakCleanText("أرى تطبيق ${snapshot.appName}: " + snapshot.visibleText.take(120), continueConversation = true)
             return
         }
 
@@ -382,14 +370,13 @@ class EveBubbleService : Service() {
             val aiAnalysis = withContext(Dispatchers.IO) {
                 GeminiService(apiKey).analyzeScreenContext(snapshot.appName, snapshot.visibleText)
             }
-            speakCleanText(aiAnalysis)
+            speakCleanText(aiAnalysis, continueConversation = true)
         } catch (e: Exception) {
-            speakCleanText("أرى تطبيق ${snapshot.appName} سيدي، ولكن تعذر تحليل المحتوى.")
+            speakCleanText("أرى تطبيق ${snapshot.appName} سيدي، ولكن تعذر تحليل المحتوى.", continueConversation = true)
         }
     }
 
-    private fun stopListeningForWakeWord() {
-        isListeningWakeWord = false
+    private fun stopListening() {
         isHandlingAwake = false
         voiceInputHelper?.stopListening()
     }
@@ -424,7 +411,6 @@ class EveBubbleService : Service() {
         super.onDestroy()
         screenReceiver?.let { unregisterReceiver(it) }
         batteryReceiver?.let { unregisterReceiver(it) }
-        pendingNotificationJob?.cancel()
         exoPlayer?.release()
         voiceInputHelper?.destroy()
         tts?.stop()
@@ -438,9 +424,5 @@ class EveBubbleService : Service() {
     companion object {
         const val ACTION_TRIGGER_NOTIFICATION_PULSE = "ACTION_TRIGGER_NOTIFICATION_PULSE"
         const val ACTION_STOP_SERVICE = "ACTION_STOP_SERVICE"
-        const val ACTION_NEW_NOTIFICATION = "ACTION_NEW_NOTIFICATION"
-        const val ACTION_CANCEL_NOTIFICATION = "ACTION_CANCEL_NOTIFICATION"
-        const val EXTRA_SPEECH_TEXT = "EXTRA_SPEECH_TEXT"
-        const val EXTRA_NOTIF_KEY = "EXTRA_NOTIF_KEY"
     }
 }
