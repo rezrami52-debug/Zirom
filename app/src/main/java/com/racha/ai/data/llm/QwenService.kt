@@ -21,62 +21,31 @@ class QwenService(private val context: Context) : LLMProvider {
     private var llmInference: LlmInference? = null
     private var isInitialized = false
 
-    fun getInternalModelPath(): String {
-        val dir = File(context.filesDir, "models")
-        if (!dir.exists()) dir.mkdirs()
-        return File(dir, MODEL_FILENAME).absolutePath
-    }
+    fun getModelFile(): File {
+        val primaryPath = File("/storage/emulated/0/Racha/models", MODEL_FILENAME)
+        if (primaryPath.exists() && primaryPath.length() > 100_000_000) return primaryPath
 
-    fun getInternalModelFile(): File {
-        val dir = File(context.filesDir, "models")
-        if (!dir.exists()) dir.mkdirs()
-        return File(dir, MODEL_FILENAME)
+        val secondaryPath = File("/sdcard/Racha/models", MODEL_FILENAME)
+        if (secondaryPath.exists() && secondaryPath.length() > 100_000_000) return secondaryPath
+
+        return File(File(context.filesDir, "models"), MODEL_FILENAME)
     }
 
     fun isModelPresent(): Boolean {
-        val f = getInternalModelFile()
+        val f = getModelFile()
         return f.exists() && f.length() > 100_000_000
-    }
-
-    suspend fun copyModelFromUri(uri: Uri): Result<Unit> = withContext(Dispatchers.IO) {
-        try {
-            Log.d(TAG, "بدء النسخ من: $uri")
-            val destFile = getInternalModelFile()
-            val startTime = System.currentTimeMillis()
-
-            context.contentResolver.openInputStream(uri)?.use { input ->
-                destFile.outputStream().use { output ->
-                    input.copyTo(output, bufferSize = 1024 * 1024)
-                }
-            } ?: return@withContext Result.failure(Exception("فشل فتح الملف المصدر"))
-
-            val elapsed = (System.currentTimeMillis() - startTime) / 1000.0
-            val sizeMB = destFile.length() / (1024 * 1024)
-            Log.d(TAG, "✅ تم النسخ في ${elapsed}ث — الحجم: ${sizeMB}MB")
-
-            llmInference?.close()
-            llmInference = null
-            isInitialized = false
-
-            Result.success(Unit)
-        } catch (e: Exception) {
-            Log.e(TAG, "فشل النسخ", e)
-            Result.failure(e)
-        }
     }
 
     suspend fun initialize(): Result<Unit> = withContext(Dispatchers.IO) {
         try {
-            if (isInitialized) return@withContext Result.success(Unit)
+            if (isInitialized && llmInference != null) return@withContext Result.success(Unit)
 
-            val modelFile = getInternalModelFile()
+            val modelFile = getModelFile()
             if (!modelFile.exists() || modelFile.length() < 100_000_000) {
-                return@withContext Result.failure(
-                    Exception("النموذج غير موجود. اختر الملف من الإعدادات.")
-                )
+                return@withContext Result.failure(Exception("ملف Qwen غير موجود"))
             }
 
-            Log.d(TAG, "تحميل النموذج من: ${modelFile.absolutePath}")
+            Log.d(TAG, "تحميل Qwen من: ${modelFile.absolutePath}")
             val startTime = System.currentTimeMillis()
 
             val options = LlmInference.LlmInferenceOptions.builder()
@@ -87,16 +56,21 @@ class QwenService(private val context: Context) : LLMProvider {
             isInitialized = true
 
             val elapsed = (System.currentTimeMillis() - startTime) / 1000.0
-            Log.d(TAG, "✅ تم التحميل في ${elapsed}ث")
+            Log.d(TAG, "✅ تم تجهيز Qwen بنجاح في ${elapsed}ثانية")
 
             Result.success(Unit)
         } catch (e: Exception) {
-            Log.e(TAG, "فشل التحميل", e)
+            Log.e(TAG, "فشل تهيئة Qwen", e)
             Result.failure(e)
         }
     }
 
     override fun isReady(): Boolean = isInitialized && llmInference != null
+
+    suspend fun generateResponse(prompt: String): String = withContext(Dispatchers.IO) {
+        val res = sendMessageWithContext(emptyList(), prompt, "")
+        res.getOrElse { "سيدي، تعذر استخراج الإجابة محلياً: ${it.localizedMessage}" }
+    }
 
     override suspend fun sendMessageWithContext(
         history: List<ChatMessageEntity>,
@@ -106,70 +80,45 @@ class QwenService(private val context: Context) : LLMProvider {
         try {
             if (!isInitialized) {
                 val initResult = initialize()
-                initResult.onFailure {
-                    return@withContext Result.failure(it)
-                }
+                initResult.onFailure { return@withContext Result.failure(it) }
             }
 
-            val inference = llmInference
-                ?: return@withContext Result.failure(Exception("النموذج غير جاهز"))
-
+            val inference = llmInference ?: return@withContext Result.failure(Exception("النموذج غير جاهز"))
             val fullPrompt = buildPrompt(history, userMessage, userProfileContext)
 
             val startTime = System.currentTimeMillis()
             val response = inference.generateResponse(fullPrompt)
             val elapsed = (System.currentTimeMillis() - startTime) / 1000.0
-            Log.d(TAG, "✅ توليد في ${elapsed}ث")
+            Log.d(TAG, "✅ تم التوليد محلياً في ${elapsed}ثانية")
 
             Result.success(response.trim())
         } catch (e: Exception) {
-            Log.e(TAG, "فشل التوليد", e)
+            Log.e(TAG, "خطأ في التوليد", e)
             Result.failure(e)
         }
     }
 
-    /**
-     * Prompt قوي للعربي + منع الصيني + ردود قصيرة.
-     */
     private fun buildPrompt(
         history: List<ChatMessageEntity>,
         userMessage: String,
         userProfileContext: String
     ): String {
         val sb = StringBuilder()
-
-        // System prompt قوي جداً
         sb.append("<|im_start|>system\n")
-        sb.append("أنت Racha، رفيق شخصي ذكي.\n")
-        sb.append("\n")
-        sb.append("قواعد صارمة:\n")
-        sb.append("1. اجب بالعربية الفصحى المبسطة فقط.\n")
-        sb.append("2. لا تستخدم الصينية أو الإنجليزية إطلاقاً.\n")
-        sb.append("3. الردود قصيرة: 2-3 أسطر كحد أقصى.\n")
-        sb.append("4. إن لم تعرف الإجابة، قل بالضبط: \"لا أعلم\".\n")
-        sb.append("5. كن دافئاً وودّياً.\n")
-        sb.append("6. لا تستخدم رموز تعبيرية (emoji) في الإجابات التقنية.\n")
-
-        if (userProfileContext.isNotBlank()) {
-            sb.append("\n[معلومات عن صاحبك]\n")
-            sb.append(userProfileContext)
-            sb.append("\n")
-        }
+        sb.append("أنت EVE و Racha، مساعد شخصي ذكي.\n")
+        sb.append("قواعد:\n")
+        sb.append("1. أجب بالعربية الطبيعية.\n")
+        sb.append("2. كن مقتضباً وذكياً (1 إلى 3 أسطر).\n")
+        sb.append("3. خاطب المستخدم بـ 'سيدي'.\n")
         sb.append("<|im_end|>\n")
 
-        // آخر 4 رسائل فقط (لتسريع Qwen)
         for (msg in history.takeLast(4)) {
             val role = if (msg.isFromUser) "user" else "assistant"
-            sb.append("<|im_start|>$role\n")
-            sb.append(msg.text)
-            sb.append("<|im_end|>\n")
+            sb.append("<|im_start|>$role\n${msg.text}<|im_end|>\n")
         }
 
-        sb.append("<|im_start|>user\n")
-        sb.append(userMessage)
-        sb.append("<|im_end|>\n")
+        sb.append("<|im_start|>user\n$userMessage<|im_end|>\n")
         sb.append("<|im_start|>assistant\n")
-
         return sb.toString()
     }
 

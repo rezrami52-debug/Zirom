@@ -29,6 +29,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.racha.ai.core.eve.EveAccessibilityService
 import com.racha.ai.core.preferences.AppPreferences
 import com.racha.ai.core.shizuku.ShizukuShellRunner
+import com.racha.ai.data.llm.QwenService
 import com.racha.ai.theme.AppThemeManager
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -45,6 +46,7 @@ fun SettingsScreen(
     val state by viewModel.uiState.collectAsState()
     val context = LocalContext.current
     val appPrefs = remember { AppPreferences(context) }
+    val qwenService = remember { QwenService(context) }
     val themeState by themeManager.themeState.collectAsState()
     val cardBgColor = themeState.rachaBubbleColor.copy(alpha = themeState.elementsAlpha)
     val headerCardBgColor = themeState.glowColor.copy(alpha = themeState.elementsAlpha)
@@ -52,13 +54,13 @@ fun SettingsScreen(
     var currentLanguage by remember { mutableStateOf(appPrefs.getLanguage()) }
     var showLanguageDialog by remember { mutableStateOf(false) }
     var showApiKey by remember { mutableStateOf(false) }
+    var selectedLLMProvider by remember { mutableStateOf(appPrefs.getLLMProvider()) }
 
-    // حالات الصلاحيات الحية
     var isAccessibilityActive by remember { mutableStateOf(EveAccessibilityService.isRunning()) }
     var isMediaPermissionGranted by remember { mutableStateOf(checkMediaPermission(context)) }
     var isShizukuActive by remember { mutableStateOf(checkShizukuStatus()) }
+    var isQwenInstalled by remember { mutableStateOf(qwenService.isModelPresent()) }
 
-    // قيم الصوت والمسجد الحية
     var ttsSpeed by remember { mutableFloatStateOf(appPrefs.getTtsSpeed()) }
     var ttsPitch by remember { mutableFloatStateOf(appPrefs.getTtsPitch()) }
     var mosqueDuration by remember { mutableIntStateOf(appPrefs.getMosqueDuration()) }
@@ -115,78 +117,106 @@ fun SettingsScreen(
                 }
             }
 
-            // 🤖 محرك الذكاء الاصطناعي (AI Engine & API Key)
+            // 🤖 محرك الذكاء الاصطناعي واختيار المزوّد
             Card(
                 modifier = Modifier.fillMaxWidth(),
                 colors = CardDefaults.cardColors(containerColor = cardBgColor),
                 shape = RoundedCornerShape(16.dp)
             ) {
                 Column(modifier = Modifier.padding(16.dp)) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text("🤖", fontSize = 20.sp)
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Column {
-                            Text("محرك الذكاء الاصطناعي", fontWeight = FontWeight.Bold, fontSize = 16.sp)
-                            Text(viewModel.getProviderName(), fontSize = 12.sp, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.SemiBold)
-                        }
-                    }
-                    Spacer(modifier = Modifier.height(10.dp))
-
-                    OutlinedTextField(
-                        value = state.apiKey,
-                        onValueChange = { viewModel.onApiKeyChange(it) },
-                        modifier = Modifier.fillMaxWidth(),
-                        label = { Text("أدخل مفتاح الـ API (Groq أو Gemini)") },
-                        visualTransformation = if (showApiKey) androidx.compose.ui.text.input.VisualTransformation.None else androidx.compose.ui.text.input.PasswordVisualTransformation(),
-                        trailingIcon = {
-                            IconButton(onClick = { showApiKey = !showApiKey }) {
-                                Icon(if (showApiKey) Icons.Default.Visibility else Icons.Default.VisibilityOff, contentDescription = null)
-                            }
-                        }
-                    )
-
+                    Text("محرك الذكاء الاصطناعي 🤖", fontWeight = FontWeight.Bold, fontSize = 16.sp)
                     Spacer(modifier = Modifier.height(8.dp))
 
+                    // اختيار المزوّد
                     Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Button(
-                            onClick = { viewModel.testApiKeyConnection() },
-                            modifier = Modifier.weight(1f),
-                            enabled = !state.isTestingKey && state.apiKey.isNotBlank(),
-                            colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.secondary)
+                        FilterChip(
+                            selected = selectedLLMProvider != "qwen",
+                            onClick = {
+                                selectedLLMProvider = "cloud"
+                                appPrefs.setLLMProvider("cloud")
+                            },
+                            label = { Text("سحابي (Groq ⚡)") },
+                            modifier = Modifier.weight(1f)
+                        )
+
+                        FilterChip(
+                            selected = selectedLLMProvider == "qwen",
+                            onClick = {
+                                selectedLLMProvider = "qwen"
+                                appPrefs.setLLMProvider("qwen")
+                            },
+                            label = { Text("محلي (Qwen أوفلاين 📱)") },
+                            modifier = Modifier.weight(1f)
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.height(10.dp))
+
+                    if (selectedLLMProvider == "qwen") {
+                        Surface(
+                            shape = RoundedCornerShape(10.dp),
+                            color = if (isQwenInstalled) Color(0xFF00E676).copy(alpha = 0.15f) else Color(0xFFFF5252).copy(alpha = 0.15f),
+                            modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)
                         ) {
-                            if (state.isTestingKey) {
-                                CircularProgressIndicator(modifier = Modifier.size(16.dp), color = Color.White, strokeWidth = 2.dp)
-                            } else {
-                                Text("فحص الاتصال ⚡", fontSize = 13.sp)
+                            Row(modifier = Modifier.padding(10.dp), verticalAlignment = Alignment.CenterVertically) {
+                                Text(if (isQwenInstalled) "✅" else "⚠️", fontSize = 18.sp)
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text(
+                                    text = if (isQwenInstalled) "تم العثور على Qwen 2.5 (1.5GB) في /Racha/models ومستعد للعمل بدون إنترنت!" else "ملف Qwen غير موجود في مجلد Racha/models",
+                                    fontSize = 12.sp,
+                                    fontWeight = FontWeight.Medium,
+                                    color = if (isQwenInstalled) Color(0xFF00E676) else Color(0xFFFF5252)
+                                )
+                            }
+                        }
+                    } else {
+                        OutlinedTextField(
+                            value = state.apiKey,
+                            onValueChange = { viewModel.onApiKeyChange(it) },
+                            modifier = Modifier.fillMaxWidth(),
+                            label = { Text("أدخل مفتاح الـ API (Groq أو Gemini)") },
+                            visualTransformation = if (showApiKey) androidx.compose.ui.text.input.VisualTransformation.None else androidx.compose.ui.text.input.PasswordVisualTransformation(),
+                            trailingIcon = {
+                                IconButton(onClick = { showApiKey = !showApiKey }) {
+                                    Icon(if (showApiKey) Icons.Default.Visibility else Icons.Default.VisibilityOff, contentDescription = null)
+                                }
+                            }
+                        )
+
+                        Spacer(modifier = Modifier.height(8.dp))
+
+                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Button(
+                                onClick = { viewModel.testApiKeyConnection() },
+                                modifier = Modifier.weight(1f),
+                                enabled = !state.isTestingKey && state.apiKey.isNotBlank(),
+                                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.secondary)
+                            ) {
+                                if (state.isTestingKey) {
+                                    CircularProgressIndicator(modifier = Modifier.size(16.dp), color = Color.White, strokeWidth = 2.dp)
+                                } else {
+                                    Text("فحص الاتصال ⚡", fontSize = 13.sp)
+                                }
+                            }
+
+                            Button(
+                                onClick = { viewModel.saveApiKey() },
+                                modifier = Modifier.weight(1f),
+                                enabled = state.apiKey.isNotBlank()
+                            ) {
+                                Text("حفظ المفتاح 💾", fontSize = 13.sp)
                             }
                         }
 
-                        Button(
-                            onClick = { viewModel.saveApiKey() },
-                            modifier = Modifier.weight(1f),
-                            enabled = state.apiKey.isNotBlank()
-                        ) {
-                            Text("حفظ المفتاح 💾", fontSize = 13.sp)
+                        if (state.testMessage != null) {
+                            Spacer(modifier = Modifier.height(6.dp))
+                            Text(
+                                text = state.testMessage!!,
+                                color = if (state.isTestSuccess == true) Color(0xFF00E676) else Color(0xFFFF5252),
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.Medium
+                            )
                         }
-                    }
-
-                    if (state.testMessage != null) {
-                        Spacer(modifier = Modifier.height(6.dp))
-                        Text(
-                            text = state.testMessage!!,
-                            color = if (state.isTestSuccess == true) Color(0xFF00E676) else Color(0xFFFF5252),
-                            fontSize = 12.sp,
-                            fontWeight = FontWeight.Medium
-                        )
-                    }
-
-                    if (state.saveMessage != null) {
-                        Spacer(modifier = Modifier.height(4.dp))
-                        Text(
-                            text = state.saveMessage!!,
-                            color = if (state.isSaved) Color(0xFF00E676) else Color(0xFFFF5252),
-                            fontSize = 12.sp
-                        )
                     }
                 }
             }
@@ -201,7 +231,6 @@ fun SettingsScreen(
                     Text("مركز الصلاحيات وحالة النظام 🛠️", fontWeight = FontWeight.Bold, fontSize = 16.sp)
                     Spacer(modifier = Modifier.height(10.dp))
 
-                    // Shizuku
                     Row(
                         modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
                         horizontalArrangement = Arrangement.SpaceBetween,
@@ -209,7 +238,7 @@ fun SettingsScreen(
                     ) {
                         Column {
                             Text("خدمة Shizuku (التحكم العميق)", fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
-                            Text(if (isShizukuActive) "متصل وجاهز للعمل ✅" else "غير متصل ⚠️ (تحتاج تشغيله)", fontSize = 11.sp, color = if (isShizukuActive) Color(0xFF00E676) else Color.Gray)
+                            Text(if (isShizukuActive) "متصل وجاهز للعمل ✅" else "غير متصل ⚠️", fontSize = 11.sp, color = if (isShizukuActive) Color(0xFF00E676) else Color.Gray)
                         }
                         Button(
                             onClick = {
@@ -225,7 +254,6 @@ fun SettingsScreen(
 
                     Divider(modifier = Modifier.padding(vertical = 6.dp))
 
-                    // Accessibility
                     Row(
                         modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
                         horizontalArrangement = Arrangement.SpaceBetween,
@@ -233,7 +261,7 @@ fun SettingsScreen(
                     ) {
                         Column {
                             Text("إمكانية الوصول (Accessibility)", fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
-                            Text(if (isAccessibilityActive) "مفعلة وتعمل ✅" else "معطلة ⚠️ (تحتاج تفعيل)", fontSize = 11.sp, color = if (isAccessibilityActive) Color(0xFF00E676) else Color.Gray)
+                            Text(if (isAccessibilityActive) "مفعلة وتعمل ✅" else "معطلة ⚠️", fontSize = 11.sp, color = if (isAccessibilityActive) Color(0xFF00E676) else Color.Gray)
                         }
                         Button(
                             onClick = {
@@ -248,7 +276,6 @@ fun SettingsScreen(
 
                     Divider(modifier = Modifier.padding(vertical = 6.dp))
 
-                    // Media Files
                     Row(
                         modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
                         horizontalArrangement = Arrangement.SpaceBetween,
