@@ -11,7 +11,6 @@ import android.os.BatteryManager
 import android.os.Build
 import android.os.Bundle
 import android.os.IBinder
-import android.os.PowerManager
 import android.speech.tts.TextToSpeech
 import android.speech.tts.UtteranceProgressListener
 import android.speech.tts.Voice
@@ -52,7 +51,8 @@ class EveBubbleService : Service() {
     private var hasAlertedLowBattery = false
 
     private var isHandlingAwake = false
-    private var isContinuousListening = false
+    private var pendingNotificationJob: Job? = null
+    private var currentNotifKey: String? = null
 
     override fun onBind(intent: Intent?): IBinder? = null
 
@@ -85,7 +85,6 @@ class EveBubbleService : Service() {
                 tts?.setPitch(1.08f)
                 tts?.setSpeechRate(0.95f)
 
-                // الاستماع التلقائي بعد انتهاء الرد الصوتي (الحوار المستمر)
                 tts?.setOnUtteranceProgressListener(object : UtteranceProgressListener() {
                     override fun onStart(utteranceId: String?) {}
                     override fun onDone(utteranceId: String?) {
@@ -116,9 +115,38 @@ class EveBubbleService : Service() {
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         when (intent?.action) {
             ACTION_TRIGGER_NOTIFICATION_PULSE -> EveState.addNotification()
+            ACTION_NEW_NOTIFICATION -> {
+                val speechText = intent.getStringExtra(EXTRA_SPEECH_TEXT) ?: ""
+                val notifKey = intent.getStringExtra(EXTRA_NOTIF_KEY)
+                handleNewNotification(speechText, notifKey)
+            }
+            ACTION_CANCEL_NOTIFICATION -> {
+                val notifKey = intent.getStringExtra(EXTRA_NOTIF_KEY)
+                handleCancelNotification(notifKey)
+            }
             ACTION_STOP_SERVICE -> stopSelf()
         }
         return START_STICKY
+    }
+
+    private fun handleNewNotification(speechText: String, notifKey: String?) {
+        currentNotifKey = notifKey
+        EveState.addNotification()
+
+        pendingNotificationJob?.cancel()
+        pendingNotificationJob = serviceScope.launch(Dispatchers.Main) {
+            delay(15000)
+            speakCleanText("سيدي، وصلك إشعار: $speechText", continueConversation = false)
+        }
+    }
+
+    private fun handleCancelNotification(notifKey: String?) {
+        if (notifKey == null || notifKey == currentNotifKey) {
+            pendingNotificationJob?.cancel()
+            pendingNotificationJob = null
+            currentNotifKey = null
+            EveState.clearNotifications()
+        }
     }
 
     @SuppressLint("ClickableViewAccessibility")
@@ -256,7 +284,7 @@ class EveBubbleService : Service() {
                         hasAlertedLowBattery = false
                         if (pct >= 85 && !hasAlertedFullCharge) {
                             hasAlertedFullCharge = true
-                            speakCleanText("سيدي، وصل الشحن إلى $pct بالمائة، يمكنك فصل الشاحن للحفاظ على سلامة البطارية.")
+                            speakCleanText("سيدي، وصل الشحن إلى $pct بالمائة، يمكنك فصل الشاحن لحماية البطارية.")
                         }
                     } else {
                         hasAlertedFullCharge = false
@@ -284,7 +312,6 @@ class EveBubbleService : Service() {
             },
             onError = {
                 isHandlingAwake = false
-                // عند الصمت أو انتهاء الحوار، تعود للسبات بسلام
                 EveState.setMood(EveMood.SLEEPING)
             }
         )
@@ -294,14 +321,12 @@ class EveBubbleService : Service() {
         serviceScope.launch(Dispatchers.Main) {
             val lower = text.lowercase().trim()
 
-            // 1. أوامر إنهاء الحوار والسبات
             if (lower.contains("نامي") || lower.contains("سبات") || lower.contains("تصبحين على خير") || lower.contains("يكفي") || lower.contains("اغلقي")) {
                 EveState.setMood(EveMood.SLEEPING)
                 speakCleanText("في وضع السبات سيدي، أنا هنا متى احتجتني.", continueConversation = false)
                 return@launch
             }
 
-            // 2. القاموس الموسع لاستعراض وعرض الوسائط
             val isShow = lower.contains("استعرض") || lower.contains("استعرضي") || lower.contains("اعرض") ||
                          lower.contains("اعرضي") || lower.contains("افتح") || lower.contains("افتحي") ||
                          lower.contains("وريني") || lower.contains("أرني") || lower.contains("ارني") ||
@@ -424,5 +449,9 @@ class EveBubbleService : Service() {
     companion object {
         const val ACTION_TRIGGER_NOTIFICATION_PULSE = "ACTION_TRIGGER_NOTIFICATION_PULSE"
         const val ACTION_STOP_SERVICE = "ACTION_STOP_SERVICE"
+        const val ACTION_NEW_NOTIFICATION = "ACTION_NEW_NOTIFICATION"
+        const val ACTION_CANCEL_NOTIFICATION = "ACTION_CANCEL_NOTIFICATION"
+        const val EXTRA_SPEECH_TEXT = "EXTRA_SPEECH_TEXT"
+        const val EXTRA_NOTIF_KEY = "EXTRA_NOTIF_KEY"
     }
 }
