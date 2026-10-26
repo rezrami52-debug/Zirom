@@ -27,7 +27,6 @@ import com.racha.ai.core.media.MediaItemData
 import com.racha.ai.core.overlay.OverlayLifecycleOwner
 import com.racha.ai.core.security.SecurePreferences
 import com.racha.ai.core.voice.VoiceInputHelper
-import com.racha.ai.core.voice.VoiceprintManager
 import com.racha.ai.data.api.GeminiService
 import kotlinx.coroutines.*
 import java.text.SimpleDateFormat
@@ -44,7 +43,6 @@ class EveBubbleService : Service() {
     private var tts: TextToSpeech? = null
     private val serviceScope = CoroutineScope(Dispatchers.Main + Job())
     private var voiceInputHelper: VoiceInputHelper? = null
-    private lateinit var voiceprintManager: VoiceprintManager
     private lateinit var intentHandler: IntentHandler
     private lateinit var securePreferences: SecurePreferences
 
@@ -67,7 +65,6 @@ class EveBubbleService : Service() {
         super.onCreate()
         windowManager = getSystemService(Context.WINDOW_SERVICE) as WindowManager
         voiceInputHelper = VoiceInputHelper(this)
-        voiceprintManager = VoiceprintManager(this)
         securePreferences = SecurePreferences(this)
         intentHandler = IntentHandler(this, AppResolver(this), ContactResolver(this))
         exoPlayer = ExoPlayer.Builder(this).build()
@@ -175,9 +172,11 @@ class EveBubbleService : Service() {
                 EveBubbleContent(
                     onToggleSleepWake = { isAwake ->
                         if (isAwake) {
-                            speakCleanText("نعم سيدي، في خدمتك")
+                            speakCleanText("نعم سيدي، أنا أستمع إليك")
+                            triggerDirectVoiceListening()
                         } else {
                             speakCleanText("في وضع السبات سيدي")
+                            stopListeningForWakeWord()
                         }
                     },
                     onOpenApp = { handleEveClick() },
@@ -246,21 +245,13 @@ class EveBubbleService : Service() {
         screenReceiver = object : BroadcastReceiver() {
             override fun onReceive(context: Context?, intent: Intent?) {
                 when (intent?.action) {
-                    Intent.ACTION_SCREEN_ON -> {
-                        checkAndTriggerMorningBriefing()
-                        startListeningForWakeWord()
-                    }
+                    Intent.ACTION_SCREEN_ON -> checkAndTriggerMorningBriefing()
                     Intent.ACTION_SCREEN_OFF -> stopListeningForWakeWord()
                 }
             }
         }
         val filter = IntentFilter(Intent.ACTION_SCREEN_ON).apply { addAction(Intent.ACTION_SCREEN_OFF) }
         registerReceiver(screenReceiver, filter)
-
-        val powerManager = getSystemService(Context.POWER_SERVICE) as PowerManager
-        if (powerManager.isInteractive) {
-            startListeningForWakeWord()
-        }
     }
 
     private fun checkAndTriggerMorningBriefing() {
@@ -268,7 +259,6 @@ class EveBubbleService : Service() {
         val hour = cal.get(Calendar.HOUR_OF_DAY)
         val todayStr = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(Date())
 
-        // يتم إلقاء التحية الصباحية مرة واحدة في اليوم بين 6 و 10 صباحاً
         if (hour in 6..10 && lastMorningBriefingDate != todayStr) {
             lastMorningBriefingDate = todayStr
             serviceScope.launch {
@@ -293,7 +283,7 @@ class EveBubbleService : Service() {
                         hasAlertedLowBattery = false
                         if (pct >= 85 && !hasAlertedFullCharge) {
                             hasAlertedFullCharge = true
-                            speakCleanText("سيدي، وصل الشحن إلى $pct بالمائة، يمكنك فصل الشاحن للحفاظ على سلامة البطارية.")
+                            speakCleanText("سيدي، وصل الشحن إلى $pct بالمائة، يمكنك فصل الشاحن لحماية البطارية.")
                         }
                     } else {
                         hasAlertedFullCharge = false
@@ -308,39 +298,32 @@ class EveBubbleService : Service() {
         registerReceiver(batteryReceiver, IntentFilter(Intent.ACTION_BATTERY_CHANGED))
     }
 
-    private fun isWakeWord(text: String): Boolean {
-        val l = text.lowercase()
-        return l.contains("eve") || l.contains("ايف") || l.contains("إيف") ||
-               l.contains("ايڤ") || l.contains("اف") || l.contains("racha") ||
-               l.contains("راشا") || l.contains("رشا") || l.contains("روشا") ||
-               l.contains("وينك") || l.contains("أين هاتفي") || l.contains("اين هاتفي")
-    }
-
-    private fun handleVoiceTrigger(text: String) {
+    /**
+     * استماع مباشر ونظيف عند لمس الفقاعة أو الأمر الصوتي دون أي حلقة مفرغة
+     */
+    fun triggerDirectVoiceListening() {
         if (isHandlingAwake) return
         isHandlingAwake = true
-        voiceInputHelper?.stopListening()
+        EveState.setMood(EveMood.AWAKE_SMILING)
 
-        serviceScope.launch(Dispatchers.Main) {
-            val currentPitch = withContext(Dispatchers.IO) {
-                voiceprintManager.captureCurrentSpeakerPitch()
-            }
-
-            if (!voiceprintManager.isOwnerVoice(currentPitch)) {
-                EveState.setMood(EveMood.SLEEPING)
+        voiceInputHelper?.startListening(
+            languageTag = "ar",
+            onResult = { text ->
                 isHandlingAwake = false
-                delay(1000)
-                startListeningForWakeWord()
-                return@launch
+                processSpokenText(text)
+            },
+            onError = {
+                isHandlingAwake = false
+                EveState.setMood(EveMood.SLEEPING)
             }
+        )
+    }
 
-            EveState.setMood(EveMood.AWAKE_SMILING)
-
+    private fun processSpokenText(text: String) {
+        serviceScope.launch(Dispatchers.Main) {
             val lower = text.lowercase()
-            if (lower.contains("سجلي صوتي") || lower.contains("احفظي بصمتي")) {
-                voiceprintManager.registerPitch(currentPitch)
-                speakCleanText("تم حفظ وتحديث بصمة صوتك بنجاح سيدي")
-            } else if (lower.contains("فيديو") || lower.contains("فيديوهات")) {
+
+            if (lower.contains("فيديو") || lower.contains("فيديوهات")) {
                 EveState.openShelf(MediaShelfType.VIDEOS)
                 speakCleanText("تفضل الفيديوهات سيدي")
             } else if (lower.contains("صور") || lower.contains("الصور")) {
@@ -349,8 +332,7 @@ class EveBubbleService : Service() {
             } else if (lower.contains("موسيقى") || lower.contains("اغاني")) {
                 EveState.openShelf(MediaShelfType.MUSIC)
                 speakCleanText("تفضل قائمة الموسيقى")
-            } else if (lower.contains("ماذا ترى") || lower.contains("شوفي الشاشة") || lower.contains("حللي الشاشة") || lower.contains("اقرأ الشاشة")) {
-                // ميزة الذكاء البصري التوليدي للشاشة عبر Gemini
+            } else if (lower.contains("ماذا ترى") || lower.contains("شوفي الشاشة") || lower.contains("حللي الشاشة")) {
                 handleScreenVisionQuery()
             } else {
                 val cleanCommand = text.replace(Regex("(?i)eve|racha|ايف|إيف|ايڤ|اف|راشا|رشا|روشا|يا "), "").trim()
@@ -361,7 +343,6 @@ class EveBubbleService : Service() {
                         is IntentHandler.HandlerResult.DirectReply -> speakCleanText(result.message)
                         is IntentHandler.HandlerResult.Error -> speakCleanText(result.message)
                         else -> {
-                            // الاستعانة بـ Gemini للإجابة عن الأسئلة العامة بدلاً من الرد الصامت
                             val apiKey = securePreferences.getApiKey()
                             if (!apiKey.isNullOrBlank()) {
                                 try {
@@ -381,10 +362,6 @@ class EveBubbleService : Service() {
                     speakCleanText("أنا معك سيدي، ماذا تطلب؟")
                 }
             }
-
-            delay(3000)
-            isHandlingAwake = false
-            startListeningForWakeWord()
         }
     }
 
@@ -407,50 +384,13 @@ class EveBubbleService : Service() {
             }
             speakCleanText(aiAnalysis)
         } catch (e: Exception) {
-            speakCleanText("أرى تطبيق ${snapshot.appName} سيدي، ولكن تعذر تحليل المحتوى بالذكاء الاصطناعي.")
-        }
-    }
-
-    private fun startListeningForWakeWord() {
-        if (isListeningWakeWord || isHandlingAwake) return
-        isListeningWakeWord = true
-
-        voiceInputHelper?.startListening(
-            languageTag = "ar",
-            onPartialResult = { partialText ->
-                if (isWakeWord(partialText)) {
-                    isListeningWakeWord = false
-                    handleVoiceTrigger(partialText)
-                }
-            },
-            onResult = { fullText ->
-                if (isWakeWord(fullText)) {
-                    isListeningWakeWord = false
-                    handleVoiceTrigger(fullText)
-                } else {
-                    isListeningWakeWord = false
-                    scheduleRestartListening(400)
-                }
-            },
-            onError = {
-                isListeningWakeWord = false
-                val pm = getSystemService(Context.POWER_SERVICE) as PowerManager
-                if (pm.isInteractive && !isHandlingAwake) {
-                    scheduleRestartListening(500)
-                }
-            }
-        )
-    }
-
-    private fun scheduleRestartListening(delayMs: Long) {
-        serviceScope.launch {
-            delay(delayMs)
-            startListeningForWakeWord()
+            speakCleanText("أرى تطبيق ${snapshot.appName} سيدي، ولكن تعذر تحليل المحتوى.")
         }
     }
 
     private fun stopListeningForWakeWord() {
         isListeningWakeWord = false
+        isHandlingAwake = false
         voiceInputHelper?.stopListening()
     }
 
@@ -461,11 +401,7 @@ class EveBubbleService : Service() {
     }
 
     private fun handleEveClick() {
-        EveState.setMood(EveMood.AWAKE_SMILING)
-        packageManager.getLaunchIntentForPackage(packageName)?.let { launchIntent ->
-            launchIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP)
-            startActivity(launchIntent)
-        }
+        triggerDirectVoiceListening()
     }
 
     private fun startForegroundServiceNotification() {
@@ -477,7 +413,7 @@ class EveBubbleService : Service() {
         }
         val notification: Notification = NotificationCompat.Builder(this, channelId)
             .setContentTitle("Racha AI (EVE)")
-            .setContentText("المساعد التكتيكي النشط - في الاستماع")
+            .setContentText("المساعد التكتيكي النشط")
             .setSmallIcon(android.R.drawable.ic_dialog_info)
             .setPriority(NotificationCompat.PRIORITY_MIN)
             .build()
