@@ -1,9 +1,14 @@
 package com.racha.ai.data.api
 
+import android.graphics.Bitmap
 import android.util.Log
 import com.google.ai.client.generativeai.GenerativeModel
+import com.google.ai.client.generativeai.type.Content
 import com.google.ai.client.generativeai.type.content
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.withContext
 import org.json.JSONArray
 import org.json.JSONObject
@@ -16,12 +21,11 @@ import java.net.URL
 class GeminiService(private val apiKey: String) {
 
     private val isGroq = apiKey.startsWith("gsk_")
-
     private val jarvisSystemInstruction = """
-        You are J.A.R.V.I.S. and E.V.E., a brilliant, witty, and highly helpful personal AI assistant.
+        You are J.A.R.V.I.S. and E.V.E., a brilliant, witty, and highly helpful personal AI assistant named Racha.
         Rules:
         1. Address the user with respect as 'سيدي' (Sir).
-        2. Keep your answers brief (1 to 2 sentences max) so it can be spoken via TTS smoothly.
+        2. Keep your answers brief, intelligent, and natural so it can be spoken via TTS smoothly.
         3. Speak in elegant, natural, and friendly Arabic.
     """.trimIndent()
 
@@ -33,6 +37,137 @@ class GeminiService(private val apiKey: String) {
         )
     }
 
+    /**
+     * بث الإجابة كلمة بكلمة (Streaming) مع تذكر سياق المحادثة
+     */
+    fun generateResponseStream(
+        prompt: String,
+        history: List<Pair<String, String>> = emptyList(),
+        image: Bitmap? = null
+    ): Flow<String> {
+        return if (isGroq) {
+            val fullList = history + Pair("user", prompt)
+            streamGroqApi(fullList, jarvisSystemInstruction)
+        } else {
+            streamGeminiApi(prompt, history, image)
+        }
+    }
+
+    private fun streamGeminiApi(
+        prompt: String,
+        history: List<Pair<String, String>>,
+        image: Bitmap? = null
+    ): Flow<String> = flow {
+        try {
+            // تنسيق سجل المحادثة بدقة لضمان عدم حدوث خطأ تعاقب الأدوار (alternating user/model)
+            val validHistory = mutableListOf<Content>()
+            var expectedRole = "user"
+            for ((role, text) in history) {
+                val r = if (role == "user") "user" else "model"
+                if (r == expectedRole && text.isNotBlank()) {
+                    validHistory.add(content(role = r) { text(text) })
+                    expectedRole = if (expectedRole == "user") "model" else "user"
+                }
+            }
+            if (validHistory.isNotEmpty() && validHistory.last().role != "model") {
+                validHistory.removeAt(validHistory.lastIndex)
+            }
+
+            val chat = generativeModel.startChat(validHistory)
+
+            if (image != null) {
+                val inputContent = content {
+                    image(image)
+                    text(prompt)
+                }
+                chat.sendMessageStream(inputContent).collect { chunk ->
+                    chunk.text?.let { emit(it) }
+                }
+            } else {
+                chat.sendMessageStream(prompt).collect { chunk ->
+                    chunk.text?.let { emit(it) }
+                }
+            }
+        } catch (e: Exception) {
+            Log.e("GeminiService", "Gemini Stream Error", e)
+            emit("\n[سيدي، حدث خطأ أثناء الاتصال بالمعالج: ${e.localizedMessage}]")
+        }
+    }.flowOn(Dispatchers.IO)
+
+    private fun streamGroqApi(
+        messagesList: List<Pair<String, String>>,
+        systemPrompt: String
+    ): Flow<String> = flow {
+        var conn: HttpURLConnection? = null
+        try {
+            val url = URL("https://api.groq.com/openai/v1/chat/completions")
+            conn = url.openConnection() as HttpURLConnection
+            conn.requestMethod = "POST"
+            conn.setRequestProperty("Authorization", "Bearer $apiKey")
+            conn.setRequestProperty("Content-Type", "application/json; charset=UTF-8")
+            conn.connectTimeout = 8000
+            conn.readTimeout = 20000
+            conn.doOutput = true
+
+            val requestJson = JSONObject().apply {
+                put("model", "llama-3.3-70b-versatile")
+                put("stream", true)
+                val messages = JSONArray().apply {
+                    put(JSONObject().apply {
+                        put("role", "system")
+                        put("content", systemPrompt)
+                    })
+                    for ((role, text) in messagesList) {
+                        put(JSONObject().apply {
+                            put("role", role)
+                            put("content", text)
+                        })
+                    }
+                }
+                put("messages", messages)
+                put("temperature", 0.7)
+                put("max_tokens", 800)
+            }
+
+            OutputStreamWriter(conn.outputStream, "UTF-8").use { os ->
+                os.write(requestJson.toString())
+                os.flush()
+            }
+
+            val responseCode = conn.responseCode
+            if (responseCode == HttpURLConnection.HTTP_OK) {
+                val reader = BufferedReader(InputStreamReader(conn.inputStream, "UTF-8"))
+                var line: String?
+                while (reader.readLine().also { line = it } != null) {
+                    val l = line?.trim() ?: continue
+                    if (l.startsWith("data: ")) {
+                        val data = l.substring(6).trim()
+                        if (data == "[DONE]") break
+                        try {
+                            val json = JSONObject(data)
+                            val choices = json.optJSONArray("choices")
+                            if (choices != null && choices.length() > 0) {
+                                val delta = choices.getJSONObject(0).optJSONObject("delta")
+                                val content = delta?.optString("content")
+                                if (!content.isNullOrEmpty()) {
+                                    emit(content)
+                                }
+                            }
+                        } catch (_: Exception) {}
+                    }
+                }
+            } else {
+                emit("سيدي، استجابة المعالج غير متوفرة حالياً.")
+            }
+        } catch (e: Exception) {
+            Log.e("GroqApi", "Connection Error", e)
+            emit("سيدي، تعذر الاتصال بمحرك الذكاء الاصطناعي.")
+        } finally {
+            conn?.disconnect()
+        }
+    }.flowOn(Dispatchers.IO)
+
+    // للتوافق مع بقية خدمات التطبيق (الأخبار وشاشة EVE)
     suspend fun generateResponse(prompt: String): String = withContext(Dispatchers.IO) {
         if (isGroq) {
             callGroqApi(prompt, jarvisSystemInstruction)
@@ -129,9 +264,6 @@ class GeminiService(private val apiKey: String) {
                     val message = choices.getJSONObject(0).getJSONObject("message")
                     return message.getString("content").trim()
                 }
-            } else {
-                val errorStream = conn.errorStream?.let { BufferedReader(InputStreamReader(it, "UTF-8")).readText() }
-                Log.e("GroqApi", "Error Code: $responseCode, Error: $errorStream")
             }
             "سيدي، استجابة المعالج غير متوفرة حالياً."
         } catch (e: Exception) {

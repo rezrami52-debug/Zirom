@@ -1,15 +1,20 @@
 package com.racha.ai.ui.screens.chat
 
 import android.Manifest
+import android.content.ClipData
+import android.content.ClipboardManager
+import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import android.os.Build
 import android.provider.Settings
+import android.speech.tts.TextToSpeech
+import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.BorderStroke
-import androidx.compose.foundation.background
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.isSystemInDarkTheme
@@ -47,6 +52,7 @@ import com.racha.ai.core.tools.PhotoCaptureActivity
 import com.racha.ai.core.voice.VoiceInputHelper
 import com.racha.ai.data.repository.NotificationRepository
 import kotlinx.coroutines.launch
+import java.util.Locale
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalPermissionsApi::class)
 @Composable
@@ -70,6 +76,21 @@ fun ChatScreen(
     var isListening by remember { mutableStateOf(false) }
     val voiceHelper = remember { VoiceInputHelper(context) }
 
+    // محرك تحويل النص إلى صوت (TTS)
+    var tts: TextToSpeech? by remember { mutableStateOf(null) }
+    DisposableEffect(Unit) {
+        val ttsInstance = TextToSpeech(context) { status ->
+            if (status == TextToSpeech.SUCCESS) {
+                tts?.language = Locale("ar")
+            }
+        }
+        tts = ttsInstance
+        onDispose {
+            ttsInstance.stop()
+            ttsInstance.shutdown()
+        }
+    }
+
     val themeManager = remember { AppThemeManager(context) }
     val themeState by themeManager.themeState.collectAsState()
 
@@ -83,15 +104,20 @@ fun ChatScreen(
     )
 
     val cameraLauncher = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
-        if (result.resultCode == android.app.Activity.RESULT_OK) viewModel.onSpecialToolCompleted(true, "📸 تم حفظ الصورة")
+        if (result.resultCode == android.app.Activity.RESULT_OK) viewModel.onSpecialToolCompleted(true, "📸 تم التقاط الصورة")
         else viewModel.onSpecialToolCancelled()
     }
 
     LaunchedEffect(state.pendingSpecialTool) {
         if (state.pendingSpecialTool == "open_camera") cameraLauncher.launch(Intent(context, PhotoCaptureActivity::class.java))
     }
-    LaunchedEffect(state.messages.size) {
-        if (state.messages.isNotEmpty()) listState.animateScrollToItem(state.messages.size - 1)
+
+    // التمرير التلقائي اللحظي مع كل حرف جديد يكتب في البث المباشر
+    val lastMessageText = state.messages.lastOrNull()?.text.orEmpty()
+    LaunchedEffect(state.messages.size, lastMessageText) {
+        if (state.messages.isNotEmpty()) {
+            listState.scrollToItem(state.messages.size - 1)
+        }
     }
 
     Column(
@@ -110,13 +136,13 @@ fun ChatScreen(
             onNewChat = { viewModel.startNewChat() }
         )
 
-        // 3. بطاقة الطقس ومواقيت الصلاة (تظهر بثبات دائماً)
+        // 3. بطاقة الطقس ومواقيت الصلاة
         val currentWeather = weatherState.weather
         if (currentWeather != null) {
             WeatherCardRacha(currentWeather, cardBackground, cardBorder, primaryGlow)
         }
 
-        // 4. منطقة الرسائل
+        // 4. منطقة الرسائل مع دعم النطق الصوتي والنسخ
         LazyColumn(
             state = listState,
             modifier = Modifier
@@ -126,7 +152,38 @@ fun ChatScreen(
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             items(state.messages) { msg ->
-                MessageBubbleRacha(msg, isDarkTheme, userBubbleColor, aiBubbleColor, primaryGlow)
+                MessageBubbleRacha(
+                    message = msg,
+                    isDark = isDarkTheme,
+                    userColor = userBubbleColor,
+                    aiColor = aiBubbleColor,
+                    glow = primaryGlow,
+                    onSpeak = { text ->
+                        tts?.speak(text, TextToSpeech.QUEUE_FLUSH, null, "RACHA_MSG")
+                    },
+                    onCopy = { text ->
+                        val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                        clipboard.setPrimaryClip(ClipData.newPlainText("Racha AI", text))
+                        Toast.makeText(context, "تم نسخ النص", Toast.LENGTH_SHORT).show()
+                    }
+                )
+            }
+
+            if (state.isLoading) {
+                item {
+                    Row(
+                        modifier = Modifier.padding(start = 8.dp, top = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(16.dp),
+                            strokeWidth = 2.dp,
+                            color = primaryGlow
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text("رشا تفكر...", color = Color.Gray, fontSize = 12.sp)
+                    }
+                }
             }
         }
 
@@ -151,7 +208,7 @@ fun ChatScreen(
             glow = primaryGlow
         )
 
-        // 6. الشريط السفلي العائم (يظهر دائماً بثبات)
+        // 6. الشريط السفلي العائم
         BottomNavRacha(
             glow = primaryGlow,
             unreadCount = unreadCount,
@@ -161,8 +218,6 @@ fun ChatScreen(
         )
     }
 }
-
-// ---------------- المكونات المحدثة ----------------
 
 @Composable
 fun TopBarRacha(
@@ -196,7 +251,7 @@ fun TopBarRacha(
                 ) {
                     Image(
                         painter = painterResource(id = R.drawable.ic_racha_avatar),
-                        contentDescription = "EVE Avatar",
+                        contentDescription = "Avatar",
                         modifier = Modifier.fillMaxSize().padding(3.dp),
                         contentScale = ContentScale.Crop
                     )
@@ -208,23 +263,12 @@ fun TopBarRacha(
                 }
             }
 
-            // أزرار التحكم بالمحادثات
             Row(verticalAlignment = Alignment.CenterVertically) {
-                // زر محادثة جديدة
-                IconButton(
-                    onClick = onNewChat,
-                    modifier = Modifier.size(36.dp)
-                ) {
+                IconButton(onClick = onNewChat, modifier = Modifier.size(36.dp)) {
                     Icon(Icons.Default.Add, contentDescription = "محادثة جديدة", tint = glow)
                 }
-
                 Spacer(modifier = Modifier.width(4.dp))
-
-                // زر سجل المحادثات السابقة
-                IconButton(
-                    onClick = onOpenHistory,
-                    modifier = Modifier.size(36.dp)
-                ) {
+                IconButton(onClick = onOpenHistory, modifier = Modifier.size(36.dp)) {
                     Icon(Icons.Default.History, contentDescription = "المحادثات السابقة", tint = Color.White)
                 }
             }
@@ -346,7 +390,9 @@ fun MessageBubbleRacha(
     isDark: Boolean,
     userColor: Color,
     aiColor: Color,
-    glow: Color
+    glow: Color,
+    onSpeak: (String) -> Unit = {},
+    onCopy: (String) -> Unit = {}
 ) {
     val isUser = message.isFromUser
     Row(
@@ -363,15 +409,39 @@ fun MessageBubbleRacha(
             color = if (isUser) userColor else Color(0xFF1E293B).copy(alpha = 0.92f),
             border = BorderStroke(1.dp, if (isUser) glow.copy(alpha = 0.5f) else Color.White.copy(alpha = 0.15f)),
             shadowElevation = 4.dp,
-            modifier = Modifier.widthIn(max = 280.dp)
+            modifier = Modifier.widthIn(max = 300.dp)
         ) {
-            Box(modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp)) {
+            Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp)) {
                 Text(
                     text = message.text,
                     color = Color.White,
                     fontSize = 15.sp,
                     lineHeight = 22.sp
                 )
+
+                // أزرار سريعة فقط لرسائل الذكاء الاصطناعي (نسخ + قراءة صوتية)
+                if (!isUser && message.text.isNotBlank()) {
+                    Spacer(modifier = Modifier.height(6.dp))
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.End,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        IconButton(
+                            onClick = { onCopy(message.text) },
+                            modifier = Modifier.size(26.dp)
+                        ) {
+                            Icon(Icons.Default.ContentCopy, contentDescription = "نسخ", tint = Color.LightGray, modifier = Modifier.size(15.dp))
+                        }
+                        Spacer(modifier = Modifier.width(6.dp))
+                        IconButton(
+                            onClick = { onSpeak(message.text) },
+                            modifier = Modifier.size(26.dp)
+                        ) {
+                            Icon(Icons.Default.VolumeUp, contentDescription = "استماع", tint = glow, modifier = Modifier.size(17.dp))
+                        }
+                    }
+                }
             }
         }
     }
@@ -502,8 +572,8 @@ fun NavItem(icon: androidx.compose.ui.graphics.vector.ImageVector, label: String
             .clickable { onClick() }
             .padding(horizontal = 14.dp, vertical = 4.dp)
     ) {
-        Icon(icon, contentDescription = label, tint = glow, modifier = Modifier.size(24.dp))
-        Spacer(modifier = Modifier.height(3.dp))
-        Text(label, fontSize = 11.sp, fontWeight = FontWeight.Medium, color = Color(0xFFE2E8F0))
+        Icon(icon, contentDescription = label, tint = glow, modifier = Modifier.size(22.dp))
+        Spacer(modifier = Modifier.height(2.dp))
+        Text(label, fontSize = 11.sp, color = Color.White.copy(alpha = 0.85f))
     }
 }

@@ -70,6 +70,23 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         _uiState.update { it.copy(messages = it.messages + message) }
     }
 
+    private fun updateLastMessage(newText: String) {
+        _uiState.update { state ->
+            if (state.messages.isEmpty()) return@update state
+            val updated = state.messages.toMutableList()
+            val last = updated.last()
+            updated[updated.lastIndex] = last.copy(text = newText)
+            state.copy(messages = updated)
+        }
+    }
+
+    private fun removeLastMessage() {
+        _uiState.update { state ->
+            if (state.messages.isEmpty()) return@update state
+            state.copy(messages = state.messages.dropLast(1))
+        }
+    }
+
     fun sendMessage() {
         val userText = _uiState.value.inputText
         _uiState.update { it.copy(inputText = "") }
@@ -114,19 +131,40 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         val apiKey = securePrefs.getApiKey()
         if (!apiKey.isNullOrBlank()) {
             try {
-                // 1. الأولوية المطلقة لذكاء Gemini في التحليل والإجابة
+                // تجميع سجل المحادثة السابق لتغذية ذاكرة الذكاء الاصطناعي
+                val history = _uiState.value.messages.dropLast(1).map { msg ->
+                    Pair(if (msg.isFromUser) "user" else "model", msg.text)
+                }
+
                 val geminiService = GeminiService(apiKey)
-                val response = geminiService.generateResponse(query)
-                appendMessage(ChatMessage(text = response, isFromUser = false))
+                
+                // إضافة رسالة فارغة للمساعد للبدء في ملئها بالبث المباشر
+                appendMessage(ChatMessage(text = "", isFromUser = false))
                 _uiState.update { it.copy(isLoading = false) }
-                return
+
+                val fullResponse = StringBuilder()
+                var receivedAnyChunk = false
+
+                geminiService.generateResponseStream(query, history).collect { chunk ->
+                    receivedAnyChunk = true
+                    fullResponse.append(chunk)
+                    updateLastMessage(fullResponse.toString())
+                }
+
+                if (receivedAnyChunk && fullResponse.isNotBlank()) {
+                    return
+                } else {
+                    removeLastMessage()
+                }
             } catch (e: Exception) {
                 e.printStackTrace()
+                removeLastMessage()
             }
         }
 
-        // 2. البحث على الويب كخيار بديل فقط إذا تعذر Gemini
+        // البحث على الويب كخيار بديل إذا لم يتوفر مفتاح API أو فشل الاتصال
         try {
+            _uiState.update { it.copy(isLoading = true) }
             val webResponse = WebSearchEngine.searchWeb(query)
             appendMessage(ChatMessage(text = webResponse, isFromUser = false))
         } catch (e: Exception) {
