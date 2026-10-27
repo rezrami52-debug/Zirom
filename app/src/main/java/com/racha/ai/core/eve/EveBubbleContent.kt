@@ -1,6 +1,9 @@
 package com.racha.ai.core.eve
 
+import android.graphics.Bitmap
 import android.graphics.BitmapFactory
+import android.os.Build
+import android.util.Size
 import android.widget.VideoView
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.*
@@ -28,7 +31,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.geometry.Size as GeometrySize
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
@@ -75,13 +78,13 @@ fun EveBubbleContent(
     val context = LocalContext.current
     val mediaManager = remember { LocalMediaManager(context) }
 
-    // حالة الميديا المعروضة وحجم الشاشة
+    // مستوى الزوم للشاشة (0: عادي 265dp، 1: متوسط 305dp، 2: كبير 345dp، 3: مسرحي 380dp)
+    var zoomLevel by remember { mutableIntStateOf(0) }
     var activePreviewItem by remember { mutableStateOf<MediaItemData?>(null) }
-    var isVideoFullscreen by remember { mutableStateOf(false) }
 
     LaunchedEffect(shelfType) {
         activePreviewItem = null
-        isVideoFullscreen = false
+        zoomLevel = 0
     }
 
     val items by produceState<List<MediaItemData>>(initialValue = emptyList(), shelfType) {
@@ -153,7 +156,7 @@ fun EveBubbleContent(
         verticalAlignment = Alignment.Top,
         horizontalArrangement = Arrangement.Start
     ) {
-        // --- 1. جسد EVE وإيماءات اللمس الموحدة ---
+        // --- 1. جسد EVE وإيماءات اللمس ---
         Column(
             horizontalAlignment = Alignment.CenterHorizontally,
             modifier = modifier
@@ -215,21 +218,21 @@ fun EveBubbleContent(
                     drawRoundRect(
                         color = Color(0x33000000),
                         topLeft = Offset(w * 0.08f, h * 0.05f),
-                        size = Size(w * 0.84f, h * 0.90f),
+                        size = GeometrySize(w * 0.84f, h * 0.90f),
                         cornerRadius = CornerRadius(w * 0.42f, h * 0.45f)
                     )
 
                     drawRoundRect(
                         brush = bodyBrush,
                         topLeft = Offset(w * 0.07f, h * 0.03f),
-                        size = Size(w * 0.86f, h * 0.92f),
+                        size = GeometrySize(w * 0.86f, h * 0.92f),
                         cornerRadius = CornerRadius(w * 0.43f, h * 0.46f)
                     )
 
                     drawRoundRect(
                         color = if (isNotifying) Color(0xFFFF1744) else Color(0xFFC7D3E0),
                         topLeft = Offset(w * 0.07f, h * 0.03f),
-                        size = Size(w * 0.86f, h * 0.92f),
+                        size = GeometrySize(w * 0.86f, h * 0.92f),
                         cornerRadius = CornerRadius(w * 0.43f, h * 0.46f),
                         style = Stroke(width = if (isNotifying) 2.5f else 1.5f)
                     )
@@ -244,7 +247,7 @@ fun EveBubbleContent(
                             listOf(Color(0xFF151922), Color(0xFF090B0E), Color(0xFF020305))
                         ),
                         topLeft = Offset(visorLeft, visorTop),
-                        size = Size(visorWidth, visorHeight),
+                        size = GeometrySize(visorWidth, visorHeight),
                         cornerRadius = CornerRadius(visorWidth * 0.42f, visorHeight * 0.50f)
                     )
 
@@ -270,13 +273,13 @@ fun EveBubbleContent(
                         drawRoundRect(
                             brush = Brush.radialGradient(listOf(Color(0xFFE0FFFF), eyeGlowColor, Color(0xFF0091EA)), center = Offset(leftEyeX, eyeCenterY), radius = eyeWidth * eyeGlow),
                             topLeft = Offset(leftEyeX - eyeWidth / 2f, eyeCenterY - eyeHeight / 2f),
-                            size = Size(eyeWidth, eyeHeight),
+                            size = GeometrySize(eyeWidth, eyeHeight),
                             cornerRadius = CornerRadius(eyeWidth * 0.45f, eyeHeight * 0.45f)
                         )
                         drawRoundRect(
                             brush = Brush.radialGradient(listOf(Color(0xFFE0FFFF), eyeGlowColor, Color(0xFF0091EA)), center = Offset(rightEyeX, eyeCenterY), radius = eyeWidth * eyeGlow),
                             topLeft = Offset(rightEyeX - eyeWidth / 2f, eyeCenterY - eyeHeight / 2f),
-                            size = Size(eyeWidth, eyeHeight),
+                            size = GeometrySize(eyeWidth, eyeHeight),
                             cornerRadius = CornerRadius(eyeWidth * 0.45f, eyeHeight * 0.45f)
                         )
                     }
@@ -344,14 +347,32 @@ fun EveBubbleContent(
             }
         }
 
-        // --- 2. نافذة الوسائط ومشغل الفيديو المدمج في الأسفل ---
+        // --- 2. نافذة الوسائط والمشغل السينمائي المطوّر ---
         AnimatedVisibility(
             visible = shelfType != MediaShelfType.NONE,
             enter = fadeIn(),
             exit = fadeOut()
         ) {
-            val windowWidth = if (isVideoFullscreen) 330.dp else 265.dp
-            val windowHeight = if (isVideoFullscreen) 440.dp else 330.dp
+            // أبعاد النافذة حسب مستوى التكبير المختار (0 إلى 3)
+            val windowWidth = when (zoomLevel) {
+                1 -> 305.dp
+                2 -> 345.dp
+                3 -> 380.dp
+                else -> 265.dp
+            }
+            val windowHeight = when (zoomLevel) {
+                1 -> 400.dp
+                2 -> 480.dp
+                3 -> 560.dp
+                else -> 330.dp
+            }
+
+            val zoomLabel = when (zoomLevel) {
+                1 -> "2x"
+                2 -> "3x"
+                3 -> "4x 🎬"
+                else -> "1x"
+            }
 
             Surface(
                 modifier = Modifier
@@ -364,14 +385,14 @@ fun EveBubbleContent(
                 shadowElevation = 16.dp
             ) {
                 Column(modifier = Modifier.padding(8.dp)) {
-                    // الشريط العلوي للنافذة
+                    // شريط العنوان وأزرار التحجيم
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Text(
-                            text = if (activePreviewItem != null) "🎬 المشغل السينمائي" else when (shelfType) {
+                            text = if (activePreviewItem != null) "🎬 المشغل ($zoomLabel)" else when (shelfType) {
                                 MediaShelfType.MUSIC -> "الموسيقى (${items.size}) 🎶"
                                 MediaShelfType.VIDEOS -> "الفيديوهات (${items.size}) 📽️"
                                 MediaShelfType.PHOTOS -> "الصور (${items.size}) 🖼️"
@@ -383,24 +404,24 @@ fun EveBubbleContent(
                         )
 
                         Row(verticalAlignment = Alignment.CenterVertically) {
-                            if (activePreviewItem != null) {
-                                // زر تكبير وتصغير الشاشة
-                                IconButton(
-                                    onClick = { isVideoFullscreen = !isVideoFullscreen },
-                                    modifier = Modifier.size(26.dp)
-                                ) {
-                                    Icon(
-                                        imageVector = if (isVideoFullscreen) Icons.Default.FullscreenExit else Icons.Default.Fullscreen,
-                                        contentDescription = "تحجيم",
-                                        tint = Color(0xFF00E5FF),
-                                        modifier = Modifier.size(18.dp)
-                                    )
-                                }
+                            // زر التبديل بين مستويات الزوم الأربعة (1x -> 2x -> 3x -> 4x -> 1x)
+                            IconButton(
+                                onClick = { zoomLevel = (zoomLevel + 1) % 4 },
+                                modifier = Modifier.size(26.dp)
+                            ) {
+                                Icon(
+                                    imageVector = if (zoomLevel > 0) Icons.Default.FullscreenExit else Icons.Default.Fullscreen,
+                                    contentDescription = "تحجيم الشاشة",
+                                    tint = Color(0xFF00E5FF),
+                                    modifier = Modifier.size(18.dp)
+                                )
+                            }
 
+                            if (activePreviewItem != null) {
                                 TextButton(
                                     onClick = {
                                         activePreviewItem = null
-                                        isVideoFullscreen = false
+                                        zoomLevel = 0
                                     },
                                     contentPadding = PaddingValues(horizontal = 6.dp, vertical = 2.dp)
                                 ) {
@@ -416,15 +437,24 @@ fun EveBubbleContent(
 
                     Divider(color = Color.White.copy(alpha = 0.15f), thickness = 1.dp, modifier = Modifier.padding(vertical = 4.dp))
 
-                    // شاشة العرض المباشرة داخل نافذة EVE
+                    // 1. شاشة المشغل المباشر
                     if (activePreviewItem != null) {
                         val currentItem = activePreviewItem!!
+                        val currentIndex = items.indexOfFirst { it.id == currentItem.id }
 
                         if (currentItem.type == "VIDEO") {
                             var videoViewRef by remember { mutableStateOf<VideoView?>(null) }
                             var isPlaying by remember { mutableStateOf(true) }
                             var currentPosition by remember { mutableIntStateOf(0) }
                             var totalDuration by remember { mutableIntStateOf(1) }
+
+                            // تحديث الفيديو عند الانتقال للتالي أو السابق
+                            LaunchedEffect(currentItem.uri) {
+                                currentPosition = 0
+                                isPlaying = true
+                                videoViewRef?.setVideoURI(currentItem.uri)
+                                videoViewRef?.start()
+                            }
 
                             LaunchedEffect(isPlaying) {
                                 while (isPlaying) {
@@ -434,12 +464,11 @@ fun EveBubbleContent(
                                             totalDuration = vv.duration.coerceAtLeast(1)
                                         }
                                     }
-                                    delay(500)
+                                    delay(400)
                                 }
                             }
 
                             Column(modifier = Modifier.weight(1f).fillMaxWidth()) {
-                                // شاشة الفيديو
                                 Box(
                                     modifier = Modifier
                                         .weight(1f)
@@ -460,13 +489,16 @@ fun EveBubbleContent(
                                                 videoViewRef = this
                                             }
                                         },
+                                        update = { vv ->
+                                            videoViewRef = vv
+                                        },
                                         modifier = Modifier.fillMaxSize()
                                     )
                                 }
 
                                 Spacer(modifier = Modifier.height(6.dp))
 
-                                // شريط التحكم المدمج والجميل في الأسفل
+                                // شريط التحكم السينمائي مع أزرار التالي والسابق
                                 Surface(
                                     shape = RoundedCornerShape(12.dp),
                                     color = Color(0xFF0F172A).copy(alpha = 0.95f),
@@ -474,7 +506,6 @@ fun EveBubbleContent(
                                     modifier = Modifier.fillMaxWidth()
                                 ) {
                                     Column(modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)) {
-                                        // شريط التمرير الزمني
                                         Row(
                                             modifier = Modifier.fillMaxWidth(),
                                             verticalAlignment = Alignment.CenterVertically
@@ -492,12 +523,30 @@ fun EveBubbleContent(
                                             Text(formatMillis(totalDuration), color = Color.Gray, fontSize = 9.sp)
                                         }
 
-                                        // أزرار التحكم
                                         Row(
                                             modifier = Modifier.fillMaxWidth(),
-                                            horizontalArrangement = Arrangement.Center,
+                                            horizontalArrangement = Arrangement.SpaceEvenly,
                                             verticalAlignment = Alignment.CenterVertically
                                         ) {
+                                            // 1. الفيديو السابق
+                                            IconButton(
+                                                onClick = {
+                                                    if (currentIndex > 0) {
+                                                        activePreviewItem = items[currentIndex - 1]
+                                                    }
+                                                },
+                                                enabled = currentIndex > 0,
+                                                modifier = Modifier.size(28.dp)
+                                            ) {
+                                                Icon(
+                                                    Icons.Default.SkipPrevious,
+                                                    contentDescription = "السابق",
+                                                    tint = if (currentIndex > 0) Color(0xFF00E5FF) else Color.DarkGray,
+                                                    modifier = Modifier.size(18.dp)
+                                                )
+                                            }
+
+                                            // 2. ترجيع 10 ثوانٍ
                                             IconButton(
                                                 onClick = {
                                                     videoViewRef?.let { vv ->
@@ -506,13 +555,12 @@ fun EveBubbleContent(
                                                         currentPosition = target
                                                     }
                                                 },
-                                                modifier = Modifier.size(28.dp)
+                                                modifier = Modifier.size(26.dp)
                                             ) {
                                                 Icon(Icons.Default.FastRewind, contentDescription = "ترجيع 10ث", tint = Color.White, modifier = Modifier.size(16.dp))
                                             }
 
-                                            Spacer(modifier = Modifier.width(16.dp))
-
+                                            // 3. تشغيل / إيقاف
                                             IconButton(
                                                 onClick = {
                                                     videoViewRef?.let { vv ->
@@ -535,8 +583,7 @@ fun EveBubbleContent(
                                                 )
                                             }
 
-                                            Spacer(modifier = Modifier.width(16.dp))
-
+                                            // 4. تقديم 10 ثوانٍ
                                             IconButton(
                                                 onClick = {
                                                     videoViewRef?.let { vv ->
@@ -545,9 +592,27 @@ fun EveBubbleContent(
                                                         currentPosition = target
                                                     }
                                                 },
-                                                modifier = Modifier.size(28.dp)
+                                                modifier = Modifier.size(26.dp)
                                             ) {
                                                 Icon(Icons.Default.FastForward, contentDescription = "تقديم 10ث", tint = Color.White, modifier = Modifier.size(16.dp))
+                                            }
+
+                                            // 5. الفيديو التالي
+                                            IconButton(
+                                                onClick = {
+                                                    if (currentIndex != -1 && currentIndex < items.lastIndex) {
+                                                        activePreviewItem = items[currentIndex + 1]
+                                                    }
+                                                },
+                                                enabled = currentIndex != -1 && currentIndex < items.lastIndex,
+                                                modifier = Modifier.size(28.dp)
+                                            ) {
+                                                Icon(
+                                                    Icons.Default.SkipNext,
+                                                    contentDescription = "التالي",
+                                                    tint = if (currentIndex != -1 && currentIndex < items.lastIndex) Color(0xFF00E5FF) else Color.DarkGray,
+                                                    modifier = Modifier.size(18.dp)
+                                                )
                                             }
                                         }
                                     }
@@ -574,7 +639,7 @@ fun EveBubbleContent(
                             }
                         }
                     } else {
-                        // قائمة الملفات العادية
+                        // 2. قائمة الاستعراض مع البوسترات الحية والصور المصغرة
                         if (items.isEmpty()) {
                             Box(modifier = Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
                                 Text("لا توجد ملفات أو جاري الفحص...", color = Color.Gray, fontSize = 11.sp)
@@ -597,20 +662,19 @@ fun EveBubbleContent(
                                                 }
                                             }
                                             .background(Color.White.copy(alpha = 0.05f))
-                                            .padding(vertical = 7.dp, horizontal = 8.dp),
+                                            .padding(vertical = 5.dp, horizontal = 6.dp),
                                         verticalAlignment = Alignment.CenterVertically
                                     ) {
-                                        Icon(
-                                            imageVector = when (item.type) {
-                                                "AUDIO" -> Icons.Default.MusicNote
-                                                "VIDEO" -> Icons.Default.PlayCircle
-                                                else -> Icons.Default.Image
-                                            },
-                                            contentDescription = null,
-                                            tint = Color(0xFF00E5FF),
-                                            modifier = Modifier.size(18.dp)
+                                        // البوستر الحقيقي المصغر للفيديو أو الصورة بدلاً من الأيقونة الزرقاء!
+                                        MediaItemThumbnail(
+                                            item = item,
+                                            modifier = Modifier
+                                                .size(width = 46.dp, height = 34.dp)
+                                                .clip(RoundedCornerShape(6.dp))
                                         )
+
                                         Spacer(modifier = Modifier.width(8.dp))
+
                                         Text(
                                             text = item.title,
                                             color = Color.White,
@@ -627,6 +691,53 @@ fun EveBubbleContent(
                     }
                 }
             }
+        }
+    }
+}
+
+/**
+ * مكون استخراج الصورة المصغرة الحية للفيديو أو الصورة من ذاكرة أندرويد
+ */
+@Composable
+private fun MediaItemThumbnail(item: MediaItemData, modifier: Modifier = Modifier) {
+    val context = LocalContext.current
+    val bitmap by produceState<Bitmap?>(initialValue = null, item.uri) {
+        value = withContext(Dispatchers.IO) {
+            try {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                    context.contentResolver.loadThumbnail(item.uri, Size(120, 120), null)
+                } else {
+                    context.contentResolver.openInputStream(item.uri)?.use { stream ->
+                        val options = BitmapFactory.Options().apply { inSampleSize = 4 }
+                        BitmapFactory.decodeStream(stream, null, options)
+                    }
+                }
+            } catch (_: Exception) { null }
+        }
+    }
+
+    if (bitmap != null) {
+        Image(
+            bitmap = bitmap!!.asImageBitmap(),
+            contentDescription = null,
+            contentScale = ContentScale.Crop,
+            modifier = modifier
+        )
+    } else {
+        Box(
+            modifier = modifier.background(Color(0xFF1E293B)),
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(
+                imageVector = when (item.type) {
+                    "VIDEO" -> Icons.Default.PlayCircle
+                    "AUDIO" -> Icons.Default.MusicNote
+                    else -> Icons.Default.Image
+                },
+                contentDescription = null,
+                tint = Color(0xFF00E5FF),
+                modifier = Modifier.size(20.dp)
+            )
         }
     }
 }
