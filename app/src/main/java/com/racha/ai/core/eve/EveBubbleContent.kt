@@ -1,11 +1,15 @@
 package com.racha.ai.core.eve
 
+import android.graphics.BitmapFactory
+import android.widget.MediaController
+import android.widget.VideoView
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.*
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -14,7 +18,6 @@ import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
@@ -30,14 +33,17 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.viewinterop.AndroidView
 import com.racha.ai.core.media.LocalMediaManager
 import com.racha.ai.core.media.MediaItemData
 import kotlinx.coroutines.Dispatchers
@@ -61,13 +67,19 @@ fun EveBubbleContent(
     val eveUiState by EveState.uiState.collectAsState()
     val isSleeping = eveUiState.mood == EveMood.SLEEPING
     val isNotifying = eveUiState.mood == EveMood.NOTIFICATION_ALERT
-    val isAwake = eveUiState.mood == EveMood.AWAKE_SMILING
     val playback = eveUiState.playback
     val hasActiveMedia = playback.title.isNotBlank()
     val shelfType = eveUiState.shelfType
 
     val context = LocalContext.current
     val mediaManager = remember { LocalMediaManager(context) }
+
+    // المعاينة المباشرة للميديا داخل النافذة (فيديو أو صورة)
+    var activePreviewItem by remember { mutableStateOf<MediaItemData?>(null) }
+
+    LaunchedEffect(shelfType) {
+        activePreviewItem = null
+    }
 
     val items by produceState<List<MediaItemData>>(initialValue = emptyList(), shelfType) {
         if (shelfType != MediaShelfType.NONE) {
@@ -94,17 +106,6 @@ fun EveBubbleContent(
             repeatMode = RepeatMode.Reverse
         ),
         label = "hoverY"
-    )
-
-    // نبض الهالة التكتيكية
-    val pulseGlow by infiniteTransition.animateFloat(
-        initialValue = 0.6f,
-        targetValue = 1.25f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(900, easing = LinearEasing),
-            repeatMode = RepeatMode.Reverse
-        ),
-        label = "pulseGlow"
     )
 
     val eyeGlow by infiniteTransition.animateFloat(
@@ -145,10 +146,6 @@ fun EveBubbleContent(
         label = "eyeScale"
     )
 
-    var totalDragY by remember { mutableFloatStateOf(0f) }
-    var totalDragX by remember { mutableFloatStateOf(0f) }
-    val dismissThreshold = 220f
-
     Row(
         verticalAlignment = Alignment.Top,
         horizontalArrangement = Arrangement.Start
@@ -159,23 +156,10 @@ fun EveBubbleContent(
                 .offset { IntOffset(0, hoverY.roundToInt()) }
                 .pointerInput(Unit) {
                     detectDragGestures(
-                        onDragStart = { totalDragY = 0f; totalDragX = 0f },
-                        onDragEnd = {
-                            if (totalDragY > dismissThreshold && totalDragY > kotlin.math.abs(totalDragX) * 1.2f) {
-                                onDismiss()
-                            } else {
-                                onDragEnd()
-                            }
-                            totalDragY = 0f; totalDragX = 0f
-                        },
-                        onDragCancel = {
-                            onDragEnd()
-                            totalDragY = 0f; totalDragX = 0f
-                        },
+                        onDragEnd = { onDragEnd() },
+                        onDragCancel = { onDragEnd() },
                         onDrag = { change, dragAmount ->
                             change.consume()
-                            totalDragY += dragAmount.y
-                            totalDragX += dragAmount.x
                             onDrag(dragAmount.x, dragAmount.y)
                         }
                     )
@@ -188,33 +172,16 @@ fun EveBubbleContent(
                         },
                         onDoubleTap = { onOpenApp() },
                         onLongPress = {
-                            EveState.setMood(EveMood.SLEEPING)
-                            onToggleSleepWake(false)
+                            // ضغطة مطولة لإغلاق المساعد نهائياً
+                            onDismiss()
                         }
                     )
                 }
         ) {
             Box(
-                modifier = Modifier.size(width = 86.dp, height = 110.dp),
+                modifier = Modifier.size(width = 80.dp, height = 105.dp),
                 contentAlignment = Alignment.Center
             ) {
-                // هالة ضوئية دائرية تنبض حول EVE عند اليقظة أو الإشعارات
-                if (isAwake || isNotifying) {
-                    Box(
-                        modifier = Modifier
-                            .size(80.dp)
-                            .clip(CircleShape)
-                            .background(
-                                Brush.radialGradient(
-                                    listOf(
-                                        (if (isNotifying) Color(0xFFFF1744) else Color(0xFF00E5FF)).copy(alpha = 0.25f * pulseGlow),
-                                        Color.Transparent
-                                    )
-                                )
-                            )
-                    )
-                }
-
                 Canvas(modifier = Modifier.fillMaxSize()) {
                     val w = size.width
                     val h = size.height
@@ -238,11 +205,11 @@ fun EveBubbleContent(
                     )
 
                     drawRoundRect(
-                        color = if (isNotifying) Color(0xFFFF1744) else Color(0xFF00E5FF).copy(alpha = 0.5f),
+                        color = if (isNotifying) Color(0xFFFF1744) else Color(0xFFC7D3E0),
                         topLeft = Offset(w * 0.07f, h * 0.03f),
                         size = Size(w * 0.86f, h * 0.92f),
                         cornerRadius = CornerRadius(w * 0.43f, h * 0.46f),
-                        style = Stroke(width = if (isNotifying || isAwake) 2.2f else 1.2f)
+                        style = Stroke(width = if (isNotifying) 2.5f else 1.5f)
                     )
 
                     val visorWidth = w * 0.64f
@@ -297,12 +264,12 @@ fun EveBubbleContent(
                     Box(
                         modifier = Modifier
                             .align(Alignment.BottomCenter)
-                            .padding(bottom = 12.dp)
-                            .width(66.dp)
-                            .height(18.dp)
+                            .padding(bottom = 14.dp)
+                            .width(62.dp)
+                            .height(16.dp)
                             .clip(RoundedCornerShape(8.dp))
-                            .background(Color(0xFF080D1A).copy(alpha = 0.92f))
-                            .border(1.dp, Color(0xFF00E5FF).copy(alpha = 0.7f), RoundedCornerShape(8.dp)),
+                            .background(Color(0xFF080D1A).copy(alpha = 0.9f))
+                            .border(1.dp, Color(0xFF00E5FF).copy(alpha = 0.6f), RoundedCornerShape(8.dp)),
                         contentAlignment = Alignment.Center
                     ) {
                         Text(
@@ -355,6 +322,7 @@ fun EveBubbleContent(
             }
         }
 
+        // --- نافذة الوسائط المنبثقة ومشغل الفيديو/الصور المدمج ---
         AnimatedVisibility(
             visible = shelfType != MediaShelfType.NONE,
             enter = fadeIn(),
@@ -363,80 +331,166 @@ fun EveBubbleContent(
             Surface(
                 modifier = Modifier
                     .padding(start = 10.dp)
-                    .width(230.dp)
-                    .height(300.dp),
+                    .width(260.dp)
+                    .height(340.dp),
                 shape = RoundedCornerShape(16.dp),
-                color = Color(0xFF080D1A).copy(alpha = 0.95f),
+                color = Color(0xFF080D1A).copy(alpha = 0.98f),
                 border = BorderStroke(1.5.dp, Color(0xFF00E5FF).copy(alpha = 0.7f)),
-                shadowElevation = 12.dp
+                shadowElevation = 14.dp
             ) {
-                Column(modifier = Modifier.padding(8.dp)) {
+                Column(modifier = Modifier.padding(10.dp)) {
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Text(
-                            text = when (shelfType) {
+                            text = if (activePreviewItem != null) "🎬 مشغل الوسائط" else when (shelfType) {
                                 MediaShelfType.MUSIC -> "الموسيقى (${items.size}) 🎶"
                                 MediaShelfType.VIDEOS -> "الفيديوهات (${items.size}) 📽️"
                                 MediaShelfType.PHOTOS -> "الصور (${items.size}) 🖼️"
                                 else -> ""
                             },
                             color = Color(0xFF00E5FF),
-                            fontSize = 11.sp,
+                            fontSize = 12.sp,
                             fontWeight = FontWeight.Bold
                         )
 
-                        IconButton(onClick = { EveState.closeShelf() }, modifier = Modifier.size(22.dp)) {
-                            Icon(Icons.Default.Close, contentDescription = "إغلاق", tint = Color.Gray, modifier = Modifier.size(14.dp))
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            if (activePreviewItem != null) {
+                                TextButton(
+                                    onClick = { activePreviewItem = null },
+                                    contentPadding = PaddingValues(horizontal = 6.dp, vertical = 2.dp)
+                                ) {
+                                    Text("رجوع ↩️", color = Color.White, fontSize = 11.sp)
+                                }
+                            }
+                            IconButton(onClick = { EveState.closeShelf() }, modifier = Modifier.size(22.dp)) {
+                                Icon(Icons.Default.Close, contentDescription = "إغلاق", tint = Color.Gray, modifier = Modifier.size(14.dp))
+                            }
                         }
                     }
 
                     Divider(color = Color.White.copy(alpha = 0.15f), thickness = 1.dp, modifier = Modifier.padding(vertical = 4.dp))
 
-                    if (items.isEmpty()) {
-                        Box(
+                    // 1. شاشة المشغل المباشر داخل نافذة EVE
+                    if (activePreviewItem != null) {
+                        val currentItem = activePreviewItem!!
+                        Column(
                             modifier = Modifier.weight(1f).fillMaxWidth(),
-                            contentAlignment = Alignment.Center
+                            horizontalAlignment = Alignment.CenterHorizontally
                         ) {
-                            Text("لا توجد ملفات أو جاري التحميل...", color = Color.Gray, fontSize = 10.sp)
+                            Text(
+                                text = currentItem.title,
+                                color = Color.White,
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Bold,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                                modifier = Modifier.padding(bottom = 6.dp)
+                            )
+
+                            if (currentItem.type == "VIDEO") {
+                                Box(
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .fillMaxWidth()
+                                        .clip(RoundedCornerShape(10.dp))
+                                        .background(Color.Black)
+                                ) {
+                                    AndroidView(
+                                        factory = { ctx ->
+                                            VideoView(ctx).apply {
+                                                setVideoURI(currentItem.uri)
+                                                val mc = MediaController(ctx)
+                                                mc.setAnchorView(this)
+                                                setMediaController(mc)
+                                                setOnPreparedListener { mp ->
+                                                    mp.isLooping = true
+                                                    start()
+                                                }
+                                            }
+                                        },
+                                        modifier = Modifier.fillMaxSize()
+                                    )
+                                }
+                            } else if (currentItem.type == "PHOTO") {
+                                val bmp = remember(currentItem) {
+                                    try {
+                                        context.contentResolver.openInputStream(currentItem.uri)?.use { stream ->
+                                            BitmapFactory.decodeStream(stream)?.asImageBitmap()
+                                        }
+                                    } catch (_: Exception) { null }
+                                }
+                                if (bmp != null) {
+                                    Image(
+                                        bitmap = bmp,
+                                        contentDescription = null,
+                                        modifier = Modifier
+                                            .weight(1f)
+                                            .fillMaxWidth()
+                                            .clip(RoundedCornerShape(10.dp)),
+                                        contentScale = ContentScale.Fit
+                                    )
+                                } else {
+                                    Box(modifier = Modifier.weight(1f), contentAlignment = Alignment.Center) {
+                                        Text("تعذر فتح الصورة", color = Color.Gray, fontSize = 11.sp)
+                                    }
+                                }
+                            }
                         }
                     } else {
-                        LazyColumn(
-                            modifier = Modifier.weight(1f).fillMaxWidth(),
-                            verticalArrangement = Arrangement.spacedBy(4.dp)
-                        ) {
-                            items(items) { item ->
-                                Row(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .clip(RoundedCornerShape(8.dp))
-                                        .clickable { onMediaItemSelected(item) }
-                                        .background(Color.White.copy(alpha = 0.05f))
-                                        .padding(vertical = 6.dp, horizontal = 6.dp),
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
-                                    Icon(
-                                        imageVector = when (item.type) {
-                                            "AUDIO" -> Icons.Default.MusicNote
-                                            "VIDEO" -> Icons.Default.PlayCircle
-                                            else -> Icons.Default.Image
-                                        },
-                                        contentDescription = null,
-                                        tint = Color(0xFF00E5FF),
-                                        modifier = Modifier.size(16.dp)
-                                    )
-                                    Spacer(modifier = Modifier.width(6.dp))
-                                    Text(
-                                        text = item.title,
-                                        color = Color.White,
-                                        fontSize = 10.sp,
-                                        maxLines = 1,
-                                        overflow = TextOverflow.Ellipsis,
-                                        fontWeight = FontWeight.Medium,
-                                        modifier = Modifier.weight(1f)
-                                    )
+                        // 2. قائمة الاستعراض للملفات
+                        if (items.isEmpty()) {
+                            Box(
+                                modifier = Modifier.weight(1f).fillMaxWidth(),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Text("لا توجد ملفات أو جاري الفحص...", color = Color.Gray, fontSize = 11.sp)
+                            }
+                        } else {
+                            LazyColumn(
+                                modifier = Modifier.weight(1f).fillMaxWidth(),
+                                verticalArrangement = Arrangement.spacedBy(4.dp)
+                            ) {
+                                items(items) { item ->
+                                    Row(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .clip(RoundedCornerShape(8.dp))
+                                            .clickable {
+                                                if (item.type == "AUDIO") {
+                                                    onMediaItemSelected(item)
+                                                } else {
+                                                    // فتح الفيديو أو الصورة مباشرة داخل نافذة EVE!
+                                                    activePreviewItem = item
+                                                }
+                                            }
+                                            .background(Color.White.copy(alpha = 0.05f))
+                                            .padding(vertical = 7.dp, horizontal = 8.dp),
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Icon(
+                                            imageVector = when (item.type) {
+                                                "AUDIO" -> Icons.Default.MusicNote
+                                                "VIDEO" -> Icons.Default.PlayCircle
+                                                else -> Icons.Default.Image
+                                            },
+                                            contentDescription = null,
+                                            tint = Color(0xFF00E5FF),
+                                            modifier = Modifier.size(18.dp)
+                                        )
+                                        Spacer(modifier = Modifier.width(8.dp))
+                                        Text(
+                                            text = item.title,
+                                            color = Color.White,
+                                            fontSize = 11.sp,
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis,
+                                            fontWeight = FontWeight.Medium,
+                                            modifier = Modifier.weight(1f)
+                                        )
+                                    }
                                 }
                             }
                         }

@@ -28,9 +28,11 @@ import com.racha.ai.core.apps.IntentHandler
 import com.racha.ai.core.contacts.ContactResolver
 import com.racha.ai.core.media.MediaItemData
 import com.racha.ai.core.overlay.OverlayLifecycleOwner
+import com.racha.ai.core.preferences.AppPreferences
 import com.racha.ai.core.security.SecurePreferences
 import com.racha.ai.core.voice.VoiceInputHelper
 import com.racha.ai.data.api.GeminiService
+import com.racha.ai.data.llm.QwenService
 import kotlinx.coroutines.*
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -47,6 +49,8 @@ class EveBubbleService : Service() {
     private var voiceInputHelper: VoiceInputHelper? = null
     private lateinit var intentHandler: IntentHandler
     private lateinit var securePreferences: SecurePreferences
+    private lateinit var appPreferences: AppPreferences
+    private lateinit var qwenService: QwenService
 
     private var exoPlayer: ExoPlayer? = null
     private var screenReceiver: BroadcastReceiver? = null
@@ -60,7 +64,6 @@ class EveBubbleService : Service() {
     private var pendingNotificationJob: Job? = null
     private var currentNotifKey: String? = null
 
-    // سجل ذاكرة الحوار المتصل (Multi-turn Context Memory)
     private val conversationHistory = mutableListOf<Pair<String, String>>()
 
     override fun onBind(intent: Intent?): IBinder? = null
@@ -70,7 +73,9 @@ class EveBubbleService : Service() {
         windowManager = getSystemService(Context.WINDOW_SERVICE) as WindowManager
         voiceInputHelper = VoiceInputHelper(this)
         securePreferences = SecurePreferences(this)
+        appPreferences = AppPreferences(this)
         intentHandler = IntentHandler(this, AppResolver(this), ContactResolver(this))
+        qwenService = QwenService(this)
         exoPlayer = ExoPlayer.Builder(this).build()
 
         startForegroundServiceNotification()
@@ -91,13 +96,13 @@ class EveBubbleService : Service() {
                     }
                     if (highQualityVoice != null) tts?.voice = highQualityVoice
                 } catch (e: Exception) { e.printStackTrace() }
-                tts?.setPitch(1.08f)
-                tts?.setSpeechRate(0.95f)
+                tts?.setPitch(appPreferences.getTtsPitch())
+                tts?.setSpeechRate(appPreferences.getTtsSpeed())
 
                 tts?.setOnUtteranceProgressListener(object : UtteranceProgressListener() {
                     override fun onStart(utteranceId: String?) {}
                     override fun onDone(utteranceId: String?) {
-                        if (utteranceId == "CONTINUE_CONVERSATION") {
+                        if (utteranceId == "CONTINUE_CONVERSATION" && appPreferences.isContinuousChatEnabled()) {
                             serviceScope.launch(Dispatchers.Main) {
                                 delay(350)
                                 triggerDirectVoiceListening()
@@ -133,7 +138,7 @@ class EveBubbleService : Service() {
                 val notifKey = intent.getStringExtra(EXTRA_NOTIF_KEY)
                 handleCancelNotification(notifKey)
             }
-            ACTION_STOP_SERVICE -> stopSelf()
+            ACTION_STOP_SERVICE -> closeAndDismiss()
         }
         return START_STICKY
     }
@@ -194,7 +199,6 @@ class EveBubbleService : Service() {
                 EveBubbleContent(
                     onToggleSleepWake = { isAwake ->
                         if (isAwake) {
-                            // المقاطعة الفورية: إسكات أي كلام سابق فور النقر
                             if (tts?.isSpeaking == true) tts?.stop()
                             triggerDirectVoiceListening()
                         } else {
@@ -203,13 +207,13 @@ class EveBubbleService : Service() {
                         }
                     },
                     onOpenApp = { handleEveClick() },
-                    onDismiss = { stopSelf() },
+                    onDismiss = { closeAndDismiss() },
                     onMediaPlayPause = { togglePlayPause() },
                     onMediaNext = { skipNext() },
                     onMediaPrev = { skipPrev() },
-                    onMediaItemSelected = { item -> playSelectedMedia(item) },
+                    onMediaItemSelected = { item -> playSelectedAudio(item) },
                     onDrag = { dx, dy -> updatePosition(dx, dy) },
-                    onDragEnd = { snapToNearestEdge() }
+                    onDragEnd = { handleDragEnd() }
                 )
             }
         }
@@ -221,6 +225,31 @@ class EveBubbleService : Service() {
             e.printStackTrace()
             stopSelf()
         }
+    }
+
+    /**
+     * فحص مكان إفلات الفقاعة: إذا كانت في أسفل الشاشة تغلق فوراً، وإلا تلتصق بالحافة
+     */
+    private fun handleDragEnd() {
+        val displayMetrics = resources.displayMetrics
+        val screenHeight = displayMetrics.heightPixels
+
+        // إذا سحب المستخدم الفقاعة إلى الثلث السفلي من الشاشة -> إغلاق حقيقي وتام
+        if (layoutParams.y > screenHeight * 0.65f) {
+            closeAndDismiss()
+        } else {
+            if (appPreferences.isEdgeSnapEnabled()) {
+                snapToNearestEdge()
+            }
+        }
+    }
+
+    private fun closeAndDismiss() {
+        try {
+            composeView?.let { windowManager.removeView(it) }
+            composeView = null
+        } catch (e: Exception) { e.printStackTrace() }
+        stopSelf()
     }
 
     private fun snapToNearestEdge() {
@@ -248,7 +277,7 @@ class EveBubbleService : Service() {
         stopListening()
     }
 
-    private fun playSelectedMedia(item: MediaItemData) {
+    private fun playSelectedAudio(item: MediaItemData) {
         if (item.type == "AUDIO") {
             exoPlayer?.stop()
             exoPlayer?.clearMediaItems()
@@ -256,15 +285,7 @@ class EveBubbleService : Service() {
             exoPlayer?.prepare()
             exoPlayer?.play()
             EveState.updatePlayback(isPlaying = true, title = item.title)
-            EveState.closeShelf()
             speakCleanText("جاري تشغيل ${item.title}")
-        } else {
-            val intent = Intent(Intent.ACTION_VIEW).apply {
-                setDataAndType(item.uri, if (item.type == "VIDEO") "video/*" else "image/*")
-                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_GRANT_READ_URI_PERMISSION)
-            }
-            startActivity(intent)
-            EveState.closeShelf()
         }
     }
 
@@ -347,9 +368,6 @@ class EveBubbleService : Service() {
         )
     }
 
-    /**
-     * استخراج معطيات الهاتف اللحظية لحقنها في عقل الذكاء الاصطناعي
-     */
     private fun getLiveDeviceContext(): String {
         val time = SimpleDateFormat("HH:mm", Locale.getDefault()).format(Date())
         val chargingStr = if (isPhoneCharging) "قيد الشحن" else "يعمل على البطارية"
@@ -375,13 +393,13 @@ class EveBubbleService : Service() {
 
             if (isShow && (lower.contains("فيديو") || lower.contains("فيديوهات") || lower.contains("مقاطع") || lower.contains("مقطع"))) {
                 EveState.openShelf(MediaShelfType.VIDEOS)
-                speakCleanText("تفضل مقاطع الفيديو سيدي", continueConversation = true)
+                speakCleanText("تفضل مقاطع الفيديو سيدي", continueConversation = false)
             } else if (isShow && (lower.contains("صور") || lower.contains("الصور") || lower.contains("صورة") || lower.contains("البوم") || lower.contains("ألبوم") || lower.contains("معرض"))) {
                 EveState.openShelf(MediaShelfType.PHOTOS)
-                speakCleanText("تفضل ألبوم الصور سيدي", continueConversation = true)
+                speakCleanText("تفضل ألبوم الصور سيدي", continueConversation = false)
             } else if (isShow && (lower.contains("موسيقى") || lower.contains("اغاني") || lower.contains("أغاني") || lower.contains("صوتيات") || lower.contains("اناشيد"))) {
                 EveState.openShelf(MediaShelfType.MUSIC)
-                speakCleanText("تفضل قائمة الموسيقى سيدي", continueConversation = true)
+                speakCleanText("تفضل قائمة الموسيقى سيدي", continueConversation = false)
             } else if (lower.contains("ماذا ترى") || lower.contains("شوفي الشاشة") || lower.contains("حللي الشاشة")) {
                 handleScreenVisionQuery()
             } else {
@@ -397,6 +415,18 @@ class EveBubbleService : Service() {
                             speakCleanText(result.message, continueConversation = true)
                         }
                         else -> {
+                            val selectedProvider = appPreferences.getLLMProvider()
+
+                            // استخدام Qwen إذا كان هو المختار أو في حال عدم وجود إنترنت
+                            if (selectedProvider == "qwen" && qwenService.isModelPresent()) {
+                                try {
+                                    val qwenReply = withContext(Dispatchers.IO) { qwenService.generateResponse(cleanCommand) }
+                                    speakCleanText(qwenReply, continueConversation = true)
+                                    return@launch
+                                } catch (_: Exception) {}
+                            }
+
+                            // استخدام المزود السحابي
                             val apiKey = securePreferences.getApiKey()
                             if (!apiKey.isNullOrBlank()) {
                                 try {
@@ -407,7 +437,6 @@ class EveBubbleService : Service() {
                                         GeminiService(apiKey).generateResponse(contextualPrompt)
                                     }
 
-                                    // حفظ الحوار في الذاكرة المتصلة
                                     conversationHistory.add(Pair("user", cleanCommand))
                                     conversationHistory.add(Pair("assistant", aiReply))
                                     if (conversationHistory.size > 8) {
@@ -417,10 +446,20 @@ class EveBubbleService : Service() {
 
                                     speakCleanText(aiReply, continueConversation = true)
                                 } catch (e: Exception) {
-                                    speakCleanText("أنا معك سيدي، تفضل بأمرك التالي.", continueConversation = true)
+                                    if (qwenService.isModelPresent()) {
+                                        val fallback = withContext(Dispatchers.IO) { qwenService.generateResponse(cleanCommand) }
+                                        speakCleanText(fallback, continueConversation = true)
+                                    } else {
+                                        speakCleanText("أنا معك سيدي، تفضل بأمرك التالي.", continueConversation = true)
+                                    }
                                 }
                             } else {
-                                speakCleanText("أنا معك سيدي، تفضل بأمرك.", continueConversation = true)
+                                if (qwenService.isModelPresent()) {
+                                    val fallback = withContext(Dispatchers.IO) { qwenService.generateResponse(cleanCommand) }
+                                    speakCleanText(fallback, continueConversation = true)
+                                } else {
+                                    speakCleanText("أنا معك سيدي، تفضل بأمرك.", continueConversation = true)
+                                }
                             }
                         }
                     }
