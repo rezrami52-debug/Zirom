@@ -95,7 +95,7 @@ class EveBubbleService : Service() {
                         (voice.quality == Voice.QUALITY_VERY_HIGH || voice.name.contains("female", ignoreCase = true))
                     }
                     if (highQualityVoice != null) tts?.voice = highQualityVoice
-                } catch (e: Exception) { e.printStackTrace() }
+                } catch (_: Exception) {}
                 tts?.setPitch(appPreferences.getTtsPitch())
                 tts?.setSpeechRate(appPreferences.getTtsSpeed())
 
@@ -104,7 +104,7 @@ class EveBubbleService : Service() {
                     override fun onDone(utteranceId: String?) {
                         if (utteranceId == "CONTINUE_CONVERSATION" && appPreferences.isContinuousChatEnabled()) {
                             serviceScope.launch(Dispatchers.Main) {
-                                delay(350)
+                                delay(300)
                                 triggerDirectVoiceListening()
                             }
                         }
@@ -227,14 +227,10 @@ class EveBubbleService : Service() {
         }
     }
 
-    /**
-     * فحص مكان إفلات الفقاعة: إذا كانت في أسفل الشاشة تغلق فوراً، وإلا تلتصق بالحافة
-     */
     private fun handleDragEnd() {
         val displayMetrics = resources.displayMetrics
         val screenHeight = displayMetrics.heightPixels
 
-        // إذا سحب المستخدم الفقاعة إلى الثلث السفلي من الشاشة -> إغلاق حقيقي وتام
         if (layoutParams.y > screenHeight * 0.65f) {
             closeAndDismiss()
         } else {
@@ -248,7 +244,7 @@ class EveBubbleService : Service() {
         try {
             composeView?.let { windowManager.removeView(it) }
             composeView = null
-        } catch (e: Exception) { e.printStackTrace() }
+        } catch (_: Exception) {}
         stopSelf()
     }
 
@@ -266,7 +262,7 @@ class EveBubbleService : Service() {
             interpolator = DecelerateInterpolator()
             addUpdateListener { animation ->
                 layoutParams.x = animation.animatedValue as Int
-                try { windowManager.updateViewLayout(composeView, layoutParams) } catch (e: Exception) { e.printStackTrace() }
+                try { windowManager.updateViewLayout(composeView, layoutParams) } catch (_: Exception) {}
             }
         }.start()
     }
@@ -356,14 +352,20 @@ class EveBubbleService : Service() {
         EveState.setMood(EveMood.AWAKE_SMILING)
 
         voiceInputHelper?.startListening(
-            languageTag = "ar",
+            languageTag = "ar-TN",
             onResult = { text ->
                 isHandlingAwake = false
                 processSpokenText(text)
             },
-            onError = {
+            onError = { errorMsg ->
                 isHandlingAwake = false
-                EveState.setMood(EveMood.SLEEPING)
+                // إذا لم يسمع المستخدم، يُعطيه تنبيهاً بدلاً من السبات الصامت المحيّر
+                if (errorMsg.contains("لم أسمع") || errorMsg.contains("مهلة صمت")) {
+                    speakCleanText("لم أسمعك بوضوح سيدي، تفضل بإعادة طلبك.", continueConversation = false)
+                    EveState.setMood(EveMood.SLEEPING)
+                } else {
+                    EveState.setMood(EveMood.SLEEPING)
+                }
             }
         )
     }
@@ -417,7 +419,6 @@ class EveBubbleService : Service() {
                         else -> {
                             val selectedProvider = appPreferences.getLLMProvider()
 
-                            // استخدام Qwen إذا كان هو المختار أو في حال عدم وجود إنترنت
                             if (selectedProvider == "qwen" && qwenService.isModelPresent()) {
                                 try {
                                     val qwenReply = withContext(Dispatchers.IO) { qwenService.generateResponse(cleanCommand) }
@@ -426,7 +427,6 @@ class EveBubbleService : Service() {
                                 } catch (_: Exception) {}
                             }
 
-                            // استخدام المزود السحابي
                             val apiKey = securePreferences.getApiKey()
                             if (!apiKey.isNullOrBlank()) {
                                 try {
@@ -501,7 +501,7 @@ class EveBubbleService : Service() {
     private fun updatePosition(dx: Float, dy: Float) {
         layoutParams.x += dx.toInt()
         layoutParams.y += dy.toInt()
-        try { windowManager.updateViewLayout(composeView, layoutParams) } catch (e: Exception) { e.printStackTrace() }
+        try { windowManager.updateViewLayout(composeView, layoutParams) } catch (_: Exception) {}
     }
 
     private fun handleEveClick() {
@@ -535,7 +535,7 @@ class EveBubbleService : Service() {
         tts?.shutdown()
         overlayLifecycleOwner.handleDestroy()
         composeView?.let {
-            try { windowManager.removeView(it) } catch (e: Exception) { e.printStackTrace() }
+            try { windowManager.removeView(it) } catch (_: Exception) {}
         }
     }
 
