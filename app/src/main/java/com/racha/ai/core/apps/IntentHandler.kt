@@ -8,8 +8,6 @@ import android.hardware.camera2.CameraManager
 import android.media.AudioManager
 import android.net.Uri
 import android.os.BatteryManager
-import android.os.Build
-import android.os.Environment
 import android.provider.MediaStore
 import android.provider.Settings
 import android.util.Log
@@ -24,6 +22,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.net.URLEncoder
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -50,9 +49,9 @@ class IntentHandler(
         object Unknown : HandlerResult()
     }
 
-    suspend fun handle(text: String): HandlerResult {
+    suspend fun handle(text: String): HandlerResult = withContext(Dispatchers.IO) {
         val intentType = IntentClassifier.classify(text)
-        return when (intentType) {
+        return@withContext when (intentType) {
             IntentClassifier.IntentType.OPEN_APP -> handleOpenApp(text)
             IntentClassifier.IntentType.OPEN_PHOTOS -> {
                 EveState.openShelf(MediaShelfType.PHOTOS)
@@ -94,7 +93,6 @@ class IntentHandler(
             IntentClassifier.IntentType.SET_ALARM -> handleSetAlarm(text)
             IntentClassifier.IntentType.CORRECTION -> HandlerResult.NeedsCorrection(text)
             else -> {
-                // استدعاء الوكيل الذاتي الذكي لمحاولة حل وتنفيذ الأمر قبل الاستسلام
                 val dynamicRes = dynamicActionRunner.tryExecuteDynamicAction(text)
                 if (dynamicRes != null && dynamicRes.success) {
                     HandlerResult.DirectReply(dynamicRes.feedback)
@@ -135,21 +133,19 @@ class IntentHandler(
         val finalAppName = matchedApp?.appName ?: appNameClean
 
         if (pkgToOpen != null) {
+            val launchIntent = context.packageManager.getLaunchIntentForPackage(pkgToOpen)
+            val componentName = launchIntent?.component?.flattenToShortString()
+
             return try {
-                if (isSmallWindow) {
-                    val shellCmd = "am start -n $(cmd package resolve-activity --brief $pkgToOpen | tail -n 1) --windowingMode 5"
-                    ShizukuShellRunner.execCommand(shellCmd)
+                if (isSmallWindow && componentName != null) {
+                    ShizukuShellRunner.execCommand("am start -n $componentName --windowingMode 5")
                     HandlerResult.DirectReply("✅ تم فتح $finalAppName في نافذة مصغرة يا رمزي.")
+                } else if (launchIntent != null) {
+                    launchIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                    context.startActivity(launchIntent)
+                    HandlerResult.DirectReply("✅ تم فتح $finalAppName يا رمزي.")
                 } else {
-                    val intent = context.packageManager.getLaunchIntentForPackage(pkgToOpen)?.apply {
-                        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                    }
-                    if (intent != null) {
-                        context.startActivity(intent)
-                        HandlerResult.DirectReply("✅ تم فتح $finalAppName يا رمزي.")
-                    } else {
-                        HandlerResult.Error("⚠️ لم أتمكن من العثور على تطبيق $finalAppName مثبت في هاتفك.")
-                    }
+                    HandlerResult.Error("⚠️ لم أتمكن من العثور على تطبيق $finalAppName مثبت في هاتفك.")
                 }
             } catch (_: Exception) {
                 appResolver.openApp(pkgToOpen)
@@ -157,7 +153,7 @@ class IntentHandler(
             }
         }
 
-        return HandlerResult.Error("⚠️ لم أتعرف على التطبيق المطلوب بدقة يا رمزي. جرب مثلاً: 'افتحي فيسبوك' أو 'افتحي تيك توك'.")
+        return HandlerResult.Error("⚠️ لم أتعرف على التطبيق المطلوب بدقة يا رمزي.")
     }
 
     private suspend fun handleSendMessage(text: String): HandlerResult {

@@ -3,6 +3,7 @@ package com.racha.ai.ui.screens.chat
 import android.app.Application
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import com.racha.ai.core.agent.SelfEvolutionAgent
 import com.racha.ai.core.apps.AppResolver
 import com.racha.ai.core.apps.IntentHandler
 import com.racha.ai.core.apps.PendingAction
@@ -11,11 +12,13 @@ import com.racha.ai.core.preferences.AppPreferences
 import com.racha.ai.core.security.SecurePreferences
 import com.racha.ai.data.api.GeminiService
 import com.racha.ai.data.llm.QwenService
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 data class ChatMessage(
     val text: String,
@@ -42,6 +45,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
     private val contactResolver = ContactResolver(application)
     private val intentHandler = IntentHandler(application, appResolver, contactResolver)
     private val qwenService = QwenService(application)
+    private val selfEvolutionAgent = SelfEvolutionAgent(application)
 
     init {
         _uiState.update {
@@ -82,12 +86,36 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
 
         appendMessage(ChatMessage(text = trimmed, isFromUser = true))
 
+        if (trimmed.startsWith("ghp_") || trimmed.startsWith("github:")) {
+            val token = trimmed.replace(Regex("(?i)github:"), "").trim()
+            securePrefs.saveGitHubToken(token)
+            appendMessage(ChatMessage(text = "✅ تم ربط مفتاح GitHub بنجاح يا رمزي! أنا الآن قادرة على قراءة وتطوير الكود بنفسي.", isFromUser = false))
+            return
+        }
+
         if (trimmed.startsWith("gsk_") || trimmed.startsWith("AIza") || trimmed.startsWith("مفتاح:") || trimmed.startsWith("api:")) {
             val extractedKey = trimmed.replace(Regex("(?i)مفتاح:|api:"), "").trim()
             securePrefs.saveApiKey(extractedKey)
             _uiState.update { it.copy(hasApiKey = true) }
             val provider = if (extractedKey.startsWith("gsk_")) "Groq (Llama 3.3 ⚡)" else "Gemini"
-            appendMessage(ChatMessage(text = "✅ تم تفعيل وحفظ مفتاح $provider بنجاح سيدي! أنا الآن في أتم الجاهزية للإجابة على جميع أسئلتك.", isFromUser = false))
+            appendMessage(ChatMessage(text = "✅ تم تفعيل وحفظ مفتاح $provider بنجاح يا رمزي!", isFromUser = false))
+            return
+        }
+
+        val lower = trimmed.lowercase()
+        if ((lower.contains("افحصي كود") || lower.contains("راجعي كود") || lower.contains("طوري كود")) && (lower.contains("البوصلة") || lower.contains("الطقس") || lower.contains(".kt"))) {
+            viewModelScope.launch {
+                _uiState.update { it.copy(isLoading = true) }
+                val targetFile = if (lower.contains("البوصلة") || lower.contains("الطقس")) {
+                    "app/src/main/java/com/racha/ai/ui/screens/chat/WeatherBannerWithPrayerTimes.kt"
+                } else {
+                    trimmed.substringAfter("كود").trim().split(" ").first()
+                }
+
+                val reply = selfEvolutionAgent.auditAndProposeFix(targetFile, trimmed)
+                appendMessage(ChatMessage(text = reply, isFromUser = false))
+                _uiState.update { it.copy(isLoading = false) }
+            }
             return
         }
 
@@ -95,7 +123,9 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
             _uiState.update { it.copy(isLoading = true) }
 
             try {
-                when (val result = intentHandler.handle(trimmed)) {
+                // تشغيل IntentHandler داخل Dispatchers.IO تماماً لمنع أي تجميد للواجهة
+                val result = withContext(Dispatchers.IO) { intentHandler.handle(trimmed) }
+                when (result) {
                     is IntentHandler.HandlerResult.DirectReply -> {
                         appendMessage(ChatMessage(text = result.message, isFromUser = false))
                         _uiState.update { it.copy(isLoading = false) }
@@ -108,7 +138,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                         _uiState.update { it.copy(isLoading = false) }
                     }
                     is IntentHandler.HandlerResult.NeedsCorrection -> {
-                        appendMessage(ChatMessage(text = "سيدي، هل يمكنك توضيح: '${result.text}'؟", isFromUser = false))
+                        appendMessage(ChatMessage(text = "هل يمكنك توضيح: '${result.text}' يا رمزي؟", isFromUser = false))
                         _uiState.update { it.copy(isLoading = false) }
                     }
                     is IntentHandler.HandlerResult.Unknown -> {
@@ -116,28 +146,24 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                     }
                 }
             } catch (e: Exception) {
-                appendMessage(ChatMessage(text = "عذراً سيدي، واجهت مشكلة في معالجة طلبك.", isFromUser = false))
+                appendMessage(ChatMessage(text = "عذراً يا رمزي، واجهت مشكلة في معالجة طلبك.", isFromUser = false))
                 _uiState.update { it.copy(isLoading = false) }
             }
         }
     }
 
-    private suspend fun handleAiQuery(query: String) {
+    private suspend fun handleAiQuery(query: String) = withContext(Dispatchers.IO) {
         val selectedProvider = appPrefs.getLLMProvider()
 
-        // 1. استخدام Qwen المحلي إذا كان هو المختار
         if (selectedProvider == "qwen" && qwenService.isModelPresent()) {
             try {
                 val localReply = qwenService.generateResponse(query)
                 appendMessage(ChatMessage(text = "$localReply \n\n📱 [Qwen محلي أوفلاين]", isFromUser = false))
                 _uiState.update { it.copy(isLoading = false) }
-                return
-            } catch (e: Exception) {
-                e.printStackTrace()
-            }
+                return@withContext
+            } catch (_: Exception) {}
         }
 
-        // 2. استخدام المزوّد السحابي (Groq / Gemini)
         val apiKey = securePrefs.getApiKey()
         if (!apiKey.isNullOrBlank()) {
             try {
@@ -145,24 +171,21 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                 val response = geminiService.generateResponse(query)
                 appendMessage(ChatMessage(text = response, isFromUser = false))
                 _uiState.update { it.copy(isLoading = false) }
-                return
-            } catch (e: Exception) {
-                e.printStackTrace()
-            }
+                return@withContext
+            } catch (_: Exception) {}
         }
 
-        // 3. التحويل التلقائي لـ Qwen في حال تعذر الإنترنت أو عدم وجود مفتاح
         if (qwenService.isModelPresent()) {
             try {
                 val fallbackReply = qwenService.generateResponse(query)
                 appendMessage(ChatMessage(text = "$fallbackReply \n\n📱 [Qwen وضع أوفلاين التلقائي]", isFromUser = false))
                 _uiState.update { it.copy(isLoading = false) }
-                return
+                return@withContext
             } catch (_: Exception) {}
         }
 
         appendMessage(ChatMessage(
-            text = "سيدي، للإجابة على هذا السؤال بذكاء خارق، يمكنك إما استخدام نموذج Qwen المحلي من الإعدادات، أو لصق مفتاح Groq المجاني (gsk_...) هنا مباشرة!",
+            text = "يا رمزي، يمكنك إما استخدام نموذج Qwen المحلي من الإعدادات، أو لصق مفتاح Groq المجاني (gsk_...) هنا مباشرة!",
             isFromUser = false
         ))
         _uiState.update { it.copy(isLoading = false) }
