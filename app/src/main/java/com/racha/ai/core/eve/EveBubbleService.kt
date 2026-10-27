@@ -227,11 +227,15 @@ class EveBubbleService : Service() {
         }
     }
 
+    /**
+     * إغلاق فوري إذا سُحبت الفقاعة لمنتصف الشاشة السفلي
+     */
     private fun handleDragEnd() {
         val displayMetrics = resources.displayMetrics
         val screenHeight = displayMetrics.heightPixels
 
-        if (layoutParams.y > screenHeight * 0.65f) {
+        // عتبة 52% (بمجرد سحبها للأسفل تغلق وتختفي فوراً)
+        if (layoutParams.y > screenHeight * 0.52f) {
             closeAndDismiss()
         } else {
             if (appPreferences.isEdgeSnapEnabled()) {
@@ -255,10 +259,10 @@ class EveBubbleService : Service() {
         val bubbleWidth = composeView?.width ?: 200
 
         val targetX = if (layoutParams.x + bubbleWidth / 2 < screenWidth / 2) 20 else screenWidth - bubbleWidth - 20
-        layoutParams.y = layoutParams.y.coerceIn(100, screenHeight - 320)
+        layoutParams.y = layoutParams.y.coerceIn(80, screenHeight - 340)
 
         ValueAnimator.ofInt(layoutParams.x, targetX).apply {
-            duration = 260
+            duration = 240
             interpolator = DecelerateInterpolator()
             addUpdateListener { animation ->
                 layoutParams.x = animation.animatedValue as Int
@@ -359,7 +363,6 @@ class EveBubbleService : Service() {
             },
             onError = { errorMsg ->
                 isHandlingAwake = false
-                // إذا لم يسمع المستخدم، يُعطيه تنبيهاً بدلاً من السبات الصامت المحيّر
                 if (errorMsg.contains("لم أسمع") || errorMsg.contains("مهلة صمت")) {
                     speakCleanText("لم أسمعك بوضوح سيدي، تفضل بإعادة طلبك.", continueConversation = false)
                     EveState.setMood(EveMood.SLEEPING)

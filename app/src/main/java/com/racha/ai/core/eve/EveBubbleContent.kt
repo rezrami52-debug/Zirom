@@ -1,7 +1,6 @@
 package com.racha.ai.core.eve
 
 import android.graphics.BitmapFactory
-import android.widget.MediaController
 import android.widget.VideoView
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.*
@@ -13,11 +12,12 @@ import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.gestures.detectDragGestures
-import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
@@ -49,6 +49,7 @@ import com.racha.ai.core.media.MediaItemData
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
+import java.util.Locale
 import kotlin.math.roundToInt
 
 @Composable
@@ -74,11 +75,13 @@ fun EveBubbleContent(
     val context = LocalContext.current
     val mediaManager = remember { LocalMediaManager(context) }
 
-    // المعاينة المباشرة للميديا داخل النافذة (فيديو أو صورة)
+    // حالة الميديا المعروضة وحجم الشاشة
     var activePreviewItem by remember { mutableStateOf<MediaItemData?>(null) }
+    var isVideoFullscreen by remember { mutableStateOf(false) }
 
     LaunchedEffect(shelfType) {
         activePreviewItem = null
+        isVideoFullscreen = false
     }
 
     val items by produceState<List<MediaItemData>>(initialValue = emptyList(), shelfType) {
@@ -150,32 +153,51 @@ fun EveBubbleContent(
         verticalAlignment = Alignment.Top,
         horizontalArrangement = Arrangement.Start
     ) {
+        // --- 1. جسد EVE وإيماءات اللمس الموحدة ---
         Column(
             horizontalAlignment = Alignment.CenterHorizontally,
             modifier = modifier
                 .offset { IntOffset(0, hoverY.roundToInt()) }
                 .pointerInput(Unit) {
-                    detectDragGestures(
-                        onDragEnd = { onDragEnd() },
-                        onDragCancel = { onDragEnd() },
-                        onDrag = { change, dragAmount ->
-                            change.consume()
-                            onDrag(dragAmount.x, dragAmount.y)
+                    awaitEachGesture {
+                        val down = awaitFirstDown(requireUnconsumed = false)
+                        var isDrag = false
+                        val startX = down.position.x
+                        val startY = down.position.y
+                        val startTime = System.currentTimeMillis()
+
+                        while (true) {
+                            val event = awaitPointerEvent()
+                            val change = event.changes.firstOrNull { it.id == down.id } ?: break
+                            if (!change.pressed) break
+
+                            val dx = change.position.x - startX
+                            val dy = change.position.y - startY
+
+                            if (!isDrag && (kotlin.math.abs(dx) > 12f || kotlin.math.abs(dy) > 12f)) {
+                                isDrag = true
+                            }
+
+                            if (isDrag) {
+                                val moveDx = change.position.x - change.previousPosition.x
+                                val moveDy = change.position.y - change.previousPosition.y
+                                change.consume()
+                                onDrag(moveDx, moveDy)
+                            }
                         }
-                    )
-                }
-                .pointerInput(Unit) {
-                    detectTapGestures(
-                        onTap = {
-                            EveState.setMood(EveMood.AWAKE_SMILING)
-                            onToggleSleepWake(true)
-                        },
-                        onDoubleTap = { onOpenApp() },
-                        onLongPress = {
-                            // ضغطة مطولة لإغلاق المساعد نهائياً
-                            onDismiss()
+
+                        if (isDrag) {
+                            onDragEnd()
+                        } else {
+                            val duration = System.currentTimeMillis() - startTime
+                            if (duration > 650) {
+                                onDismiss()
+                            } else {
+                                EveState.setMood(EveMood.AWAKE_SMILING)
+                                onToggleSleepWake(true)
+                            }
                         }
-                    )
+                    }
                 }
         ) {
             Box(
@@ -302,7 +324,7 @@ fun EveBubbleContent(
                         horizontalArrangement = Arrangement.spacedBy(4.dp)
                     ) {
                         IconButton(onClick = onMediaPrev, modifier = Modifier.size(26.dp)) {
-                            Icon(Icons.Default.SkipPrevious, contentDescription = "Prev", tint = Color.White, modifier = Modifier.size(16.dp))
+                            Icon(Icons.Default.FastRewind, contentDescription = "Prev", tint = Color.White, modifier = Modifier.size(16.dp))
                         }
 
                         IconButton(onClick = onMediaPlayPause, modifier = Modifier.size(30.dp)) {
@@ -315,37 +337,41 @@ fun EveBubbleContent(
                         }
 
                         IconButton(onClick = onMediaNext, modifier = Modifier.size(26.dp)) {
-                            Icon(Icons.Default.SkipNext, contentDescription = "Next", tint = Color.White, modifier = Modifier.size(16.dp))
+                            Icon(Icons.Default.FastForward, contentDescription = "Next", tint = Color.White, modifier = Modifier.size(16.dp))
                         }
                     }
                 }
             }
         }
 
-        // --- نافذة الوسائط المنبثقة ومشغل الفيديو/الصور المدمج ---
+        // --- 2. نافذة الوسائط ومشغل الفيديو المدمج في الأسفل ---
         AnimatedVisibility(
             visible = shelfType != MediaShelfType.NONE,
             enter = fadeIn(),
             exit = fadeOut()
         ) {
+            val windowWidth = if (isVideoFullscreen) 330.dp else 265.dp
+            val windowHeight = if (isVideoFullscreen) 440.dp else 330.dp
+
             Surface(
                 modifier = Modifier
                     .padding(start = 10.dp)
-                    .width(260.dp)
-                    .height(340.dp),
-                shape = RoundedCornerShape(16.dp),
-                color = Color(0xFF080D1A).copy(alpha = 0.98f),
-                border = BorderStroke(1.5.dp, Color(0xFF00E5FF).copy(alpha = 0.7f)),
-                shadowElevation = 14.dp
+                    .width(windowWidth)
+                    .height(windowHeight),
+                shape = RoundedCornerShape(18.dp),
+                color = Color(0xFF070B16).copy(alpha = 0.98f),
+                border = BorderStroke(1.5.dp, Color(0xFF00E5FF).copy(alpha = 0.8f)),
+                shadowElevation = 16.dp
             ) {
-                Column(modifier = Modifier.padding(10.dp)) {
+                Column(modifier = Modifier.padding(8.dp)) {
+                    // الشريط العلوي للنافذة
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Text(
-                            text = if (activePreviewItem != null) "🎬 مشغل الوسائط" else when (shelfType) {
+                            text = if (activePreviewItem != null) "🎬 المشغل السينمائي" else when (shelfType) {
                                 MediaShelfType.MUSIC -> "الموسيقى (${items.size}) 🎶"
                                 MediaShelfType.VIDEOS -> "الفيديوهات (${items.size}) 📽️"
                                 MediaShelfType.PHOTOS -> "الصور (${items.size}) 🖼️"
@@ -358,94 +384,199 @@ fun EveBubbleContent(
 
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             if (activePreviewItem != null) {
+                                // زر تكبير وتصغير الشاشة
+                                IconButton(
+                                    onClick = { isVideoFullscreen = !isVideoFullscreen },
+                                    modifier = Modifier.size(26.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = if (isVideoFullscreen) Icons.Default.FullscreenExit else Icons.Default.Fullscreen,
+                                        contentDescription = "تحجيم",
+                                        tint = Color(0xFF00E5FF),
+                                        modifier = Modifier.size(18.dp)
+                                    )
+                                }
+
                                 TextButton(
-                                    onClick = { activePreviewItem = null },
+                                    onClick = {
+                                        activePreviewItem = null
+                                        isVideoFullscreen = false
+                                    },
                                     contentPadding = PaddingValues(horizontal = 6.dp, vertical = 2.dp)
                                 ) {
                                     Text("رجوع ↩️", color = Color.White, fontSize = 11.sp)
                                 }
                             }
-                            IconButton(onClick = { EveState.closeShelf() }, modifier = Modifier.size(22.dp)) {
-                                Icon(Icons.Default.Close, contentDescription = "إغلاق", tint = Color.Gray, modifier = Modifier.size(14.dp))
+
+                            IconButton(onClick = { EveState.closeShelf() }, modifier = Modifier.size(24.dp)) {
+                                Icon(Icons.Default.Close, contentDescription = "إغلاق", tint = Color.Gray, modifier = Modifier.size(16.dp))
                             }
                         }
                     }
 
                     Divider(color = Color.White.copy(alpha = 0.15f), thickness = 1.dp, modifier = Modifier.padding(vertical = 4.dp))
 
-                    // 1. شاشة المشغل المباشر داخل نافذة EVE
+                    // شاشة العرض المباشرة داخل نافذة EVE
                     if (activePreviewItem != null) {
                         val currentItem = activePreviewItem!!
-                        Column(
-                            modifier = Modifier.weight(1f).fillMaxWidth(),
-                            horizontalAlignment = Alignment.CenterHorizontally
-                        ) {
-                            Text(
-                                text = currentItem.title,
-                                color = Color.White,
-                                fontSize = 11.sp,
-                                fontWeight = FontWeight.Bold,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis,
-                                modifier = Modifier.padding(bottom = 6.dp)
-                            )
 
-                            if (currentItem.type == "VIDEO") {
+                        if (currentItem.type == "VIDEO") {
+                            var videoViewRef by remember { mutableStateOf<VideoView?>(null) }
+                            var isPlaying by remember { mutableStateOf(true) }
+                            var currentPosition by remember { mutableIntStateOf(0) }
+                            var totalDuration by remember { mutableIntStateOf(1) }
+
+                            LaunchedEffect(isPlaying) {
+                                while (isPlaying) {
+                                    videoViewRef?.let { vv ->
+                                        if (vv.isPlaying) {
+                                            currentPosition = vv.currentPosition
+                                            totalDuration = vv.duration.coerceAtLeast(1)
+                                        }
+                                    }
+                                    delay(500)
+                                }
+                            }
+
+                            Column(modifier = Modifier.weight(1f).fillMaxWidth()) {
+                                // شاشة الفيديو
                                 Box(
                                     modifier = Modifier
                                         .weight(1f)
                                         .fillMaxWidth()
-                                        .clip(RoundedCornerShape(10.dp))
+                                        .clip(RoundedCornerShape(12.dp))
                                         .background(Color.Black)
                                 ) {
                                     AndroidView(
                                         factory = { ctx ->
                                             VideoView(ctx).apply {
                                                 setVideoURI(currentItem.uri)
-                                                val mc = MediaController(ctx)
-                                                mc.setAnchorView(this)
-                                                setMediaController(mc)
                                                 setOnPreparedListener { mp ->
+                                                    totalDuration = duration.coerceAtLeast(1)
                                                     mp.isLooping = true
                                                     start()
+                                                    isPlaying = true
                                                 }
+                                                videoViewRef = this
                                             }
                                         },
                                         modifier = Modifier.fillMaxSize()
                                     )
                                 }
-                            } else if (currentItem.type == "PHOTO") {
-                                val bmp = remember(currentItem) {
-                                    try {
-                                        context.contentResolver.openInputStream(currentItem.uri)?.use { stream ->
-                                            BitmapFactory.decodeStream(stream)?.asImageBitmap()
+
+                                Spacer(modifier = Modifier.height(6.dp))
+
+                                // شريط التحكم المدمج والجميل في الأسفل
+                                Surface(
+                                    shape = RoundedCornerShape(12.dp),
+                                    color = Color(0xFF0F172A).copy(alpha = 0.95f),
+                                    border = BorderStroke(1.dp, Color(0xFF00E5FF).copy(alpha = 0.4f)),
+                                    modifier = Modifier.fillMaxWidth()
+                                ) {
+                                    Column(modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)) {
+                                        // شريط التمرير الزمني
+                                        Row(
+                                            modifier = Modifier.fillMaxWidth(),
+                                            verticalAlignment = Alignment.CenterVertically
+                                        ) {
+                                            Text(formatMillis(currentPosition), color = Color.White, fontSize = 9.sp)
+                                            Slider(
+                                                value = currentPosition.toFloat(),
+                                                onValueChange = {
+                                                    currentPosition = it.toInt()
+                                                    videoViewRef?.seekTo(it.toInt())
+                                                },
+                                                valueRange = 0f..totalDuration.toFloat(),
+                                                modifier = Modifier.weight(1f).height(18.dp)
+                                            )
+                                            Text(formatMillis(totalDuration), color = Color.Gray, fontSize = 9.sp)
                                         }
-                                    } catch (_: Exception) { null }
-                                }
-                                if (bmp != null) {
-                                    Image(
-                                        bitmap = bmp,
-                                        contentDescription = null,
-                                        modifier = Modifier
-                                            .weight(1f)
-                                            .fillMaxWidth()
-                                            .clip(RoundedCornerShape(10.dp)),
-                                        contentScale = ContentScale.Fit
-                                    )
-                                } else {
-                                    Box(modifier = Modifier.weight(1f), contentAlignment = Alignment.Center) {
-                                        Text("تعذر فتح الصورة", color = Color.Gray, fontSize = 11.sp)
+
+                                        // أزرار التحكم
+                                        Row(
+                                            modifier = Modifier.fillMaxWidth(),
+                                            horizontalArrangement = Arrangement.Center,
+                                            verticalAlignment = Alignment.CenterVertically
+                                        ) {
+                                            IconButton(
+                                                onClick = {
+                                                    videoViewRef?.let { vv ->
+                                                        val target = (vv.currentPosition - 10000).coerceAtLeast(0)
+                                                        vv.seekTo(target)
+                                                        currentPosition = target
+                                                    }
+                                                },
+                                                modifier = Modifier.size(28.dp)
+                                            ) {
+                                                Icon(Icons.Default.FastRewind, contentDescription = "ترجيع 10ث", tint = Color.White, modifier = Modifier.size(16.dp))
+                                            }
+
+                                            Spacer(modifier = Modifier.width(16.dp))
+
+                                            IconButton(
+                                                onClick = {
+                                                    videoViewRef?.let { vv ->
+                                                        if (vv.isPlaying) {
+                                                            vv.pause()
+                                                            isPlaying = false
+                                                        } else {
+                                                            vv.start()
+                                                            isPlaying = true
+                                                        }
+                                                    }
+                                                },
+                                                modifier = Modifier.size(34.dp).background(Color(0xFF00E5FF), CircleShape)
+                                            ) {
+                                                Icon(
+                                                    imageVector = if (isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
+                                                    contentDescription = "تشغيل/إيقاف",
+                                                    tint = Color.Black,
+                                                    modifier = Modifier.size(20.dp)
+                                                )
+                                            }
+
+                                            Spacer(modifier = Modifier.width(16.dp))
+
+                                            IconButton(
+                                                onClick = {
+                                                    videoViewRef?.let { vv ->
+                                                        val target = (vv.currentPosition + 10000).coerceAtMost(vv.duration)
+                                                        vv.seekTo(target)
+                                                        currentPosition = target
+                                                    }
+                                                },
+                                                modifier = Modifier.size(28.dp)
+                                            ) {
+                                                Icon(Icons.Default.FastForward, contentDescription = "تقديم 10ث", tint = Color.White, modifier = Modifier.size(16.dp))
+                                            }
+                                        }
                                     }
                                 }
                             }
+                        } else if (currentItem.type == "PHOTO") {
+                            val bmp = remember(currentItem) {
+                                try {
+                                    context.contentResolver.openInputStream(currentItem.uri)?.use { stream ->
+                                        BitmapFactory.decodeStream(stream)?.asImageBitmap()
+                                    }
+                                } catch (_: Exception) { null }
+                            }
+                            if (bmp != null) {
+                                Image(
+                                    bitmap = bmp,
+                                    contentDescription = null,
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .fillMaxWidth()
+                                        .clip(RoundedCornerShape(12.dp)),
+                                    contentScale = ContentScale.Fit
+                                )
+                            }
                         }
                     } else {
-                        // 2. قائمة الاستعراض للملفات
+                        // قائمة الملفات العادية
                         if (items.isEmpty()) {
-                            Box(
-                                modifier = Modifier.weight(1f).fillMaxWidth(),
-                                contentAlignment = Alignment.Center
-                            ) {
+                            Box(modifier = Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
                                 Text("لا توجد ملفات أو جاري الفحص...", color = Color.Gray, fontSize = 11.sp)
                             }
                         } else {
@@ -462,7 +593,6 @@ fun EveBubbleContent(
                                                 if (item.type == "AUDIO") {
                                                     onMediaItemSelected(item)
                                                 } else {
-                                                    // فتح الفيديو أو الصورة مباشرة داخل نافذة EVE!
                                                     activePreviewItem = item
                                                 }
                                             }
@@ -499,4 +629,11 @@ fun EveBubbleContent(
             }
         }
     }
+}
+
+private fun formatMillis(ms: Int): String {
+    val totalSeconds = (ms / 1000).coerceAtLeast(0)
+    val minutes = totalSeconds / 60
+    val seconds = totalSeconds % 60
+    return String.format(Locale.US, "%02d:%02d", minutes, seconds)
 }
