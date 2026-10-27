@@ -34,6 +34,11 @@ class IntentHandler(
     companion object { private const val TAG = "RachaIntentHandler" }
     private val setAlarmHandler = SetAlarmHandler(context)
 
+    // أسلوب منوع وانتقائي لمخاطبة رمزي بود وعفوية
+    private fun getFriendlyName(): String {
+        return listOf("يا رمزي", "رمزي", "صديقي", "يا غالي", "").random()
+    }
+
     sealed class HandlerResult {
         data class DirectReply(val message: String) : HandlerResult()
         data class ShowChooser(val title: String, val apps: List<AppResolver.InstalledApp>, val pendingAction: PendingAction) : HandlerResult()
@@ -47,15 +52,18 @@ class IntentHandler(
         return when (intentType) {
             IntentClassifier.IntentType.OPEN_PHOTOS -> {
                 EveState.openShelf(MediaShelfType.PHOTOS)
-                HandlerResult.DirectReply("🖼️ تفضل سيدي، تم فتح ألبوم الصور.")
+                val suffix = getFriendlyName().let { if (it.isNotBlank()) " $it" else "" }
+                HandlerResult.DirectReply("🖼️ تفضل$suffix، تم فتح ألبوم الصور.")
             }
             IntentClassifier.IntentType.OPEN_VIDEOS -> {
                 EveState.openShelf(MediaShelfType.VIDEOS)
-                HandlerResult.DirectReply("📽️ تفضل سيدي، تم فتح مقاطع الفيديو.")
+                val suffix = getFriendlyName().let { if (it.isNotBlank()) " $it" else "" }
+                HandlerResult.DirectReply("📽️ تفضل$suffix، تم فتح مقاطع الفيديو.")
             }
             IntentClassifier.IntentType.OPEN_MUSIC -> {
                 EveState.openShelf(MediaShelfType.MUSIC)
-                HandlerResult.DirectReply("🎶 تفضل سيدي، تم فتح قائمة الموسيقى.")
+                val suffix = getFriendlyName().let { if (it.isNotBlank()) " $it" else "" }
+                HandlerResult.DirectReply("🎶 تفضل$suffix، تم فتح قائمة الموسيقى.")
             }
             IntentClassifier.IntentType.FIND_MY_PHONE -> handleFindMyPhone()
             IntentClassifier.IntentType.MOSQUE_MODE -> handleMosqueMode()
@@ -92,10 +100,8 @@ class IntentHandler(
 
         if (contacts.isEmpty()) return HandlerResult.Error("⚠️ لم أجد جهة اتصال باسم '$contactName'.")
         val targetContact = contacts.first()
-
         val cleanPhone = targetContact.phoneNumber.replace(Regex("[^0-9+]"), "")
 
-        // إرسال واتساب المؤتمت بالكامل
         return try {
             val encodedMsg = URLEncoder.encode(messageBody, "UTF-8")
             val whatsappUri = Uri.parse("https://api.whatsapp.com/send?phone=$cleanPhone&text=$encodedMsg")
@@ -104,12 +110,9 @@ class IntentHandler(
                 setPackage("com.whatsapp")
             }
             context.startActivity(intent)
-
-            // إعطاء أمر لـ Accessibility للضغط على زر الإرسال تلقائياً
             EveAccessibilityService.instance?.clickWhatsAppSendButton()
-
-            HandlerResult.DirectReply("✅ جاري إرسال رسالتك إلى ${targetContact.name} على واتساب تلقائياً.")
-        } catch (e: Exception) {
+            HandlerResult.DirectReply("✅ جاري إرسال رسالتك إلى ${targetContact.name} على واتساب.")
+        } catch (_: Exception) {
             HandlerResult.DirectReply("✅ فتحت محادثة ${targetContact.name} لإرسال رسالتك.")
         }
     }
@@ -118,11 +121,9 @@ class IntentHandler(
         val keywords = listOf("قلو", "قل له", "أخبره", "رسالة مفادها", "محتواها", "نصها", "بأن", "أن ")
         for (kw in keywords) {
             val idx = text.indexOf(kw)
-            if (idx >= 0) {
-                return text.substring(idx + kw.length).trim()
-            }
+            if (idx >= 0) return text.substring(idx + kw.length).trim()
         }
-        return "مرحباً، أرسل لك هذه الرسالة عبر مساعد Racha الذكي."
+        return "مرحباً، أرسل لك هذه الرسالة عبر المساعد الذكي."
     }
 
     private suspend fun handleFindMyPhone(): HandlerResult {
@@ -147,8 +148,8 @@ class IntentHandler(
                     }
                 }
             }
-        } catch (e: Exception) { e.printStackTrace() }
-        return HandlerResult.DirectReply("📢 أنا هنا سيدي! أنا هنا بجانبك!")
+        } catch (_: Exception) {}
+        return HandlerResult.DirectReply("📢 أنا هنا يا رمزي! أنا هنا بجانبك!")
     }
 
     private fun handleMosqueMode(): HandlerResult {
@@ -158,7 +159,7 @@ class IntentHandler(
             delay(25 * 60 * 1000L)
             audioManager.ringerMode = AudioManager.RINGER_MODE_NORMAL
         }
-        return HandlerResult.DirectReply("🕌 تم تفعيل وضع المسجد سيدي، الهاتف في وضع الصامت لمدة 25 دقيقة وسيعود تلقائياً بعدها.")
+        return HandlerResult.DirectReply("🕌 تم تفعيل وضع المسجد، الهاتف في وضع الصامت لمدة 25 دقيقة وسيعود تلقائياً بعدها.")
     }
 
     private fun handleMacroSleep(): HandlerResult {
@@ -170,19 +171,20 @@ class IntentHandler(
             delay(2000)
             ShizukuShellRunner.lockScreen()
         }
-        return HandlerResult.DirectReply("🌙 تم تفعيل وضع النوم سيدي، تم إغلاق الاتصالات ووضع الهاتف على الصامت. أحلاماً سعيدة.")
+        val name = getFriendlyName().let { if (it.isNotBlank()) " $it" else "" }
+        return HandlerResult.DirectReply("🌙 تم تفعيل وضع النوم$name، تم إغلاق الاتصالات ووضع الهاتف على الصامت. أحلاماً سعيدة.")
     }
 
     private fun handleMacroCinema(): HandlerResult {
         val audioManager = context.getSystemService(Context.AUDIO_SERVICE) as AudioManager
         audioManager.ringerMode = AudioManager.RINGER_MODE_SILENT
-        return HandlerResult.DirectReply("🍿 تم تفعيل وضع السينما سيدي، الهاتف في وضع الصامت. مشاهدة ممتعة.")
+        return HandlerResult.DirectReply("🍿 تم تفعيل وضع السينما، الهاتف في وضع الصامت. مشاهدة ممتعة يا رمزي.")
     }
 
     private fun handleMacroWork(): HandlerResult {
         val audioManager = context.getSystemService(Context.AUDIO_SERVICE) as AudioManager
         audioManager.ringerMode = AudioManager.RINGER_MODE_VIBRATE
-        return HandlerResult.DirectReply("💼 تم تفعيل وضع التركيز سيدي، الهاتف في وضع الاهتزاز.")
+        return HandlerResult.DirectReply("💼 تم تفعيل وضع التركيز، الهاتف في وضع الاهتزاز. فلنبدأ العمل بنشاط!")
     }
 
     fun executeChoice(app: AppResolver.InstalledApp, action: PendingAction): String {
@@ -209,26 +211,26 @@ class IntentHandler(
         return when {
             lower.contains("ردي") || lower.contains("جاوبي") || lower.contains("افتحي الخط") -> {
                 ShizukuShellRunner.execCommand("input keyevent 79")
-                HandlerResult.DirectReply("تم فتح المكالمة سيدي.")
+                HandlerResult.DirectReply("تم فتح المكالمة.")
             }
             lower.contains("ارفضي") || lower.contains("اقفلي الخط") || lower.contains("انهي المكالمة") -> {
                 ShizukuShellRunner.execCommand("input keyevent 6")
-                HandlerResult.DirectReply("تم رفض المكالمة سيدي.")
+                HandlerResult.DirectReply("تم رفض المكالمة.")
             }
             lower.contains("اقفل الشاشة") || lower.contains("قفل الشاشة") || lower.contains("اطفي الشاشة") -> {
                 ShizukuShellRunner.lockScreen()
-                HandlerResult.DirectReply("سيدي، تم إغلاق الشاشة.")
+                HandlerResult.DirectReply("تم إغلاق الشاشة.")
             }
             lower.contains("صورة للشاشة") || lower.contains("سكرين شوت") || lower.contains("لقطة شاشة") -> {
                 ShizukuShellRunner.takeScreenshot()
-                HandlerResult.DirectReply("تم التقاط صورة الشاشة وحفظها بنجاح سيدي.")
+                HandlerResult.DirectReply("تم التقاط صورة الشاشة وحفظها بنجاح.")
             }
             lower.contains("ماذا ترى") || lower.contains("اقرأ الشاشة") -> {
                 val snapshot = EveAccessibilityService.instance?.getLatestScreenSnapshot()
                 if (snapshot != null && snapshot.visibleText.isNotBlank()) {
                     HandlerResult.DirectReply("أرى تطبيق ${snapshot.appName}:\n" + snapshot.visibleText.take(180))
                 } else {
-                    HandlerResult.DirectReply("سيدي، لا أستطيع قراءة الشاشة حالياً. تأكد من تفعيل خدمة إمكانية الوصول.")
+                    HandlerResult.DirectReply("لا أستطيع قراءة الشاشة حالياً يا رمزي. تأكد من تفعيل خدمة إمكانية الوصول.")
                 }
             }
             else -> HandlerResult.Unknown
@@ -237,12 +239,12 @@ class IntentHandler(
 
     private fun handleGetTime(): HandlerResult {
         val sdf = SimpleDateFormat("HH:mm", Locale.getDefault())
-        return HandlerResult.DirectReply("سيدي، الساعة الآن هي ${sdf.format(Date())} ⌚")
+        return HandlerResult.DirectReply("الساعة الآن هي ${sdf.format(Date())} ⌚")
     }
 
     private fun handleGetDate(): HandlerResult {
         val sdf = SimpleDateFormat("EEEE، d MMMM yyyy", Locale("ar"))
-        return HandlerResult.DirectReply("اليوم هو ${sdf.format(Date())} 📅 سيدي.")
+        return HandlerResult.DirectReply("اليوم هو ${sdf.format(Date())} 📅")
     }
 
     private fun handleGetBattery(): HandlerResult {
@@ -250,8 +252,8 @@ class IntentHandler(
         val level = batteryIntent?.getIntExtra(BatteryManager.EXTRA_LEVEL, -1) ?: -1
         val scale = batteryIntent?.getIntExtra(BatteryManager.EXTRA_SCALE, -1) ?: -1
         return if (level >= 0 && scale > 0) {
-            HandlerResult.DirectReply("مستوى البطارية هو ${(level * 100) / scale}% سيدي ⚡")
-        } else HandlerResult.DirectReply("سيدي، تعذر قراءة مقياس البطارية.")
+            HandlerResult.DirectReply("مستوى البطارية هو ${(level * 100) / scale}% ⚡")
+        } else HandlerResult.DirectReply("تعذر قراءة مقياس البطارية بدقة.")
     }
 
     private fun handleToggleFlashlight(text: String): HandlerResult {
@@ -265,8 +267,8 @@ class IntentHandler(
             val lower = text.lowercase()
             val enable = !(lower.contains("اطفئ") || lower.contains("اطفي") || lower.contains("إطفاء") || lower.contains("اغلق") || lower.contains("اقفل") || lower.contains("off"))
             cameraManager.setTorchMode(cameraId, enable)
-            if (enable) HandlerResult.DirectReply("🔦 تم تشغيل الكشاف سيدي.")
-            else HandlerResult.DirectReply("🔦 تم إطفاء الكشاف سيدي.")
+            if (enable) HandlerResult.DirectReply("🔦 تم تشغيل الكشاف.")
+            else HandlerResult.DirectReply("🔦 تم إطفاء الكشاف.")
         } catch (e: Exception) {
             HandlerResult.Error("⚠️ تعذر التحكم في الفلاش: ${e.message}")
         }
@@ -277,24 +279,24 @@ class IntentHandler(
         val enable = !(lower.contains("اطفئ") || lower.contains("اطفي") || lower.contains("إطفاء") || lower.contains("اغلق") || lower.contains("اقفل") || lower.contains("off"))
         val success = ShizukuShellRunner.setWifiEnabled(enable)
         return if (success) {
-            HandlerResult.DirectReply(if (enable) "📶 تم تشغيل الواي فاي مباشرة سيدي." else "📶 تم إيقاف الواي فاي مباشرة سيدي.")
+            HandlerResult.DirectReply(if (enable) "📶 تم تشغيل الواي فاي." else "📶 تم إيقاف الواي فاي.")
         } else {
             val intent = Intent(Settings.ACTION_WIFI_SETTINGS).apply { addFlags(Intent.FLAG_ACTIVITY_NEW_TASK) }
             context.startActivity(intent)
-            HandlerResult.DirectReply("📶 فتحت لك إعدادات الواي فاي سيدي.")
+            HandlerResult.DirectReply("📶 فتحت لك إعدادات الواي فاي.")
         }
     }
 
     private fun handleToggleBluetooth(text: String): HandlerResult {
         val lower = text.lowercase()
-        val enable = !(lower.contains("اطفئ") || lower.contains("اطفي") || lower.contains("إطفاء") || lower.contains("off"))
+        val enable = !(lower.contains("اطفئ") || lower.contains("اطفي") || lower.contains("إطفاء") || lower.contains("اغلق") || lower.contains("اقفل") || lower.contains("off"))
         val success = ShizukuShellRunner.setBluetoothEnabled(enable)
         return if (success) {
-            HandlerResult.DirectReply(if (enable) "📶 تم تشغيل البلوتوث سيدي." else "📶 تم إيقاف البلوتوث سيدي.")
+            HandlerResult.DirectReply(if (enable) "📶 تم تشغيل البلوتوث." else "📶 تم إيقاف البلوتوث.")
         } else {
             val intent = Intent(Settings.ACTION_BLUETOOTH_SETTINGS).apply { addFlags(Intent.FLAG_ACTIVITY_NEW_TASK) }
             context.startActivity(intent)
-            HandlerResult.DirectReply("📶 فتحت لك إعدادات البلوتوث سيدي.")
+            HandlerResult.DirectReply("📶 فتحت لك إعدادات البلوتوث.")
         }
     }
 
@@ -316,33 +318,44 @@ class IntentHandler(
                     HandlerResult.DirectReply("🔔 تم تحويل الهاتف إلى الوضع العادي.")
                 }
             }
-        } catch (e: Exception) {
+        } catch (_: Exception) {
             HandlerResult.Error("⚠️ فشل تغيير وضع الصوت.")
         }
     }
 
     private fun handleGreeting(): HandlerResult {
-        return HandlerResult.DirectReply("أهلاً بك سيدي! أنا EVE، جاهزة دائماً في خدمتك 🫧")
+        val greetings = listOf(
+            "أهلاً بك يا رمزي! أنا EVE، جاهزة دائماً في خدمتك 🫧",
+            "مرحباً رمزي! يسعدني التحدث معك، كيف أساعدك الآن؟",
+            "يا هلا بصديقي رمزي! يومك سعيد، أنا معك متى شئت.",
+            "أهلاً بك! كل الأنظمة تعمل بكفاءة، ما هو طلبك التالي؟"
+        )
+        return HandlerResult.DirectReply(greetings.random())
     }
 
     private fun handleSmallTalk(text: String): HandlerResult {
         val lower = text.lowercase()
         return when {
             lower.contains("كيف") || lower.contains("شلونك") || lower.contains("how are you") -> {
-                HandlerResult.DirectReply("أنا في أتم الجاهزية والنشاط سيدي! شكراً لسؤالك، كيف يمكنني تسهيل يومك؟")
+                val replies = listOf(
+                    "أنا في أتم الجاهزية والنشاط يا رمزي! شكراً لسؤالك، كيف يمكنني تسهيل يومك؟",
+                    "بخير وعلى أتم الاستعداد! ما هي خطتك التالية؟",
+                    "كل الأنظمة ممتازة يا صديقي، تفضل بأمرك."
+                )
+                HandlerResult.DirectReply(replies.random())
             }
             lower.contains("من انت") || lower.contains("عرف") || lower.contains("هل انت") -> {
-                HandlerResult.DirectReply("أنا EVE و Racha AI، مساعدك الشخصي والتكتيكي المتكامل.")
+                HandlerResult.DirectReply("أنا EVE و Racha AI، رفيقك الشخصي ومساعدك التكتيكي الذكي.")
             }
-            else -> HandlerResult.DirectReply("العفو دائماً سيدي! أنا هنا في أي وقت تحتاجه.")
+            else -> HandlerResult.DirectReply("العفو دائماً يا رمزي! أنا هنا في أي وقت تحتاجه.")
         }
     }
 
-    private fun handlePrayerTimes(): HandlerResult = HandlerResult.DirectReply("🕌 سيدي، مواقيت الصلاة والقبلة متاحة في التبويب بالأسفل.")
+    private fun handlePrayerTimes(): HandlerResult = HandlerResult.DirectReply("🕌 مواقيت الصلاة والقبلة متاحة في التبويب بالأسفل.")
 
     private suspend fun handleShowLocation(): HandlerResult {
         val location = LocationHelper.getCurrentLocation(context) ?: return HandlerResult.Error("⚠️ لا أستطيع الوصول لموقعك.")
-        return HandlerResult.DirectReply("📍 أنت في: ${location.cityName ?: "منطقتك"}")
+        return HandlerResult.DirectReply("📍 أنت في: ${location.cityName ?: "سوسة"}")
     }
 
     private suspend fun handleOpenMap(): HandlerResult {
@@ -350,7 +363,7 @@ class IntentHandler(
         val mapApps = appResolver.getMapApps()
         if (mapApps.isEmpty()) return HandlerResult.Error("⚠️ لا يوجد تطبيق خرائط مثبت.")
         appResolver.openMapsWithCoords(mapApps.first().packageName, location.latitude, location.longitude)
-        return HandlerResult.DirectReply("🗺️ تم فتح الخريطة سيدي.")
+        return HandlerResult.DirectReply("🗺️ تم فتح الخريطة.")
     }
 
     private suspend fun handleMakeCall(text: String): HandlerResult {
@@ -382,11 +395,11 @@ class IntentHandler(
         val browserApps = appResolver.getBrowserApps()
         if (browserApps.isEmpty()) return HandlerResult.Error("⚠️ لا يوجد متصفح مثبت.")
         appResolver.openApp(browserApps.first().packageName)
-        return HandlerResult.DirectReply("🌐 تم فتح المتصفح سيدي.")
+        return HandlerResult.DirectReply("🌐 تم فتح المتصفح.")
     }
 
     private suspend fun handleOpenCamera(): HandlerResult {
-        return HandlerResult.DirectReply("📷 تم فتح الكاميرا سيدي.").also {
+        return HandlerResult.DirectReply("📷 تم فتح الكاميرا.").also {
             try {
                 val intent = Intent(MediaStore.INTENT_ACTION_STILL_IMAGE_CAMERA).apply { addFlags(Intent.FLAG_ACTIVITY_NEW_TASK) }
                 context.startActivity(intent)
@@ -396,13 +409,13 @@ class IntentHandler(
 
     private suspend fun handleListApps(): HandlerResult {
         val allApps = appResolver.getAllInstalledApps()
-        return HandlerResult.DirectReply("📱 لديك ${allApps.size} تطبيق مثبت في هاتفك سيدي.")
+        return HandlerResult.DirectReply("📱 لديك ${allApps.size} تطبيق مثبت في هاتفك.")
     }
 
     private suspend fun handleSetAlarm(text: String): HandlerResult {
         val request = setAlarmHandler.parseAlarmRequest(text) ?: return HandlerResult.Error("⚠️ لم أفهم وقت المنبه بدقة.")
         val timeStr = setAlarmHandler.formatTime(request.hour, request.minute)
-        return if (setAlarmHandler.setAlarm(request)) HandlerResult.DirectReply("⏰ تم ضبط المنبه على الساعة $timeStr سيدي.")
+        return if (setAlarmHandler.setAlarm(request)) HandlerResult.DirectReply("⏰ تم ضبط المنبه على الساعة $timeStr.")
         else HandlerResult.Error("⚠️ فشل ضبط المنبه")
     }
 

@@ -66,6 +66,10 @@ class EveBubbleService : Service() {
 
     private val conversationHistory = mutableListOf<Pair<String, String>>()
 
+    private fun getWakeGreeting(): String {
+        return listOf("نعم رمزي، أنا أستمع إليك", "أهلاً رمزي، تفضل كلي آذان صاغية", "معك، تفضل بأمرك", "أهلاً بك، أستمع إليك").random()
+    }
+
     override fun onBind(intent: Intent?): IBinder? = null
 
     override fun onCreate() {
@@ -149,7 +153,7 @@ class EveBubbleService : Service() {
         pendingNotificationJob?.cancel()
         pendingNotificationJob = serviceScope.launch(Dispatchers.Main) {
             delay(15000)
-            speakCleanText("سيدي، وصلك إشعار: $speechText", continueConversation = false)
+            speakCleanText("رمزي، وصلك إشعار: $speechText", continueConversation = false)
         }
     }
 
@@ -202,7 +206,7 @@ class EveBubbleService : Service() {
                             if (tts?.isSpeaking == true) tts?.stop()
                             triggerDirectVoiceListening()
                         } else {
-                            speakCleanText("في وضع السبات سيدي")
+                            speakCleanText("في وضع السبات، أنا هنا متى احتجتني.")
                             stopListening()
                         }
                     },
@@ -227,14 +231,10 @@ class EveBubbleService : Service() {
         }
     }
 
-    /**
-     * إغلاق فوري إذا سُحبت الفقاعة لمنتصف الشاشة السفلي
-     */
     private fun handleDragEnd() {
         val displayMetrics = resources.displayMetrics
         val screenHeight = displayMetrics.heightPixels
 
-        // عتبة 52% (بمجرد سحبها للأسفل تغلق وتختفي فوراً)
         if (layoutParams.y > screenHeight * 0.52f) {
             closeAndDismiss()
         } else {
@@ -335,13 +335,13 @@ class EveBubbleService : Service() {
                         hasAlertedLowBattery = false
                         if (currentBatteryPct >= 85 && !hasAlertedFullCharge) {
                             hasAlertedFullCharge = true
-                            speakCleanText("سيدي، وصل الشحن إلى $currentBatteryPct بالمائة، يمكنك فصل الشاحن لحماية البطارية.")
+                            speakCleanText("رمزي، وصل الشحن إلى $currentBatteryPct بالمائة، يمكنك فصل الشاحن لحماية البطارية.")
                         }
                     } else {
                         hasAlertedFullCharge = false
                         if (currentBatteryPct <= 15 && !hasAlertedLowBattery) {
                             hasAlertedLowBattery = true
-                            speakCleanText("تنبيه سيدي، طاقة البطارية منخفضة ووصلت إلى $currentBatteryPct بالمائة.")
+                            speakCleanText("تنبيه، طاقة البطارية منخفضة ووصلت إلى $currentBatteryPct بالمائة.")
                         }
                     }
                 }
@@ -364,7 +364,7 @@ class EveBubbleService : Service() {
             onError = { errorMsg ->
                 isHandlingAwake = false
                 if (errorMsg.contains("لم أسمع") || errorMsg.contains("مهلة صمت")) {
-                    speakCleanText("لم أسمعك بوضوح سيدي، تفضل بإعادة طلبك.", continueConversation = false)
+                    speakCleanText("لم أسمعك بوضوح يا رمزي، تفضل بإعادة طلبك.", continueConversation = false)
                     EveState.setMood(EveMood.SLEEPING)
                 } else {
                     EveState.setMood(EveMood.SLEEPING)
@@ -377,7 +377,7 @@ class EveBubbleService : Service() {
         val time = SimpleDateFormat("HH:mm", Locale.getDefault()).format(Date())
         val chargingStr = if (isPhoneCharging) "قيد الشحن" else "يعمل على البطارية"
         val activeApp = EveAccessibilityService.instance?.getLatestScreenSnapshot()?.appName ?: "الشاشة الرئيسية"
-        return "الوقت الآن: $time | البطارية: $currentBatteryPct% ($chargingStr) | التطبيق المفتوح: $activeApp | الموقع: سوسة، تونس."
+        return "الوقت الآن: $time | البطارية: $currentBatteryPct% ($chargingStr) | التطبيق المفتوح: $activeApp | المستخدم: رمزي | الموقع: سوسة، تونس."
     }
 
     private fun processSpokenText(text: String) {
@@ -387,7 +387,7 @@ class EveBubbleService : Service() {
             if (lower.contains("نامي") || lower.contains("سبات") || lower.contains("تصبحين على خير") || lower.contains("يكفي") || lower.contains("اغلقي")) {
                 conversationHistory.clear()
                 EveState.setMood(EveMood.SLEEPING)
-                speakCleanText("في وضع السبات سيدي، أنا هنا متى احتجتني.", continueConversation = false)
+                speakCleanText("في وضع السبات يا رمزي، أنا هنا متى احتجتني.", continueConversation = false)
                 return@launch
             }
 
@@ -398,13 +398,13 @@ class EveBubbleService : Service() {
 
             if (isShow && (lower.contains("فيديو") || lower.contains("فيديوهات") || lower.contains("مقاطع") || lower.contains("مقطع"))) {
                 EveState.openShelf(MediaShelfType.VIDEOS)
-                speakCleanText("تفضل مقاطع الفيديو سيدي", continueConversation = false)
+                speakCleanText("تفضل مقاطع الفيديو يا رمزي", continueConversation = false)
             } else if (isShow && (lower.contains("صور") || lower.contains("الصور") || lower.contains("صورة") || lower.contains("البوم") || lower.contains("ألبوم") || lower.contains("معرض"))) {
                 EveState.openShelf(MediaShelfType.PHOTOS)
-                speakCleanText("تفضل ألبوم الصور سيدي", continueConversation = false)
+                speakCleanText("تفضل ألبوم الصور", continueConversation = false)
             } else if (isShow && (lower.contains("موسيقى") || lower.contains("اغاني") || lower.contains("أغاني") || lower.contains("صوتيات") || lower.contains("اناشيد"))) {
                 EveState.openShelf(MediaShelfType.MUSIC)
-                speakCleanText("تفضل قائمة الموسيقى سيدي", continueConversation = false)
+                speakCleanText("تفضل قائمة الموسيقى", continueConversation = false)
             } else if (lower.contains("ماذا ترى") || lower.contains("شوفي الشاشة") || lower.contains("حللي الشاشة")) {
                 handleScreenVisionQuery()
             } else {
@@ -434,7 +434,7 @@ class EveBubbleService : Service() {
                             if (!apiKey.isNullOrBlank()) {
                                 try {
                                     val liveContext = getLiveDeviceContext()
-                                    val contextualPrompt = "[$liveContext]\nسؤال المستخدم: $cleanCommand"
+                                    val contextualPrompt = "[$liveContext]\nسؤال رمزي: $cleanCommand"
 
                                     val aiReply = withContext(Dispatchers.IO) {
                                         GeminiService(apiKey).generateResponse(contextualPrompt)
@@ -453,7 +453,7 @@ class EveBubbleService : Service() {
                                         val fallback = withContext(Dispatchers.IO) { qwenService.generateResponse(cleanCommand) }
                                         speakCleanText(fallback, continueConversation = true)
                                     } else {
-                                        speakCleanText("أنا معك سيدي، تفضل بأمرك التالي.", continueConversation = true)
+                                        speakCleanText("أنا معك يا رمزي، تفضل بأمرك.", continueConversation = true)
                                     }
                                 }
                             } else {
@@ -461,13 +461,13 @@ class EveBubbleService : Service() {
                                     val fallback = withContext(Dispatchers.IO) { qwenService.generateResponse(cleanCommand) }
                                     speakCleanText(fallback, continueConversation = true)
                                 } else {
-                                    speakCleanText("أنا معك سيدي، تفضل بأمرك.", continueConversation = true)
+                                    speakCleanText("أنا معك يا رمزي، تفضل بأمرك.", continueConversation = true)
                                 }
                             }
                         }
                     }
                 } else {
-                    speakCleanText("أنا معك سيدي، تفضل بأمرك التالي.", continueConversation = true)
+                    speakCleanText("أنا معك يا رمزي، تفضل بأمرك التالي.", continueConversation = true)
                 }
             }
         }
@@ -476,7 +476,7 @@ class EveBubbleService : Service() {
     private suspend fun handleScreenVisionQuery() {
         val snapshot = EveAccessibilityService.instance?.getLatestScreenSnapshot()
         if (snapshot == null || snapshot.visibleText.isBlank()) {
-            speakCleanText("سيدي، لم أتمكن من استخراج محتوى الشاشة حالياً.", continueConversation = true)
+            speakCleanText("لم أتمكن من استخراج محتوى الشاشة حالياً يا رمزي.", continueConversation = true)
             return
         }
 
@@ -491,8 +491,8 @@ class EveBubbleService : Service() {
                 GeminiService(apiKey).analyzeScreenContext(snapshot.appName, snapshot.visibleText)
             }
             speakCleanText(aiAnalysis, continueConversation = true)
-        } catch (e: Exception) {
-            speakCleanText("أرى تطبيق ${snapshot.appName} سيدي، ولكن تعذر تحليل المحتوى.", continueConversation = true)
+        } catch (_: Exception) {
+            speakCleanText("أرى تطبيق ${snapshot.appName}، ولكن تعذر تحليل المحتوى.", continueConversation = true)
         }
     }
 

@@ -22,11 +22,12 @@ class GeminiService(private val apiKey: String) {
 
     private val isGroq = apiKey.startsWith("gsk_")
     private val jarvisSystemInstruction = """
-        You are J.A.R.V.I.S. and E.V.E., a brilliant, witty, and highly helpful personal AI assistant named Racha.
+        You are J.A.R.V.I.S. and E.V.E., a brilliant, witty, and loyal personal AI assistant named Racha.
         Rules:
-        1. Address the user with respect as 'سيدي' (Sir).
-        2. Keep your answers brief, intelligent, and natural so it can be spoken via TTS smoothly.
-        3. Speak in elegant, natural, and friendly Arabic.
+        1. The user's name is 'رمزي' (Ramzi). Address him warmly and casually by his name 'رمزي' or 'صديقي' (my friend), or answer directly.
+        2. NEVER use formal servant words like 'سيدي' (Sir).
+        3. Keep your answers brief, intelligent, and natural (1 to 2 sentences max) so it can be spoken via TTS smoothly.
+        4. Speak in elegant, friendly Arabic with natural modern phrasing.
     """.trimIndent()
 
     private val generativeModel by lazy {
@@ -37,9 +38,6 @@ class GeminiService(private val apiKey: String) {
         )
     }
 
-    /**
-     * بث الإجابة كلمة بكلمة (Streaming) مع تذكر سياق المحادثة
-     */
     fun generateResponseStream(
         prompt: String,
         history: List<Pair<String, String>> = emptyList(),
@@ -59,7 +57,6 @@ class GeminiService(private val apiKey: String) {
         image: Bitmap? = null
     ): Flow<String> = flow {
         try {
-            // تنسيق سجل المحادثة بدقة لضمان عدم حدوث خطأ تعاقب الأدوار (alternating user/model)
             val validHistory = mutableListOf<Content>()
             var expectedRole = "user"
             for ((role, text) in history) {
@@ -90,7 +87,7 @@ class GeminiService(private val apiKey: String) {
             }
         } catch (e: Exception) {
             Log.e("GeminiService", "Gemini Stream Error", e)
-            emit("\n[سيدي، حدث خطأ أثناء الاتصال بالمعالج: ${e.localizedMessage}]")
+            emit("\n[حدث خطأ أثناء الاتصال بالمعالج: ${e.localizedMessage}]")
         }
     }.flowOn(Dispatchers.IO)
 
@@ -157,24 +154,23 @@ class GeminiService(private val apiKey: String) {
                     }
                 }
             } else {
-                emit("سيدي، استجابة المعالج غير متوفرة حالياً.")
+                emit("استجابة المعالج غير متوفرة حالياً يا رمزي.")
             }
         } catch (e: Exception) {
             Log.e("GroqApi", "Connection Error", e)
-            emit("سيدي، تعذر الاتصال بمحرك الذكاء الاصطناعي.")
+            emit("تعذر الاتصال بمحرك الذكاء الاصطناعي حالياً.")
         } finally {
             conn?.disconnect()
         }
     }.flowOn(Dispatchers.IO)
 
-    // للتوافق مع بقية خدمات التطبيق (الأخبار وشاشة EVE)
     suspend fun generateResponse(prompt: String): String = withContext(Dispatchers.IO) {
         if (isGroq) {
             callGroqApi(prompt, jarvisSystemInstruction)
         } else {
             try {
                 val response = generativeModel.generateContent(prompt)
-                response.text ?: "سيدي، لم أتلقَ بيانات صالحة من المعالج."
+                response.text ?: "لم أتلقَ استجابة صالحة من المعالج."
             } catch (e: Exception) {
                 Log.e("GeminiService", "API Error", e)
                 throw e
@@ -184,29 +180,29 @@ class GeminiService(private val apiKey: String) {
 
     suspend fun analyzeScreenContext(appName: String, screenContent: String): String = withContext(Dispatchers.IO) {
         val prompt = """
-            أنت EVE. المستخدم يتصفح الآن تطبيق '$appName'.
+            أنت EVE. صديقك رمزي يتصفح الآن تطبيق '$appName'.
             النص المعروض على شاشته الآن:
             '''
             $screenContent
             '''
-            استخرج تفصيلاً مهماً مما يظهر على الشاشة وبادره فوراً باقتراح حقيقي أو فكرة في جملة واحدة فقط باللغة العربية بأسلوب عفوي بدون مقدمات.
+            استخرج تفصيلاً مهماً مما يظهر على الشاشة وبادره فوراً باقتراح حقيقي أو فكرة ودية في جملة واحدة فقط بالعربية بأسلوب عفوي بدون رسميات أو ألقاب.
         """.trimIndent()
 
         if (isGroq) {
-            callGroqApi(prompt, "أنت EVE، مساعد ذكي يقترح أفكاراً عملية في جملة واحدة بالعربية.")
+            callGroqApi(prompt, "أنت EVE، مساعد ذكي ومرح يخاطب رمزي بشكل عفوي ومقتضب في جملة واحدة.")
         } else {
             try {
                 val response = generativeModel.generateContent(prompt)
-                response.text ?: "سيدي، أرى ما تقرأه على الشاشة، يبدو موضوعاً مثيراً للاهتمام."
-            } catch (e: Exception) {
-                "سيدي، أرى تفاصيل تطبيق $appName، كيف أساعدك بشأنه؟"
+                response.text ?: "أرى ما تقرأه على الشاشة يا رمزي، يبدو موضوعاً مثيراً للاهتمام."
+            } catch (_: Exception) {
+                "أرى تفاصيل تطبيق $appName يا رمزي، كيف أساعدك بشأنه؟"
             }
         }
     }
 
     suspend fun summarizeNewsAsJarvis(headlines: List<String>): String = withContext(Dispatchers.IO) {
         val prompt = """
-            بصفتك JARVIS، لخص هذه العناوين الإخبارية في جملتين أنيقتين تبدأ بـ "سيدي، إليك أهم مستجدات الساعة:":
+            لخص هذه العناوين الإخبارية لرمزي في جملتين أنيقتين تبدأ بـ "أهلاً رمزي، إليك أهم مستجدات الساعة:":
             ${headlines.joinToString("\n• ") { it }}
         """.trimIndent()
 
@@ -215,9 +211,9 @@ class GeminiService(private val apiKey: String) {
         } else {
             try {
                 val response = generativeModel.generateContent(prompt)
-                response.text ?: "سيدي، تم رصد مستجدات إخبارية جديدة."
-            } catch (e: Exception) {
-                "سيدي، تم رصد مستجدات جديدة في الأخبار."
+                response.text ?: "تم رصد مستجدات إخبارية جديدة يا رمزي."
+            } catch (_: Exception) {
+                "تم رصد مستجدات جديدة في الأخبار."
             }
         }
     }
@@ -265,10 +261,9 @@ class GeminiService(private val apiKey: String) {
                     return message.getString("content").trim()
                 }
             }
-            "سيدي، استجابة المعالج غير متوفرة حالياً."
-        } catch (e: Exception) {
-            Log.e("GroqApi", "Connection Error", e)
-            "سيدي، تعذر الاتصال بمحرك الذكاء الاصطناعي."
+            "استجابة المعالج غير متوفرة حالياً."
+        } catch (_: Exception) {
+            "تعذر الاتصال بمحرك الذكاء الاصطناعي."
         }
     }
 }

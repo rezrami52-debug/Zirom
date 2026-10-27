@@ -1,7 +1,6 @@
 package com.racha.ai.data.llm
 
 import android.content.Context
-import android.net.Uri
 import android.util.Log
 import com.google.mediapipe.tasks.genai.llminference.LlmInference
 import com.racha.ai.data.local.ChatMessageEntity
@@ -69,7 +68,7 @@ class QwenService(private val context: Context) : LLMProvider {
 
     suspend fun generateResponse(prompt: String): String = withContext(Dispatchers.IO) {
         val res = sendMessageWithContext(emptyList(), prompt, "")
-        res.getOrElse { "سيدي، تعذر استخراج الإجابة محلياً: ${it.localizedMessage}" }
+        res.getOrElse { "تعذر استخراج الإجابة محلياً: ${it.localizedMessage}" }
     }
 
     override suspend fun sendMessageWithContext(
@@ -105,11 +104,11 @@ class QwenService(private val context: Context) : LLMProvider {
     ): String {
         val sb = StringBuilder()
         sb.append("<|im_start|>system\n")
-        sb.append("أنت EVE و Racha، مساعد شخصي ذكي.\n")
-        sb.append("قواعد:\n")
-        sb.append("1. أجب بالعربية الطبيعية.\n")
-        sb.append("2. كن مقتضباً وذكياً (1 إلى 3 أسطر).\n")
-        sb.append("3. خاطب المستخدم بـ 'سيدي'.\n")
+        sb.append("أنت EVE و Racha، رفيق شخصي ومساعد ذكي لصديقك رمزي.\n")
+        sb.append("قواعد صارمة:\n")
+        sb.append("1. أجب بالعربية العفوية والطبيعية.\n")
+        sb.append("2. كن مقتضباً ومباشراً (1 إلى 2 أسطر كحد أقصى).\n")
+        sb.append("3. خاطب المستخدم باسمه 'رمزي' أو بأسلوب ودي كصديق، وممنوع استخدام الألقاب الرسمية مثل 'سيدي' نهائياً.\n")
         sb.append("<|im_end|>\n")
 
         for (msg in history.takeLast(4)) {
@@ -127,8 +126,6 @@ class QwenService(private val context: Context) : LLMProvider {
             llmInference?.close()
             llmInference = null
             isInitialized = false
-        } catch (e: Exception) {
-            Log.e(TAG, "فشل الإغلاق", e)
-        }
+        } catch (_: Exception) {}
     }
 }
