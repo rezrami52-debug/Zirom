@@ -34,7 +34,6 @@ class IntentHandler(
     companion object { private const val TAG = "RachaIntentHandler" }
     private val setAlarmHandler = SetAlarmHandler(context)
 
-    // أسلوب منوع وانتقائي لمخاطبة رمزي بود وعفوية
     private fun getFriendlyName(): String {
         return listOf("يا رمزي", "رمزي", "صديقي", "يا غالي", "").random()
     }
@@ -50,6 +49,7 @@ class IntentHandler(
     suspend fun handle(text: String): HandlerResult {
         val intentType = IntentClassifier.classify(text)
         return when (intentType) {
+            IntentClassifier.IntentType.OPEN_APP -> handleOpenApp(text)
             IntentClassifier.IntentType.OPEN_PHOTOS -> {
                 EveState.openShelf(MediaShelfType.PHOTOS)
                 val suffix = getFriendlyName().let { if (it.isNotBlank()) " $it" else "" }
@@ -91,6 +91,67 @@ class IntentHandler(
             IntentClassifier.IntentType.CORRECTION -> HandlerResult.NeedsCorrection(text)
             else -> handleAdvancedCommands(text)
         }
+    }
+
+    /**
+     * محرك فتح التطبيقات الذكي ودعم النوافذ المصغرة العائمة
+     */
+    private fun handleOpenApp(text: String): HandlerResult {
+        val lower = text.lowercase().trim()
+        val isSmallWindow = lower.contains("نافذة صغيرة") || lower.contains("نافذه صغيره") ||
+                            lower.contains("نافذة") || lower.contains("مصغرة") || lower.contains("عائمة")
+
+        val targetPkg = when {
+            lower.contains("فيسبوك") || lower.contains("فايسبوك") || lower.contains("facebook") -> "com.facebook.katana"
+            lower.contains("تيكتوك") || lower.contains("تيك توك") || lower.contains("tiktok") -> "com.zhiliaoapp.musically"
+            lower.contains("انستغرام") || lower.contains("انستقرام") || lower.contains("instagram") -> "com.instagram.android"
+            lower.contains("يوتيوب") || lower.contains("youtube") -> "com.google.android.youtube"
+            lower.contains("واتساب") || lower.contains("whatsapp") -> "com.whatsapp"
+            lower.contains("ماسنجر") || lower.contains("messenger") -> "com.facebook.orca"
+            lower.contains("تيليجرام") || lower.contains("تليجرام") || lower.contains("telegram") -> "org.telegram.messenger"
+            lower.contains("سبوتيفاي") || lower.contains("spotify") -> "com.spotify.music"
+            lower.contains("نتفليكس") || lower.contains("netflix") -> "com.netflix.mediaclient"
+            else -> null
+        }
+
+        // اسم التطبيق التقريبي للبحث في المثبتات
+        val appNameClean = text.replace(Regex("(?i)افتحي|افتح|شغلي|شغل|حلي|حل|تطبيق|برنامج|في نافذة صغيرة|نافذة صغيرة|عائمة|منبثقة|يا رمزي|رمزي"), "").trim()
+
+        val installedApps = appResolver.getAllInstalledApps()
+        val matchedApp = if (targetPkg != null) {
+            installedApps.find { it.packageName == targetPkg || it.packageName.contains(targetPkg.substringAfterLast(".")) }
+        } else {
+            installedApps.find { it.appName.lowercase().contains(appNameClean.lowercase()) }
+        }
+
+        val pkgToOpen = matchedApp?.packageName ?: targetPkg
+        val finalAppName = matchedApp?.appName ?: appNameClean
+
+        if (pkgToOpen != null) {
+            return try {
+                if (isSmallWindow) {
+                    // تشغيل التطبيق كنافذة حرة عائمة عبر Shizuku
+                    val shellCmd = "am start -n $(cmd package resolve-activity --brief $pkgToOpen | tail -n 1) --windowingMode 5"
+                    ShizukuShellRunner.execCommand(shellCmd)
+                    HandlerResult.DirectReply("✅ تم فتح $finalAppName في نافذة مصغرة يا رمزي.")
+                } else {
+                    val intent = context.packageManager.getLaunchIntentForPackage(pkgToOpen)?.apply {
+                        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                    }
+                    if (intent != null) {
+                        context.startActivity(intent)
+                        HandlerResult.DirectReply("✅ تم فتح $finalAppName يا رمزي.")
+                    } else {
+                        HandlerResult.Error("⚠️ لم أتمكن من العثور على تطبيق $finalAppName مثبت في هاتفك.")
+                    }
+                }
+            } catch (_: Exception) {
+                appResolver.openApp(pkgToOpen)
+                HandlerResult.DirectReply("✅ تم فتح $finalAppName يا رمزي.")
+            }
+        }
+
+        return HandlerResult.Error("⚠️ لم أتعرف على التطبيق المطلوب بدقة يا رمزي. جرب مثلاً: 'افتحي فيسبوك' أو 'افتحي تيك توك'.")
     }
 
     private suspend fun handleSendMessage(text: String): HandlerResult {
