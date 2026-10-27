@@ -8,9 +8,12 @@ import android.hardware.camera2.CameraManager
 import android.media.AudioManager
 import android.net.Uri
 import android.os.BatteryManager
+import android.os.Build
+import android.os.Environment
 import android.provider.MediaStore
 import android.provider.Settings
 import android.util.Log
+import com.racha.ai.core.agent.DynamicActionRunner
 import com.racha.ai.core.contacts.ContactResolver
 import com.racha.ai.core.eve.EveAccessibilityService
 import com.racha.ai.core.eve.EveState
@@ -33,6 +36,7 @@ class IntentHandler(
 ) {
     companion object { private const val TAG = "RachaIntentHandler" }
     private val setAlarmHandler = SetAlarmHandler(context)
+    private val dynamicActionRunner = DynamicActionRunner(context)
 
     private fun getFriendlyName(): String {
         return listOf("يا رمزي", "رمزي", "صديقي", "يا غالي", "").random()
@@ -89,13 +93,18 @@ class IntentHandler(
             IntentClassifier.IntentType.LIST_APPS -> handleListApps()
             IntentClassifier.IntentType.SET_ALARM -> handleSetAlarm(text)
             IntentClassifier.IntentType.CORRECTION -> HandlerResult.NeedsCorrection(text)
-            else -> handleAdvancedCommands(text)
+            else -> {
+                // استدعاء الوكيل الذاتي الذكي لمحاولة حل وتنفيذ الأمر قبل الاستسلام
+                val dynamicRes = dynamicActionRunner.tryExecuteDynamicAction(text)
+                if (dynamicRes != null && dynamicRes.success) {
+                    HandlerResult.DirectReply(dynamicRes.feedback)
+                } else {
+                    handleAdvancedCommands(text)
+                }
+            }
         }
     }
 
-    /**
-     * محرك فتح التطبيقات الذكي ودعم النوافذ المصغرة العائمة
-     */
     private fun handleOpenApp(text: String): HandlerResult {
         val lower = text.lowercase().trim()
         val isSmallWindow = lower.contains("نافذة صغيرة") || lower.contains("نافذه صغيره") ||
@@ -114,9 +123,7 @@ class IntentHandler(
             else -> null
         }
 
-        // اسم التطبيق التقريبي للبحث في المثبتات
         val appNameClean = text.replace(Regex("(?i)افتحي|افتح|شغلي|شغل|حلي|حل|تطبيق|برنامج|في نافذة صغيرة|نافذة صغيرة|عائمة|منبثقة|يا رمزي|رمزي"), "").trim()
-
         val installedApps = appResolver.getAllInstalledApps()
         val matchedApp = if (targetPkg != null) {
             installedApps.find { it.packageName == targetPkg || it.packageName.contains(targetPkg.substringAfterLast(".")) }
@@ -130,7 +137,6 @@ class IntentHandler(
         if (pkgToOpen != null) {
             return try {
                 if (isSmallWindow) {
-                    // تشغيل التطبيق كنافذة حرة عائمة عبر Shizuku
                     val shellCmd = "am start -n $(cmd package resolve-activity --brief $pkgToOpen | tail -n 1) --windowingMode 5"
                     ShizukuShellRunner.execCommand(shellCmd)
                     HandlerResult.DirectReply("✅ تم فتح $finalAppName في نافذة مصغرة يا رمزي.")
