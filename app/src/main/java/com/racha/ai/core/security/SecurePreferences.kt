@@ -1,58 +1,45 @@
 package com.racha.ai.core.security
 
 import android.content.Context
-import android.content.SharedPreferences
 import androidx.security.crypto.EncryptedSharedPreferences
 import androidx.security.crypto.MasterKey
 
-/**
- * تخزين آمن للبيانات الحساسة مثل API Keys.
- * يستخدم EncryptedSharedPreferences مع مفتاح رئيسي في Android Keystore.
- */
 class SecurePreferences(context: Context) {
 
-    private val masterKey: MasterKey = MasterKey.Builder(context)
+    private val masterKey = MasterKey.Builder(context)
         .setKeyScheme(MasterKey.KeyScheme.AES256_GCM)
         .build()
 
-    private val prefs: SharedPreferences = EncryptedSharedPreferences.create(
+    private val sharedPreferences = EncryptedSharedPreferences.create(
         context,
-        PREFS_NAME,
+        "racha_secure_prefs",
         masterKey,
         EncryptedSharedPreferences.PrefKeyEncryptionScheme.AES256_SIV,
         EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM
     )
 
-    /**
-     * حفظ API Key مشفراً.
-     */
     fun saveApiKey(apiKey: String) {
-        prefs.edit().putString(KEY_GEMINI_API, apiKey).apply()
+        sharedPreferences.edit().putString(KEY_API_KEY, apiKey).apply()
     }
 
-    /**
-     * قراءة API Key. يعيد null إذا لم يُحفظ بعد.
-     */
     fun getApiKey(): String? {
-        return prefs.getString(KEY_GEMINI_API, null)
+        return sharedPreferences.getString(KEY_API_KEY, null)
     }
 
-    /**
-     * حذف API Key (للاستخدام في "مسح البيانات").
-     */
-    fun clearApiKey() {
-        prefs.edit().remove(KEY_GEMINI_API).apply()
+    fun saveGitHubToken(token: String) {
+        sharedPreferences.edit().putString(KEY_GITHUB_TOKEN, token).apply()
     }
 
-    /**
-     * هل يوجد API Key محفوظ؟
-     */
-    fun hasApiKey(): Boolean {
-        return !getApiKey().isNullOrBlank()
+    fun getGitHubToken(): String? {
+        return sharedPreferences.getString(KEY_GITHUB_TOKEN, null)
+    }
+
+    fun clearAll() {
+        sharedPreferences.edit().clear().apply()
     }
 
     companion object {
-        private const val PREFS_NAME = "racha_secure_prefs"
-        private const val KEY_GEMINI_API = "gemini_api_key"
+        private const val KEY_API_KEY = "api_key"
+        private const val KEY_GITHUB_TOKEN = "github_token"
     }
 }
