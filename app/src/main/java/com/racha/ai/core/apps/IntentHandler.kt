@@ -10,7 +10,6 @@ import android.net.Uri
 import android.os.BatteryManager
 import android.provider.MediaStore
 import android.provider.Settings
-import android.util.Log
 import com.racha.ai.core.agent.DynamicActionRunner
 import com.racha.ai.core.contacts.ContactResolver
 import com.racha.ai.core.eve.EveAccessibilityService
@@ -52,6 +51,11 @@ class IntentHandler(
     suspend fun handle(text: String): HandlerResult = withContext(Dispatchers.IO) {
         val intentType = IntentClassifier.classify(text)
         return@withContext when (intentType) {
+            IntentClassifier.IntentType.OPEN_NOTIFICATIONS -> {
+                EveState.openShelf(MediaShelfType.NOTIFICATIONS)
+                val suffix = getFriendlyName().let { if (it.isNotBlank()) " $it" else "" }
+                HandlerResult.DirectReply("🔔 تفضل$suffix، هذه هي الإشعارات الواردة.")
+            }
             IntentClassifier.IntentType.OPEN_APP -> handleOpenApp(text)
             IntentClassifier.IntentType.OPEN_PHOTOS -> {
                 EveState.openShelf(MediaShelfType.PHOTOS)

@@ -66,10 +66,6 @@ class EveBubbleService : Service() {
 
     private val conversationHistory = mutableListOf<Pair<String, String>>()
 
-    private fun getWakeGreeting(): String {
-        return listOf("نعم رمزي، أنا أستمع إليك", "أهلاً رمزي، تفضل كلي آذان صاغية", "معك، تفضل بأمرك", "أهلاً بك، أستمع إليك").random()
-    }
-
     override fun onBind(intent: Intent?): IBinder? = null
 
     override fun onCreate() {
@@ -396,7 +392,11 @@ class EveBubbleService : Service() {
                          lower.contains("وريني") || lower.contains("أرني") || lower.contains("ارني") ||
                          lower.contains("شوفي") || lower.contains("شوف") || lower.contains("هاتي") || lower.contains("هات")
 
-            if (isShow && (lower.contains("فيديو") || lower.contains("فيديوهات") || lower.contains("مقاطع") || lower.contains("مقطع"))) {
+            // فحص فتح الإشعارات العائمة بالصوت
+            if (isShow && (lower.contains("اشعار") || lower.contains("اشعارات") || lower.contains("إشعار") || lower.contains("إشعارات"))) {
+                EveState.openShelf(MediaShelfType.NOTIFICATIONS)
+                speakCleanText("تفضل الإشعارات الواردة يا رمزي", continueConversation = false)
+            } else if (isShow && (lower.contains("فيديو") || lower.contains("فيديوهات") || lower.contains("مقاطع") || lower.contains("مقطع"))) {
                 EveState.openShelf(MediaShelfType.VIDEOS)
                 speakCleanText("تفضل مقاطع الفيديو يا رمزي", continueConversation = false)
             } else if (isShow && (lower.contains("صور") || lower.contains("الصور") || lower.contains("صورة") || lower.contains("البوم") || lower.contains("ألبوم") || lower.contains("معرض"))) {

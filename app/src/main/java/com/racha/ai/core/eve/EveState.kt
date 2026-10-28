@@ -10,7 +10,7 @@ enum class EveMood {
 }
 
 enum class MediaShelfType {
-    NONE, PHOTOS, VIDEOS, MUSIC
+    NONE, PHOTOS, VIDEOS, MUSIC, NOTIFICATIONS
 }
 
 data class MediaPlaybackState(

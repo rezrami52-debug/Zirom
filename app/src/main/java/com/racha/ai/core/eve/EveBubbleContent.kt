@@ -1,5 +1,7 @@
 package com.racha.ai.core.eve
 
+import android.content.Context
+import android.content.Intent
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.os.Build
@@ -17,6 +19,7 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -40,7 +43,9 @@ import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.IntOffset
@@ -49,9 +54,14 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
 import com.racha.ai.core.media.LocalMediaManager
 import com.racha.ai.core.media.MediaItemData
+import com.racha.ai.core.shizuku.ShizukuShellRunner
+import com.racha.ai.data.repository.NotificationRepository
+import com.racha.ai.domain.model.AppNotification
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
+import java.text.SimpleDateFormat
+import java.util.Date
 import java.util.Locale
 import kotlin.math.roundToInt
 
@@ -76,19 +86,25 @@ fun EveBubbleContent(
     val shelfType = eveUiState.shelfType
 
     val context = LocalContext.current
+    val density = LocalDensity.current
+    val configuration = LocalConfiguration.current
     val mediaManager = remember { LocalMediaManager(context) }
 
-    // مستوى الزوم للشاشة (0: عادي 265dp، 1: متوسط 305dp، 2: كبير 345dp، 3: مسرحي 380dp)
-    var zoomLevel by remember { mutableIntStateOf(0) }
+    val notifications by NotificationRepository.notifications.collectAsState()
+
+    val maxAllowedWidth = (configuration.screenWidthDp - 25).dp
+    val maxAllowedHeight = (configuration.screenHeightDp - 100).dp
+    var customWidth by remember { mutableStateOf(275.dp) }
+    var customHeight by remember { mutableStateOf(350.dp) }
+
     var activePreviewItem by remember { mutableStateOf<MediaItemData?>(null) }
 
     LaunchedEffect(shelfType) {
         activePreviewItem = null
-        zoomLevel = 0
     }
 
-    val items by produceState<List<MediaItemData>>(initialValue = emptyList(), shelfType) {
-        if (shelfType != MediaShelfType.NONE) {
+    val mediaItems by produceState<List<MediaItemData>>(initialValue = emptyList(), shelfType) {
+        if (shelfType != MediaShelfType.NONE && shelfType != MediaShelfType.NOTIFICATIONS) {
             value = withContext(Dispatchers.IO) {
                 when (shelfType) {
                     MediaShelfType.MUSIC -> mediaManager.getLocalAudios()
@@ -156,7 +172,6 @@ fun EveBubbleContent(
         verticalAlignment = Alignment.Top,
         horizontalArrangement = Arrangement.Start
     ) {
-        // --- 1. جسد EVE وإيماءات اللمس ---
         Column(
             horizontalAlignment = Alignment.CenterHorizontally,
             modifier = modifier
@@ -347,347 +362,343 @@ fun EveBubbleContent(
             }
         }
 
-        // --- 2. نافذة الوسائط والمشغل السينمائي المطوّر ---
+        // --- 2. نافذة العرض العائمة مع التحجيم الحر وسحب الإشعارات ---
         AnimatedVisibility(
             visible = shelfType != MediaShelfType.NONE,
             enter = fadeIn(),
             exit = fadeOut()
         ) {
-            // أبعاد النافذة حسب مستوى التكبير المختار (0 إلى 3)
-            val windowWidth = when (zoomLevel) {
-                1 -> 305.dp
-                2 -> 345.dp
-                3 -> 380.dp
-                else -> 265.dp
-            }
-            val windowHeight = when (zoomLevel) {
-                1 -> 400.dp
-                2 -> 480.dp
-                3 -> 560.dp
-                else -> 330.dp
-            }
-
-            val zoomLabel = when (zoomLevel) {
-                1 -> "2x"
-                2 -> "3x"
-                3 -> "4x 🎬"
-                else -> "1x"
-            }
-
             Surface(
                 modifier = Modifier
                     .padding(start = 10.dp)
-                    .width(windowWidth)
-                    .height(windowHeight),
+                    .width(customWidth)
+                    .height(customHeight),
                 shape = RoundedCornerShape(18.dp),
                 color = Color(0xFF070B16).copy(alpha = 0.98f),
                 border = BorderStroke(1.5.dp, Color(0xFF00E5FF).copy(alpha = 0.8f)),
-                shadowElevation = 16.dp
+                shadowElevation = 18.dp
             ) {
-                Column(modifier = Modifier.padding(8.dp)) {
-                    // شريط العنوان وأزرار التحجيم
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Text(
-                            text = if (activePreviewItem != null) "🎬 المشغل ($zoomLabel)" else when (shelfType) {
-                                MediaShelfType.MUSIC -> "الموسيقى (${items.size}) 🎶"
-                                MediaShelfType.VIDEOS -> "الفيديوهات (${items.size}) 📽️"
-                                MediaShelfType.PHOTOS -> "الصور (${items.size}) 🖼️"
-                                else -> ""
-                            },
-                            color = Color(0xFF00E5FF),
-                            fontSize = 12.sp,
-                            fontWeight = FontWeight.Bold
-                        )
+                Box(modifier = Modifier.fillMaxSize()) {
+                    Column(modifier = Modifier.padding(10.dp).fillMaxSize()) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = when {
+                                    activePreviewItem != null -> "🎬 المشغل السينمائي"
+                                    shelfType == MediaShelfType.NOTIFICATIONS -> "الإشعارات (${notifications.size}) 🔔"
+                                    shelfType == MediaShelfType.MUSIC -> "الموسيقى (${mediaItems.size}) 🎶"
+                                    shelfType == MediaShelfType.VIDEOS -> "الفيديوهات (${mediaItems.size}) 📽️"
+                                    shelfType == MediaShelfType.PHOTOS -> "الصور (${mediaItems.size}) 🖼️"
+                                    else -> ""
+                                },
+                                color = Color(0xFF00E5FF),
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.Bold
+                            )
 
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            // زر التبديل بين مستويات الزوم الأربعة (1x -> 2x -> 3x -> 4x -> 1x)
-                            IconButton(
-                                onClick = { zoomLevel = (zoomLevel + 1) % 4 },
-                                modifier = Modifier.size(26.dp)
-                            ) {
-                                Icon(
-                                    imageVector = if (zoomLevel > 0) Icons.Default.FullscreenExit else Icons.Default.Fullscreen,
-                                    contentDescription = "تحجيم الشاشة",
-                                    tint = Color(0xFF00E5FF),
-                                    modifier = Modifier.size(18.dp)
-                                )
-                            }
-
-                            if (activePreviewItem != null) {
-                                TextButton(
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                IconButton(
                                     onClick = {
-                                        activePreviewItem = null
-                                        zoomLevel = 0
-                                    },
-                                    contentPadding = PaddingValues(horizontal = 6.dp, vertical = 2.dp)
-                                ) {
-                                    Text("رجوع ↩️", color = Color.White, fontSize = 11.sp)
-                                }
-                            }
-
-                            IconButton(onClick = { EveState.closeShelf() }, modifier = Modifier.size(24.dp)) {
-                                Icon(Icons.Default.Close, contentDescription = "إغلاق", tint = Color.Gray, modifier = Modifier.size(16.dp))
-                            }
-                        }
-                    }
-
-                    Divider(color = Color.White.copy(alpha = 0.15f), thickness = 1.dp, modifier = Modifier.padding(vertical = 4.dp))
-
-                    // 1. شاشة المشغل المباشر
-                    if (activePreviewItem != null) {
-                        val currentItem = activePreviewItem!!
-                        val currentIndex = items.indexOfFirst { it.id == currentItem.id }
-
-                        if (currentItem.type == "VIDEO") {
-                            var videoViewRef by remember { mutableStateOf<VideoView?>(null) }
-                            var isPlaying by remember { mutableStateOf(true) }
-                            var currentPosition by remember { mutableIntStateOf(0) }
-                            var totalDuration by remember { mutableIntStateOf(1) }
-
-                            // تحديث الفيديو عند الانتقال للتالي أو السابق
-                            LaunchedEffect(currentItem.uri) {
-                                currentPosition = 0
-                                isPlaying = true
-                                videoViewRef?.setVideoURI(currentItem.uri)
-                                videoViewRef?.start()
-                            }
-
-                            LaunchedEffect(isPlaying) {
-                                while (isPlaying) {
-                                    videoViewRef?.let { vv ->
-                                        if (vv.isPlaying) {
-                                            currentPosition = vv.currentPosition
-                                            totalDuration = vv.duration.coerceAtLeast(1)
+                                        if (customWidth > 320.dp) {
+                                            customWidth = 275.dp
+                                            customHeight = 350.dp
+                                        } else {
+                                            customWidth = maxAllowedWidth
+                                            customHeight = maxAllowedHeight
                                         }
-                                    }
-                                    delay(400)
-                                }
-                            }
-
-                            Column(modifier = Modifier.weight(1f).fillMaxWidth()) {
-                                Box(
-                                    modifier = Modifier
-                                        .weight(1f)
-                                        .fillMaxWidth()
-                                        .clip(RoundedCornerShape(12.dp))
-                                        .background(Color.Black)
+                                    },
+                                    modifier = Modifier.size(26.dp)
                                 ) {
-                                    AndroidView(
-                                        factory = { ctx ->
-                                            VideoView(ctx).apply {
-                                                setVideoURI(currentItem.uri)
-                                                setOnPreparedListener { mp ->
-                                                    totalDuration = duration.coerceAtLeast(1)
-                                                    mp.isLooping = true
-                                                    start()
-                                                    isPlaying = true
-                                                }
-                                                videoViewRef = this
-                                            }
-                                        },
-                                        update = { vv ->
-                                            videoViewRef = vv
-                                        },
-                                        modifier = Modifier.fillMaxSize()
+                                    Icon(
+                                        imageVector = if (customWidth > 320.dp) Icons.Default.FullscreenExit else Icons.Default.Fullscreen,
+                                        contentDescription = "ملء الشاشة",
+                                        tint = Color(0xFF00E5FF),
+                                        modifier = Modifier.size(18.dp)
                                     )
                                 }
 
-                                Spacer(modifier = Modifier.height(6.dp))
+                                if (activePreviewItem != null) {
+                                    TextButton(
+                                        onClick = { activePreviewItem = null },
+                                        contentPadding = PaddingValues(horizontal = 6.dp, vertical = 2.dp)
+                                    ) {
+                                        Text("رجوع ↩️", color = Color.White, fontSize = 11.sp)
+                                    }
+                                }
 
-                                // شريط التحكم السينمائي مع أزرار التالي والسابق
-                                Surface(
-                                    shape = RoundedCornerShape(12.dp),
-                                    color = Color(0xFF0F172A).copy(alpha = 0.95f),
-                                    border = BorderStroke(1.dp, Color(0xFF00E5FF).copy(alpha = 0.4f)),
-                                    modifier = Modifier.fillMaxWidth()
+                                IconButton(onClick = { EveState.closeShelf() }, modifier = Modifier.size(24.dp)) {
+                                    Icon(Icons.Default.Close, contentDescription = "إغلاق", tint = Color.Gray, modifier = Modifier.size(16.dp))
+                                }
+                            }
+                        }
+
+                        Divider(color = Color.White.copy(alpha = 0.15f), thickness = 1.dp, modifier = Modifier.padding(vertical = 4.dp))
+
+                        if (shelfType == MediaShelfType.NOTIFICATIONS) {
+                            if (notifications.isEmpty()) {
+                                Box(modifier = Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
+                                    Text("لا توجد إشعارات جديدة حالياً يا رمزي", color = Color.Gray, fontSize = 11.sp)
+                                }
+                            } else {
+                                LazyColumn(
+                                    modifier = Modifier.weight(1f).fillMaxWidth(),
+                                    verticalArrangement = Arrangement.spacedBy(6.dp)
                                 ) {
-                                    Column(modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)) {
-                                        Row(
-                                            modifier = Modifier.fillMaxWidth(),
-                                            verticalAlignment = Alignment.CenterVertically
-                                        ) {
-                                            Text(formatMillis(currentPosition), color = Color.White, fontSize = 9.sp)
-                                            Slider(
-                                                value = currentPosition.toFloat(),
-                                                onValueChange = {
-                                                    currentPosition = it.toInt()
-                                                    videoViewRef?.seekTo(it.toInt())
-                                                },
-                                                valueRange = 0f..totalDuration.toFloat(),
-                                                modifier = Modifier.weight(1f).height(18.dp)
-                                            )
-                                            Text(formatMillis(totalDuration), color = Color.Gray, fontSize = 9.sp)
-                                        }
-
-                                        Row(
-                                            modifier = Modifier.fillMaxWidth(),
-                                            horizontalArrangement = Arrangement.SpaceEvenly,
-                                            verticalAlignment = Alignment.CenterVertically
-                                        ) {
-                                            // 1. الفيديو السابق
-                                            IconButton(
-                                                onClick = {
-                                                    if (currentIndex > 0) {
-                                                        activePreviewItem = items[currentIndex - 1]
-                                                    }
-                                                },
-                                                enabled = currentIndex > 0,
-                                                modifier = Modifier.size(28.dp)
-                                            ) {
-                                                Icon(
-                                                    Icons.Default.SkipPrevious,
-                                                    contentDescription = "السابق",
-                                                    tint = if (currentIndex > 0) Color(0xFF00E5FF) else Color.DarkGray,
-                                                    modifier = Modifier.size(18.dp)
-                                                )
-                                            }
-
-                                            // 2. ترجيع 10 ثوانٍ
-                                            IconButton(
-                                                onClick = {
-                                                    videoViewRef?.let { vv ->
-                                                        val target = (vv.currentPosition - 10000).coerceAtLeast(0)
-                                                        vv.seekTo(target)
-                                                        currentPosition = target
-                                                    }
-                                                },
-                                                modifier = Modifier.size(26.dp)
-                                            ) {
-                                                Icon(Icons.Default.FastRewind, contentDescription = "ترجيع 10ث", tint = Color.White, modifier = Modifier.size(16.dp))
-                                            }
-
-                                            // 3. تشغيل / إيقاف
-                                            IconButton(
-                                                onClick = {
-                                                    videoViewRef?.let { vv ->
-                                                        if (vv.isPlaying) {
-                                                            vv.pause()
-                                                            isPlaying = false
-                                                        } else {
-                                                            vv.start()
-                                                            isPlaying = true
-                                                        }
-                                                    }
-                                                },
-                                                modifier = Modifier.size(34.dp).background(Color(0xFF00E5FF), CircleShape)
-                                            ) {
-                                                Icon(
-                                                    imageVector = if (isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
-                                                    contentDescription = "تشغيل/إيقاف",
-                                                    tint = Color.Black,
-                                                    modifier = Modifier.size(20.dp)
-                                                )
-                                            }
-
-                                            // 4. تقديم 10 ثوانٍ
-                                            IconButton(
-                                                onClick = {
-                                                    videoViewRef?.let { vv ->
-                                                        val target = (vv.currentPosition + 10000).coerceAtMost(vv.duration)
-                                                        vv.seekTo(target)
-                                                        currentPosition = target
-                                                    }
-                                                },
-                                                modifier = Modifier.size(26.dp)
-                                            ) {
-                                                Icon(Icons.Default.FastForward, contentDescription = "تقديم 10ث", tint = Color.White, modifier = Modifier.size(16.dp))
-                                            }
-
-                                            // 5. الفيديو التالي
-                                            IconButton(
-                                                onClick = {
-                                                    if (currentIndex != -1 && currentIndex < items.lastIndex) {
-                                                        activePreviewItem = items[currentIndex + 1]
-                                                    }
-                                                },
-                                                enabled = currentIndex != -1 && currentIndex < items.lastIndex,
-                                                modifier = Modifier.size(28.dp)
-                                            ) {
-                                                Icon(
-                                                    Icons.Default.SkipNext,
-                                                    contentDescription = "التالي",
-                                                    tint = if (currentIndex != -1 && currentIndex < items.lastIndex) Color(0xFF00E5FF) else Color.DarkGray,
-                                                    modifier = Modifier.size(18.dp)
-                                                )
-                                            }
+                                    items(notifications) { notif ->
+                                        NotificationItemRow(notif = notif) {
+                                            openAppInFreeform(context, notif.packageName)
                                         }
                                     }
                                 }
                             }
-                        } else if (currentItem.type == "PHOTO") {
-                            val bmp = remember(currentItem) {
-                                try {
-                                    context.contentResolver.openInputStream(currentItem.uri)?.use { stream ->
-                                        BitmapFactory.decodeStream(stream)?.asImageBitmap()
+                        } else if (activePreviewItem != null) {
+                            val currentItem = activePreviewItem!!
+                            val currentIndex = mediaItems.indexOfFirst { it.id == currentItem.id }
+
+                            if (currentItem.type == "VIDEO") {
+                                var videoViewRef by remember { mutableStateOf<VideoView?>(null) }
+                                var isPlaying by remember { mutableStateOf(true) }
+                                var currentPosition by remember { mutableIntStateOf(0) }
+                                var totalDuration by remember { mutableIntStateOf(1) }
+
+                                LaunchedEffect(currentItem.uri) {
+                                    currentPosition = 0
+                                    isPlaying = true
+                                    videoViewRef?.setVideoURI(currentItem.uri)
+                                    videoViewRef?.start()
+                                }
+
+                                LaunchedEffect(isPlaying) {
+                                    while (isPlaying) {
+                                        videoViewRef?.let { vv ->
+                                            if (vv.isPlaying) {
+                                                currentPosition = vv.currentPosition
+                                                totalDuration = vv.duration.coerceAtLeast(1)
+                                            }
+                                        }
+                                        delay(400)
                                     }
-                                } catch (_: Exception) { null }
-                            }
-                            if (bmp != null) {
-                                Image(
-                                    bitmap = bmp,
-                                    contentDescription = null,
-                                    modifier = Modifier
-                                        .weight(1f)
-                                        .fillMaxWidth()
-                                        .clip(RoundedCornerShape(12.dp)),
-                                    contentScale = ContentScale.Fit
-                                )
-                            }
-                        }
-                    } else {
-                        // 2. قائمة الاستعراض مع البوسترات الحية والصور المصغرة
-                        if (items.isEmpty()) {
-                            Box(modifier = Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
-                                Text("لا توجد ملفات أو جاري الفحص...", color = Color.Gray, fontSize = 11.sp)
+                                }
+
+                                Column(modifier = Modifier.weight(1f).fillMaxWidth()) {
+                                    Box(
+                                        modifier = Modifier
+                                            .weight(1f)
+                                            .fillMaxWidth()
+                                            .clip(RoundedCornerShape(12.dp))
+                                            .background(Color.Black)
+                                    ) {
+                                        AndroidView(
+                                            factory = { ctx ->
+                                                VideoView(ctx).apply {
+                                                    setVideoURI(currentItem.uri)
+                                                    setOnPreparedListener { mp ->
+                                                        totalDuration = duration.coerceAtLeast(1)
+                                                        mp.isLooping = true
+                                                        start()
+                                                        isPlaying = true
+                                                    }
+                                                    videoViewRef = this
+                                                }
+                                            },
+                                            update = { vv -> videoViewRef = vv },
+                                            modifier = Modifier.fillMaxSize()
+                                        )
+                                    }
+
+                                    Spacer(modifier = Modifier.height(6.dp))
+
+                                    Surface(
+                                        shape = RoundedCornerShape(12.dp),
+                                        color = Color(0xFF0F172A).copy(alpha = 0.95f),
+                                        border = BorderStroke(1.dp, Color(0xFF00E5FF).copy(alpha = 0.4f)),
+                                        modifier = Modifier.fillMaxWidth()
+                                    ) {
+                                        Column(modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)) {
+                                            Row(
+                                                modifier = Modifier.fillMaxWidth(),
+                                                verticalAlignment = Alignment.CenterVertically
+                                            ) {
+                                                Text(formatMillis(currentPosition), color = Color.White, fontSize = 9.sp)
+                                                Slider(
+                                                    value = currentPosition.toFloat(),
+                                                    onValueChange = {
+                                                        currentPosition = it.toInt()
+                                                        videoViewRef?.seekTo(it.toInt())
+                                                    },
+                                                    valueRange = 0f..totalDuration.toFloat(),
+                                                    modifier = Modifier.weight(1f).height(18.dp)
+                                                )
+                                                Text(formatMillis(totalDuration), color = Color.Gray, fontSize = 9.sp)
+                                            }
+
+                                            Row(
+                                                modifier = Modifier.fillMaxWidth(),
+                                                horizontalArrangement = Arrangement.SpaceEvenly,
+                                                verticalAlignment = Alignment.CenterVertically
+                                            ) {
+                                                IconButton(
+                                                    onClick = {
+                                                        if (currentIndex > 0) activePreviewItem = mediaItems[currentIndex - 1]
+                                                    },
+                                                    enabled = currentIndex > 0,
+                                                    modifier = Modifier.size(28.dp)
+                                                ) {
+                                                    Icon(Icons.Default.SkipPrevious, contentDescription = "السابق", tint = if (currentIndex > 0) Color(0xFF00E5FF) else Color.DarkGray, modifier = Modifier.size(18.dp))
+                                                }
+
+                                                IconButton(
+                                                    onClick = {
+                                                        videoViewRef?.let { vv ->
+                                                            val target = (vv.currentPosition - 10000).coerceAtLeast(0)
+                                                            vv.seekTo(target)
+                                                            currentPosition = target
+                                                        }
+                                                    },
+                                                    modifier = Modifier.size(26.dp)
+                                                ) {
+                                                    Icon(Icons.Default.FastRewind, contentDescription = "ترجيع 10ث", tint = Color.White, modifier = Modifier.size(16.dp))
+                                                }
+
+                                                IconButton(
+                                                    onClick = {
+                                                        videoViewRef?.let { vv ->
+                                                            if (vv.isPlaying) {
+                                                                vv.pause()
+                                                                isPlaying = false
+                                                            } else {
+                                                                vv.start()
+                                                                isPlaying = true
+                                                            }
+                                                        }
+                                                    },
+                                                    modifier = Modifier.size(34.dp).background(Color(0xFF00E5FF), CircleShape)
+                                                ) {
+                                                    Icon(
+                                                        imageVector = if (isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
+                                                        contentDescription = "تشغيل/إيقاف",
+                                                        tint = Color.Black,
+                                                        modifier = Modifier.size(20.dp)
+                                                    )
+                                                }
+
+                                                IconButton(
+                                                    onClick = {
+                                                        videoViewRef?.let { vv ->
+                                                            val target = (vv.currentPosition + 10000).coerceAtMost(vv.duration)
+                                                            vv.seekTo(target)
+                                                            currentPosition = target
+                                                        }
+                                                    },
+                                                    modifier = Modifier.size(26.dp)
+                                                ) {
+                                                    Icon(Icons.Default.FastForward, contentDescription = "تقديم 10ث", tint = Color.White, modifier = Modifier.size(16.dp))
+                                                }
+
+                                                IconButton(
+                                                    onClick = {
+                                                        if (currentIndex != -1 && currentIndex < mediaItems.lastIndex) activePreviewItem = mediaItems[currentIndex + 1]
+                                                    },
+                                                    enabled = currentIndex != -1 && currentIndex < mediaItems.lastIndex,
+                                                    modifier = Modifier.size(28.dp)
+                                                ) {
+                                                    Icon(Icons.Default.SkipNext, contentDescription = "التالي", tint = if (currentIndex != -1 && currentIndex < mediaItems.lastIndex) Color(0xFF00E5FF) else Color.DarkGray, modifier = Modifier.size(18.dp))
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            } else if (currentItem.type == "PHOTO") {
+                                val bmp = remember(currentItem) {
+                                    try {
+                                        context.contentResolver.openInputStream(currentItem.uri)?.use { stream ->
+                                            BitmapFactory.decodeStream(stream)?.asImageBitmap()
+                                        }
+                                    } catch (_: Exception) { null }
+                                }
+                                if (bmp != null) {
+                                    Image(
+                                        bitmap = bmp,
+                                        contentDescription = null,
+                                        modifier = Modifier.weight(1f).fillMaxWidth().clip(RoundedCornerShape(12.dp)),
+                                        contentScale = ContentScale.Fit
+                                    )
+                                }
                             }
                         } else {
-                            LazyColumn(
-                                modifier = Modifier.weight(1f).fillMaxWidth(),
-                                verticalArrangement = Arrangement.spacedBy(4.dp)
-                            ) {
-                                items(items) { item ->
-                                    Row(
-                                        modifier = Modifier
-                                            .fillMaxWidth()
-                                            .clip(RoundedCornerShape(8.dp))
-                                            .clickable {
+                            if (mediaItems.isEmpty()) {
+                                Box(modifier = Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
+                                    Text("لا توجد ملفات أو جاري الفحص...", color = Color.Gray, fontSize = 11.sp)
+                                }
+                            } else {
+                                LazyColumn(
+                                    modifier = Modifier.weight(1f).fillMaxWidth(),
+                                    verticalArrangement = Arrangement.spacedBy(4.dp)
+                                ) {
+                                    items(mediaItems) { item ->
+                                        Row(
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .clip(RoundedCornerShape(8.dp))
+                                                .clickable {
                                                 if (item.type == "AUDIO") {
                                                     onMediaItemSelected(item)
                                                 } else {
                                                     activePreviewItem = item
                                                 }
                                             }
-                                            .background(Color.White.copy(alpha = 0.05f))
-                                            .padding(vertical = 5.dp, horizontal = 6.dp),
-                                        verticalAlignment = Alignment.CenterVertically
-                                    ) {
-                                        // البوستر الحقيقي المصغر للفيديو أو الصورة بدلاً من الأيقونة الزرقاء!
-                                        MediaItemThumbnail(
-                                            item = item,
-                                            modifier = Modifier
-                                                .size(width = 46.dp, height = 34.dp)
-                                                .clip(RoundedCornerShape(6.dp))
-                                        )
-
-                                        Spacer(modifier = Modifier.width(8.dp))
-
-                                        Text(
-                                            text = item.title,
-                                            color = Color.White,
-                                            fontSize = 11.sp,
-                                            maxLines = 1,
-                                            overflow = TextOverflow.Ellipsis,
-                                            fontWeight = FontWeight.Medium,
-                                            modifier = Modifier.weight(1f)
-                                        )
+                                                .background(Color.White.copy(alpha = 0.05f))
+                                                .padding(vertical = 5.dp, horizontal = 6.dp),
+                                            verticalAlignment = Alignment.CenterVertically
+                                        ) {
+                                            MediaItemThumbnail(
+                                                item = item,
+                                                modifier = Modifier.size(width = 46.dp, height = 34.dp).clip(RoundedCornerShape(6.dp))
+                                            )
+                                            Spacer(modifier = Modifier.width(8.dp))
+                                            Text(
+                                                text = item.title,
+                                                color = Color.White,
+                                                fontSize = 11.sp,
+                                                maxLines = 1,
+                                                overflow = TextOverflow.Ellipsis,
+                                                fontWeight = FontWeight.Medium,
+                                                modifier = Modifier.weight(1f)
+                                            )
+                                        }
                                     }
                                 }
                             }
                         }
+                    }
+
+                    // مقبض السحب اليدوي الحر في زاوية النافذة السفلية
+                    Box(
+                        modifier = Modifier
+                            .align(Alignment.BottomEnd)
+                            .size(28.dp)
+                            .pointerInput(Unit) {
+                                detectDragGestures { change, dragAmount ->
+                                    change.consume()
+                                    with(density) {
+                                        val newW = customWidth + dragAmount.x.toDp()
+                                        val newH = customHeight + dragAmount.y.toDp()
+                                        customWidth = newW.coerceIn(240.dp, maxAllowedWidth)
+                                        customHeight = newH.coerceIn(260.dp, maxAllowedHeight)
+                                    }
+                                }
+                            },
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.OpenInFull,
+                            contentDescription = "تحجيم يدوي",
+                            tint = Color(0xFF00E5FF).copy(alpha = 0.85f),
+                            modifier = Modifier.size(16.dp)
+                        )
                     }
                 }
             }
@@ -695,9 +706,61 @@ fun EveBubbleContent(
     }
 }
 
-/**
- * مكون استخراج الصورة المصغرة الحية للفيديو أو الصورة من ذاكرة أندرويد
- */
+@Composable
+private fun NotificationItemRow(
+    notif: AppNotification,
+    onDragOutToOpen: () -> Unit
+) {
+    var dragOffsetX by remember { mutableFloatStateOf(0f) }
+
+    Card(
+        shape = RoundedCornerShape(10.dp),
+        colors = CardDefaults.cardColors(containerColor = Color(0xFF0E1628)),
+        border = BorderStroke(1.dp, Color(0xFF00E5FF).copy(alpha = 0.35f)),
+        modifier = Modifier
+            .fillMaxWidth()
+            .offset { IntOffset(dragOffsetX.roundToInt(), 0) }
+            .pointerInput(notif.packageName) {
+                detectDragGestures(
+                    onDragEnd = {
+                        if (kotlin.math.abs(dragOffsetX) > 90f) {
+                            onDragOutToOpen()
+                        }
+                        dragOffsetX = 0f
+                    },
+                    onDragCancel = { dragOffsetX = 0f },
+                    onDrag = { change, dragAmount ->
+                        change.consume()
+                        dragOffsetX += dragAmount.x
+                    }
+                )
+            }
+    ) {
+        Column(modifier = Modifier.padding(8.dp)) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(notif.appName, color = Color(0xFF00E5FF), fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                Text("اسحب لفتح نافذة 🪟", color = Color(0xFF38BDF8), fontSize = 9.sp)
+            }
+            if (notif.title.isNotBlank()) {
+                Text(notif.title, color = Color.White, fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
+            }
+            if (notif.text.isNotBlank()) {
+                Text(notif.text, color = Color(0xFFCBD5E1), fontSize = 10.sp, maxLines = 2, overflow = TextOverflow.Ellipsis)
+            }
+            Text(
+                text = SimpleDateFormat("HH:mm", Locale.getDefault()).format(Date(notif.timestamp)),
+                color = Color.Gray,
+                fontSize = 8.sp,
+                modifier = Modifier.align(Alignment.End)
+            )
+        }
+    }
+}
+
 @Composable
 private fun MediaItemThumbnail(item: MediaItemData, modifier: Modifier = Modifier) {
     val context = LocalContext.current
@@ -740,6 +803,19 @@ private fun MediaItemThumbnail(item: MediaItemData, modifier: Modifier = Modifie
             )
         }
     }
+}
+
+private fun openAppInFreeform(context: Context, packageName: String) {
+    try {
+        val launchIntent = context.packageManager.getLaunchIntentForPackage(packageName)
+        val componentName = launchIntent?.component?.flattenToShortString()
+        if (componentName != null) {
+            ShizukuShellRunner.execCommand("am start -n $componentName --windowingMode 5")
+        } else {
+            launchIntent?.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            context.startActivity(launchIntent)
+        }
+    } catch (_: Exception) {}
 }
 
 private fun formatMillis(ms: Int): String {

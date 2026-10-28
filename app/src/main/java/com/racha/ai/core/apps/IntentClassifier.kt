@@ -9,7 +9,7 @@ object IntentClassifier {
         GET_TIME, GET_DATE, GET_BATTERY, TOGGLE_FLASHLIGHT,
         TOGGLE_BLUETOOTH, GREETING, SMALL_TALK, PRAYER_TIMES,
         FIND_MY_PHONE, MOSQUE_MODE, MACRO_SLEEP, MACRO_CINEMA, MACRO_WORK,
-        OPEN_PHOTOS, OPEN_VIDEOS, OPEN_MUSIC,
+        OPEN_PHOTOS, OPEN_VIDEOS, OPEN_MUSIC, OPEN_NOTIFICATIONS,
         CORRECTION, UNKNOWN
     }
 
@@ -18,6 +18,14 @@ object IntentClassifier {
 
         if (isCorrection(text)) return IntentType.CORRECTION
         if (isSetAlarm(text)) return IntentType.SET_ALARM
+
+        // أوامر عرض واستعراض الإشعارات
+        if (lower.contains("اشعار") || lower.contains("اشعارات") || lower.contains("إشعار") || lower.contains("إشعارات")) {
+            if (lower.contains("اعرض") || lower.contains("اعرضي") || lower.contains("افتح") || lower.contains("افتحي") ||
+                lower.contains("استعرض") || lower.contains("استعرضي") || lower.contains("شوفي") || lower.contains("وريني") || lower.contains("هاتي")) {
+                return IntentType.OPEN_NOTIFICATIONS
+            }
+        }
 
         // أوامر الوسائط
         val isMediaCmd = lower.contains("استعرض") || lower.contains("استعرضي") || lower.contains("اعرض") ||
@@ -29,25 +37,22 @@ object IntentClassifier {
         if (isMediaCmd && (lower.contains("صور") || lower.contains("صورة") || lower.contains("صوري") || lower.contains("البوم") || lower.contains("ألبوم") || lower.contains("معرض"))) return IntentType.OPEN_PHOTOS
         if (isMediaCmd && (lower.contains("موسيقى") || lower.contains("اغاني") || lower.contains("أغاني") || lower.contains("صوتيات") || lower.contains("غناء"))) return IntentType.OPEN_MUSIC
 
-        // أوامر فتح التطبيقات المباشرة
+        // أوامر فتح التطبيقات
         val isOpenAppCmd = lower.startsWith("افتح") || lower.startsWith("افتحي") || lower.startsWith("شغل") ||
                            lower.startsWith("شغلي") || lower.startsWith("حل") || lower.startsWith("حلي") ||
                            lower.contains("تطبيق") || lower.contains("برنامج")
 
-        if (isOpenAppCmd && !lower.contains("كاميرا") && !lower.contains("متصفح") && !lower.contains("خريطة")) {
+        if (isOpenAppCmd && !lower.contains("كاميرا") && !lower.contains("متصفح") && !lower.contains("خريطة") && !lower.contains("اشعار")) {
             return IntentType.OPEN_APP
         }
 
-        // أين هاتفي
         if (isFindPhoneQuery(lower)) return IntentType.FIND_MY_PHONE
 
-        // الماكرو
         if (lower.contains("وضع المسجد") || lower.contains("صلاة المسجد")) return IntentType.MOSQUE_MODE
         if (lower.contains("وضع النوم") || lower.contains("تصبح على خير") || lower.contains("نرقد")) return IntentType.MACRO_SLEEP
         if (lower.contains("وضع السينما") || lower.contains("وضع الفيلم")) return IntentType.MACRO_CINEMA
         if (lower.contains("وضع العمل") || lower.contains("وضع التركيز")) return IntentType.MACRO_WORK
 
-        // الوقت والعتاد
         if (isTimeQuery(lower)) return IntentType.GET_TIME
         if (isDateQuery(lower)) return IntentType.GET_DATE
         if (isBatteryQuery(lower)) return IntentType.GET_BATTERY
