@@ -10,6 +10,7 @@ import android.net.Uri
 import android.os.BatteryManager
 import android.provider.MediaStore
 import android.provider.Settings
+import android.util.Log
 import com.racha.ai.core.agent.DynamicActionRunner
 import com.racha.ai.core.contacts.ContactResolver
 import com.racha.ai.core.eve.EveAccessibilityService
