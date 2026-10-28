@@ -16,7 +16,6 @@ import android.speech.tts.TextToSpeech
 import android.speech.tts.UtteranceProgressListener
 import android.speech.tts.Voice
 import android.view.Gravity
-import android.view.MotionEvent
 import android.view.WindowManager
 import android.view.animation.DecelerateInterpolator
 import androidx.compose.ui.platform.ComposeView
@@ -41,11 +40,19 @@ import java.util.Locale
 class EveBubbleService : Service() {
 
     private lateinit var windowManager: WindowManager
-    private var composeView: ComposeView? = null
     private val overlayLifecycleOwner = OverlayLifecycleOwner()
-    private lateinit var layoutParams: WindowManager.LayoutParams
-    private var tts: TextToSpeech? = null
     private val serviceScope = CoroutineScope(Dispatchers.Main + Job())
+
+    // 1. فقاعة EVE
+    private var bubbleView: ComposeView? = null
+    private lateinit var bubbleLayoutParams: WindowManager.LayoutParams
+
+    // 2. نافذة الوسائط المستقلة تماماً (تعدد النوافذ والتحجيم الحر)
+    private var shelfView: ComposeView? = null
+    private var shelfLayoutParams: WindowManager.LayoutParams? = null
+    private var isShelfAdded = false
+
+    private var tts: TextToSpeech? = null
     private var voiceInputHelper: VoiceInputHelper? = null
     private lateinit var intentHandler: IntentHandler
     private lateinit var securePreferences: SecurePreferences
@@ -81,6 +88,7 @@ class EveBubbleService : Service() {
         startForegroundServiceNotification()
         setupHighQualityArabicTts()
         setupFloatingBubble()
+        setupShelfWindowObserver()
         setupScreenStateReceiver()
         setupBatteryGuardianReceiver()
     }
@@ -171,13 +179,12 @@ class EveBubbleService : Service() {
             WindowManager.LayoutParams.TYPE_PHONE
         }
 
-        layoutParams = WindowManager.LayoutParams(
+        bubbleLayoutParams = WindowManager.LayoutParams(
             WindowManager.LayoutParams.WRAP_CONTENT,
             WindowManager.LayoutParams.WRAP_CONTENT,
             layoutType,
             WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
-            WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS or
-            WindowManager.LayoutParams.FLAG_WATCH_OUTSIDE_TOUCH,
+            WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS,
             PixelFormat.TRANSLUCENT
         ).apply {
             gravity = Gravity.TOP or Gravity.START
@@ -185,18 +192,10 @@ class EveBubbleService : Service() {
             y = 280
         }
 
-        composeView = ComposeView(this).apply {
+        bubbleView = ComposeView(this).apply {
             overlayLifecycleOwner.attachToComposeView(this)
-
-            setOnTouchListener { _, event ->
-                if (event.action == MotionEvent.ACTION_OUTSIDE) {
-                    handleTapOutside()
-                    true
-                } else false
-            }
-
             setContent {
-                EveBubbleContent(
+                EveBubbleAvatar(
                     onToggleSleepWake = { isAwake ->
                         if (isAwake) {
                             if (tts?.isSpeaking == true) tts?.stop()
@@ -211,15 +210,14 @@ class EveBubbleService : Service() {
                     onMediaPlayPause = { togglePlayPause() },
                     onMediaNext = { skipNext() },
                     onMediaPrev = { skipPrev() },
-                    onMediaItemSelected = { item -> playSelectedAudio(item) },
-                    onDrag = { dx, dy -> updatePosition(dx, dy) },
+                    onDrag = { dx, dy -> updateBubblePosition(dx, dy) },
                     onDragEnd = { handleDragEnd() }
                 )
             }
         }
 
         try {
-            windowManager.addView(composeView, layoutParams)
+            windowManager.addView(bubbleView, bubbleLayoutParams)
             overlayLifecycleOwner.handleResume()
         } catch (e: Exception) {
             e.printStackTrace()
@@ -227,11 +225,103 @@ class EveBubbleService : Service() {
         }
     }
 
+    /**
+     * مراقبة فتح وإغلاق النافذة العائمة المستقلة دون قفلها عند النقر بالخارج
+     */
+    private fun setupShelfWindowObserver() {
+        serviceScope.launch {
+            EveState.uiState.collect { state ->
+                if (state.shelfType != MediaShelfType.NONE) {
+                    showOrUpdateShelfWindow()
+                } else {
+                    hideShelfWindow()
+                }
+            }
+        }
+    }
+
+    private fun showOrUpdateShelfWindow() {
+        if (shelfView == null) {
+            val layoutType = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY
+            } else {
+                @Suppress("DEPRECATION")
+                WindowManager.LayoutParams.TYPE_PHONE
+            }
+
+            val density = resources.displayMetrics.density
+            val defaultWidth = (280 * density).toInt()
+            val defaultHeight = (380 * density).toInt()
+
+            shelfLayoutParams = WindowManager.LayoutParams(
+                defaultWidth,
+                defaultHeight,
+                layoutType,
+                WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
+                WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS,
+                PixelFormat.TRANSLUCENT
+            ).apply {
+                gravity = Gravity.TOP or Gravity.START
+                x = 120
+                y = 240
+            }
+
+            shelfView = ComposeView(this).apply {
+                overlayLifecycleOwner.attachToComposeView(this)
+                setContent {
+                    EveStandaloneShelfWindow(
+                        onClose = { EveState.closeShelf() },
+                        onMoveWindow = { dx, dy -> updateShelfPosition(dx, dy) },
+                        onResizeWindow = { dw, dh -> resizeShelfWindow(dw, dh) },
+                        onPlayAudio = { item -> playSelectedAudio(item) }
+                    )
+                }
+            }
+
+            try {
+                windowManager.addView(shelfView, shelfLayoutParams)
+                isShelfAdded = true
+            } catch (e: Exception) { e.printStackTrace() }
+        }
+    }
+
+    private fun hideShelfWindow() {
+        if (shelfView != null && isShelfAdded) {
+            try {
+                windowManager.removeView(shelfView)
+            } catch (e: Exception) { e.printStackTrace() }
+            isShelfAdded = false
+            shelfView = null
+        }
+    }
+
+    private fun updateShelfPosition(dx: Float, dy: Float) {
+        shelfLayoutParams?.let { lp ->
+            lp.x += dx.toInt()
+            lp.y += dy.toInt()
+            try { windowManager.updateViewLayout(shelfView, lp) } catch (_: Exception) {}
+        }
+    }
+
+    private fun resizeShelfWindow(dw: Float, dh: Float) {
+        shelfLayoutParams?.let { lp ->
+            val dm = resources.displayMetrics
+            val minW = (220 * dm.density).toInt()
+            val minH = (260 * dm.density).toInt()
+            val maxW = dm.widthPixels - 20
+            val maxH = dm.heightPixels - 120
+
+            lp.width = (lp.width + dw.toInt()).coerceIn(minW, maxW)
+            lp.height = (lp.height + dh.toInt()).coerceIn(minH, maxH)
+            try { windowManager.updateViewLayout(shelfView, lp) } catch (_: Exception) {}
+        }
+    }
+
     private fun handleDragEnd() {
         val displayMetrics = resources.displayMetrics
         val screenHeight = displayMetrics.heightPixels
 
-        if (layoutParams.y > screenHeight * 0.52f) {
+        if (bubbleLayoutParams.y > screenHeight * 0.52f) {
             closeAndDismiss()
         } else {
             if (appPreferences.isEdgeSnapEnabled()) {
@@ -241,9 +331,10 @@ class EveBubbleService : Service() {
     }
 
     private fun closeAndDismiss() {
+        hideShelfWindow()
         try {
-            composeView?.let { windowManager.removeView(it) }
-            composeView = null
+            bubbleView?.let { windowManager.removeView(it) }
+            bubbleView = null
         } catch (_: Exception) {}
         stopSelf()
     }
@@ -252,25 +343,19 @@ class EveBubbleService : Service() {
         val displayMetrics = resources.displayMetrics
         val screenWidth = displayMetrics.widthPixels
         val screenHeight = displayMetrics.heightPixels
-        val bubbleWidth = composeView?.width ?: 200
+        val bubbleWidth = bubbleView?.width ?: 200
 
-        val targetX = if (layoutParams.x + bubbleWidth / 2 < screenWidth / 2) 20 else screenWidth - bubbleWidth - 20
-        layoutParams.y = layoutParams.y.coerceIn(80, screenHeight - 340)
+        val targetX = if (bubbleLayoutParams.x + bubbleWidth / 2 < screenWidth / 2) 20 else screenWidth - bubbleWidth - 20
+        bubbleLayoutParams.y = bubbleLayoutParams.y.coerceIn(80, screenHeight - 340)
 
-        ValueAnimator.ofInt(layoutParams.x, targetX).apply {
+        ValueAnimator.ofInt(bubbleLayoutParams.x, targetX).apply {
             duration = 240
             interpolator = DecelerateInterpolator()
             addUpdateListener { animation ->
-                layoutParams.x = animation.animatedValue as Int
-                try { windowManager.updateViewLayout(composeView, layoutParams) } catch (_: Exception) {}
+                bubbleLayoutParams.x = animation.animatedValue as Int
+                try { windowManager.updateViewLayout(bubbleView, bubbleLayoutParams) } catch (_: Exception) {}
             }
         }.start()
-    }
-
-    private fun handleTapOutside() {
-        EveState.closeShelf()
-        EveState.setMood(EveMood.SLEEPING)
-        stopListening()
     }
 
     private fun playSelectedAudio(item: MediaItemData) {
@@ -392,7 +477,7 @@ class EveBubbleService : Service() {
                          lower.contains("وريني") || lower.contains("أرني") || lower.contains("ارني") ||
                          lower.contains("شوفي") || lower.contains("شوف") || lower.contains("هاتي") || lower.contains("هات")
 
-            // فحص فتح الإشعارات العائمة بالصوت
+            // الأوامر المركبة والمتعددة
             if (isShow && (lower.contains("اشعار") || lower.contains("اشعارات") || lower.contains("إشعار") || lower.contains("إشعارات"))) {
                 EveState.openShelf(MediaShelfType.NOTIFICATIONS)
                 speakCleanText("تفضل الإشعارات الواردة يا رمزي", continueConversation = false)
@@ -501,10 +586,10 @@ class EveBubbleService : Service() {
         voiceInputHelper?.stopListening()
     }
 
-    private fun updatePosition(dx: Float, dy: Float) {
-        layoutParams.x += dx.toInt()
-        layoutParams.y += dy.toInt()
-        try { windowManager.updateViewLayout(composeView, layoutParams) } catch (_: Exception) {}
+    private fun updateBubblePosition(dx: Float, dy: Float) {
+        bubbleLayoutParams.x += dx.toInt()
+        bubbleLayoutParams.y += dy.toInt()
+        try { windowManager.updateViewLayout(bubbleView, bubbleLayoutParams) } catch (_: Exception) {}
     }
 
     private fun handleEveClick() {
@@ -530,6 +615,7 @@ class EveBubbleService : Service() {
 
     override fun onDestroy() {
         super.onDestroy()
+        hideShelfWindow()
         screenReceiver?.let { unregisterReceiver(it) }
         batteryReceiver?.let { unregisterReceiver(it) }
         exoPlayer?.release()
