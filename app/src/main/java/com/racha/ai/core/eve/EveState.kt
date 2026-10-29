@@ -32,8 +32,10 @@ data class EveUiState(
     val mood: EveMood = EveMood.SLEEPING,
     val config: EveCustomizationConfig = EveCustomizationConfig(),
     val playback: MediaPlaybackState = MediaPlaybackState(),
-    val shelfType: MediaShelfType = MediaShelfType.NONE
-)
+    val openShelves: Set<MediaShelfType> = emptySet()
+) {
+    val shelfType: MediaShelfType get() = openShelves.firstOrNull() ?: MediaShelfType.NONE
+}
 
 object EveState {
     private val _uiState = MutableStateFlow(EveUiState())
@@ -72,12 +74,29 @@ object EveState {
         )
     }
 
+    // فتح نافذة دون إغلاق النوافذ الأخرى
     fun openShelf(type: MediaShelfType) {
-        _uiState.value = _uiState.value.copy(shelfType = type)
+        if (type != MediaShelfType.NONE) {
+            val current = _uiState.value.openShelves
+            _uiState.value = _uiState.value.copy(openShelves = current + type)
+        }
     }
 
-    fun closeShelf() {
-        _uiState.value = _uiState.value.copy(shelfType = MediaShelfType.NONE)
+    // فتح عدة نوافذ معاً دفعة واحدة للأوامر المركبة
+    fun openMultipleShelves(types: List<MediaShelfType>) {
+        val validTypes = types.filter { it != MediaShelfType.NONE }
+        val current = _uiState.value.openShelves
+        _uiState.value = _uiState.value.copy(openShelves = current + validTypes.toSet())
+    }
+
+    // إغلاق نافذة معينة فقط مع بقاء النوافذ الأخرى
+    fun closeShelf(type: MediaShelfType) {
+        val current = _uiState.value.openShelves
+        _uiState.value = _uiState.value.copy(openShelves = current - type)
+    }
+
+    fun closeAllShelves() {
+        _uiState.value = _uiState.value.copy(openShelves = emptySet())
     }
 
     fun addNotification() {

@@ -51,7 +51,28 @@ class IntentHandler(
 
     suspend fun handle(text: String): HandlerResult = withContext(Dispatchers.IO) {
         val intentType = IntentClassifier.classify(text)
+        val lower = text.lowercase()
+
         return@withContext when (intentType) {
+            // تنفيذ الأوامر المركبة وفتح كل النوافذ المطلوبة معاً
+            IntentClassifier.IntentType.OPEN_MULTI_SHELVES -> {
+                val typesToOpen = mutableListOf<MediaShelfType>()
+                if (lower.contains("فيديو") || lower.contains("مقاطع")) typesToOpen.add(MediaShelfType.VIDEOS)
+                if (lower.contains("صور") || lower.contains("معرض") || lower.contains("البوم")) typesToOpen.add(MediaShelfType.PHOTOS)
+                if (lower.contains("موسيقى") || lower.contains("اغاني")) typesToOpen.add(MediaShelfType.MUSIC)
+                if (lower.contains("اشعار") || lower.contains("إشعار")) typesToOpen.add(MediaShelfType.NOTIFICATIONS)
+
+                // إذا طلب نافذة أخرى للصور أو الفيديو دون تحديد الكل
+                if (typesToOpen.isEmpty()) {
+                    if (lower.contains("صور")) typesToOpen.add(MediaShelfType.PHOTOS)
+                    else if (lower.contains("فيديو")) typesToOpen.add(MediaShelfType.VIDEOS)
+                    else if (lower.contains("موسيقى")) typesToOpen.add(MediaShelfType.MUSIC)
+                }
+
+                EveState.openMultipleShelves(typesToOpen)
+                val suffix = getFriendlyName().let { if (it.isNotBlank()) " $it" else "" }
+                HandlerResult.DirectReply("🪟 من عيوني$suffix، تم فتح النوافذ المستقلة معاً على الشاشة.")
+            }
             IntentClassifier.IntentType.OPEN_NOTIFICATIONS -> {
                 EveState.openShelf(MediaShelfType.NOTIFICATIONS)
                 val suffix = getFriendlyName().let { if (it.isNotBlank()) " $it" else "" }

@@ -322,7 +322,6 @@ fun EveBubbleAvatar(
             }
         }
 
-        // زر إغلاق صريح وفوري بلمسة واحدة
         Box(
             modifier = Modifier
                 .align(Alignment.TopEnd)
@@ -342,13 +341,13 @@ fun EveBubbleAvatar(
  */
 @Composable
 fun EveStandaloneShelfWindow(
+    targetShelfType: MediaShelfType,
     onClose: () -> Unit,
     onMoveWindow: (dx: Float, dy: Float) -> Unit,
     onResizeWindow: (dw: Float, dh: Float) -> Unit,
     onPlayAudio: (MediaItemData) -> Unit
 ) {
-    val eveUiState by EveState.uiState.collectAsState()
-    val shelfType = eveUiState.shelfType
+    val shelfType = targetShelfType
     val context = LocalContext.current
     val mediaManager = remember { LocalMediaManager(context) }
     val notifications by NotificationRepository.notifications.collectAsState()
@@ -383,7 +382,6 @@ fun EveStandaloneShelfWindow(
     ) {
         Box(modifier = Modifier.fillMaxSize()) {
             Column(modifier = Modifier.padding(8.dp).fillMaxSize()) {
-                // شريط العنوان: يدعم سحب وتحريك النافذة بحرية في أي مكان
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -431,7 +429,6 @@ fun EveStandaloneShelfWindow(
 
                 Divider(color = Color.White.copy(alpha = 0.15f), thickness = 1.dp, modifier = Modifier.padding(vertical = 4.dp))
 
-                // محتوى النافذة
                 if (shelfType == MediaShelfType.NOTIFICATIONS) {
                     if (notifications.isEmpty()) {
                         Box(modifier = Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
@@ -642,7 +639,7 @@ fun EveStandaloneShelfWindow(
                 }
             }
 
-            // مقبض التحجيم اليدوي ثنائي الأبعاد (أفقي وعمودي معاً ⤢)
+            // مقبض التحجيم اليدوي الحر (أفقي وعمودي معاً ⤢)
             Box(
                 modifier = Modifier
                     .align(Alignment.BottomEnd)

@@ -47,10 +47,13 @@ class EveBubbleService : Service() {
     private var bubbleView: ComposeView? = null
     private lateinit var bubbleLayoutParams: WindowManager.LayoutParams
 
-    // 2. نافذة الوسائط المستقلة تماماً
-    private var shelfView: ComposeView? = null
-    private var shelfLayoutParams: WindowManager.LayoutParams? = null
-    private var isShelfAdded = false
+    // 2. خريطة النوافذ العائمة المتعددة المستقلة تماماً (True Multi-Window)
+    private data class ShelfWindowHolder(
+        val type: MediaShelfType,
+        val view: ComposeView,
+        val layoutParams: WindowManager.LayoutParams
+    )
+    private val activeShelfWindows = mutableMapOf<MediaShelfType, ShelfWindowHolder>()
 
     private var tts: TextToSpeech? = null
     private var voiceInputHelper: VoiceInputHelper? = null
@@ -88,7 +91,7 @@ class EveBubbleService : Service() {
         startForegroundServiceNotification()
         setupHighQualityArabicTts()
         setupFloatingBubble()
-        setupShelfWindowObserver()
+        setupMultiWindowObserver()
         setupScreenStateReceiver()
         setupBatteryGuardianReceiver()
     }
@@ -225,92 +228,106 @@ class EveBubbleService : Service() {
         }
     }
 
-    private fun setupShelfWindowObserver() {
+    /**
+     * محرك النوافذ المتعددة المستقلة (مراقبة فتح وإغلاق كل نافذة بمفردها)
+     */
+    private fun setupMultiWindowObserver() {
         serviceScope.launch {
             EveState.uiState.collect { state ->
-                if (state.shelfType != MediaShelfType.NONE) {
-                    showOrUpdateShelfWindow()
-                } else {
-                    hideShelfWindow()
+                val desiredShelves = state.openShelves
+
+                // 1. إغلاق النوافذ التي طلب إغلاقها
+                val toRemove = activeShelfWindows.keys.filter { it !in desiredShelves }
+                for (type in toRemove) {
+                    activeShelfWindows[type]?.let { holder ->
+                        try {
+                            windowManager.removeView(holder.view)
+                        } catch (_: Exception) {}
+                    }
+                    activeShelfWindows.remove(type)
+                }
+
+                // 2. إنشاء النوافذ الجديدة بترتيب شلالي مستقل
+                var cascadeOffset = 0
+                for (type in desiredShelves) {
+                    if (type !in activeShelfWindows) {
+                        createAndAddShelfWindow(type, cascadeOffset)
+                        cascadeOffset += 50
+                    }
                 }
             }
         }
     }
 
-    private fun showOrUpdateShelfWindow() {
-        if (shelfView == null) {
-            val layoutType = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY
-            } else {
-                @Suppress("DEPRECATION")
-                WindowManager.LayoutParams.TYPE_PHONE
+    private fun createAndAddShelfWindow(type: MediaShelfType, offset: Int) {
+        val layoutType = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY
+        } else {
+            @Suppress("DEPRECATION")
+            WindowManager.LayoutParams.TYPE_PHONE
+        }
+
+        val density = resources.displayMetrics.density
+        val defaultWidth = (280 * density).toInt()
+        val defaultHeight = (380 * density).toInt()
+
+        val lp = WindowManager.LayoutParams(
+            defaultWidth,
+            defaultHeight,
+            layoutType,
+            WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
+            WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS,
+            PixelFormat.TRANSLUCENT
+        ).apply {
+            gravity = Gravity.TOP or Gravity.START
+            x = (70 * density).toInt() + offset
+            y = (180 * density).toInt() + offset
+        }
+
+        val view = ComposeView(this).apply {
+            overlayLifecycleOwner.attachToComposeView(this)
+            setContent {
+                EveStandaloneShelfWindow(
+                    targetShelfType = type,
+                    onClose = { EveState.closeShelf(type) },
+                    onMoveWindow = { dx, dy -> updateShelfPosition(type, dx, dy) },
+                    onResizeWindow = { dw, dh -> resizeShelfWindow(type, dw, dh) },
+                    onPlayAudio = { item -> playSelectedAudio(item) }
+                )
             }
+        }
 
-            val density = resources.displayMetrics.density
-            val defaultWidth = (280 * density).toInt()
-            val defaultHeight = (380 * density).toInt()
+        try {
+            windowManager.addView(view, lp)
+            activeShelfWindows[type] = ShelfWindowHolder(type, view, lp)
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+    }
 
-            shelfLayoutParams = WindowManager.LayoutParams(
-                defaultWidth,
-                defaultHeight,
-                layoutType,
-                WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
-                WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS,
-                PixelFormat.TRANSLUCENT
-            ).apply {
-                gravity = Gravity.TOP or Gravity.START
-                x = 120
-                y = 240
-            }
-
-            shelfView = ComposeView(this).apply {
-                overlayLifecycleOwner.attachToComposeView(this)
-                setContent {
-                    EveStandaloneShelfWindow(
-                        onClose = { EveState.closeShelf() },
-                        onMoveWindow = { dx, dy -> updateShelfPosition(dx, dy) },
-                        onResizeWindow = { dw, dh -> resizeShelfWindow(dw, dh) },
-                        onPlayAudio = { item -> playSelectedAudio(item) }
-                    )
-                }
-            }
-
+    private fun updateShelfPosition(type: MediaShelfType, dx: Float, dy: Float) {
+        activeShelfWindows[type]?.let { holder ->
+            holder.layoutParams.x += dx.toInt()
+            holder.layoutParams.y += dy.toInt()
             try {
-                windowManager.addView(shelfView, shelfLayoutParams)
-                isShelfAdded = true
-            } catch (e: Exception) { e.printStackTrace() }
+                windowManager.updateViewLayout(holder.view, holder.layoutParams)
+            } catch (_: Exception) {}
         }
     }
 
-    private fun hideShelfWindow() {
-        if (shelfView != null && isShelfAdded) {
-            try {
-                windowManager.removeView(shelfView)
-            } catch (e: Exception) { e.printStackTrace() }
-            isShelfAdded = false
-            shelfView = null
-        }
-    }
-
-    private fun updateShelfPosition(dx: Float, dy: Float) {
-        shelfLayoutParams?.let { lp ->
-            lp.x += dx.toInt()
-            lp.y += dy.toInt()
-            try { windowManager.updateViewLayout(shelfView, lp) } catch (_: Exception) {}
-        }
-    }
-
-    private fun resizeShelfWindow(dw: Float, dh: Float) {
-        shelfLayoutParams?.let { lp ->
+    private fun resizeShelfWindow(type: MediaShelfType, dw: Float, dh: Float) {
+        activeShelfWindows[type]?.let { holder ->
             val dm = resources.displayMetrics
             val minW = (220 * dm.density).toInt()
             val minH = (260 * dm.density).toInt()
             val maxW = dm.widthPixels - 20
             val maxH = dm.heightPixels - 120
 
-            lp.width = (lp.width + dw.toInt()).coerceIn(minW, maxW)
-            lp.height = (lp.height + dh.toInt()).coerceIn(minH, maxH)
-            try { windowManager.updateViewLayout(shelfView, lp) } catch (_: Exception) {}
+            holder.layoutParams.width = (holder.layoutParams.width + dw.toInt()).coerceIn(minW, maxW)
+            holder.layoutParams.height = (holder.layoutParams.height + dh.toInt()).coerceIn(minH, maxH)
+            try {
+                windowManager.updateViewLayout(holder.view, holder.layoutParams)
+            } catch (_: Exception) {}
         }
     }
 
@@ -328,7 +345,12 @@ class EveBubbleService : Service() {
     }
 
     private fun closeAndDismiss() {
-        hideShelfWindow()
+        for (holder in activeShelfWindows.values) {
+            try { windowManager.removeView(holder.view) } catch (_: Exception) {}
+        }
+        activeShelfWindows.clear()
+        EveState.closeAllShelves()
+
         try {
             bubbleView?.let { windowManager.removeView(it) }
             bubbleView = null
@@ -353,12 +375,6 @@ class EveBubbleService : Service() {
                 try { windowManager.updateViewLayout(bubbleView, bubbleLayoutParams) } catch (_: Exception) {}
             }
         }.start()
-    }
-
-    private fun handleTapOutside() {
-        EveState.closeShelf()
-        EveState.setMood(EveMood.SLEEPING)
-        stopListening()
     }
 
     private fun playSelectedAudio(item: MediaItemData) {
@@ -478,18 +494,43 @@ class EveBubbleService : Service() {
             val isShow = lower.contains("استعرض") || lower.contains("استعرضي") || lower.contains("اعرض") ||
                          lower.contains("اعرضي") || lower.contains("افتح") || lower.contains("افتحي") ||
                          lower.contains("وريني") || lower.contains("أرني") || lower.contains("ارني") ||
-                         lower.contains("شوفي") || lower.contains("شوف") || lower.contains("هاتي") || lower.contains("هات")
+                         lower.contains("شوفي") || lower.contains("شوف") || lower.contains("هاتي") ||
+                         lower.contains("هات") || lower.contains("حل") || lower.contains("حليلي") ||
+                         lower.contains("فرجني") || lower.contains("فرّجني") || lower.contains("خرجلي")
 
-            if (isShow && (lower.contains("اشعار") || lower.contains("اشعارات") || lower.contains("إشعار") || lower.contains("إشعارات"))) {
+            val hasVideo = lower.contains("فيديو") || lower.contains("فيديوهات") || lower.contains("مقاطع")
+            val hasPhoto = lower.contains("صور") || lower.contains("صورة") || lower.contains("معرض") || lower.contains("البوم")
+            val hasMusic = lower.contains("موسيقى") || lower.contains("اغاني") || lower.contains("أغاني") || lower.contains("صوتيات")
+            val hasNotif = lower.contains("اشعار") || lower.contains("اشعارات") || lower.contains("إشعار")
+
+            val mediaCount = listOf(hasVideo, hasPhoto, hasMusic, hasNotif).count { it }
+            val isOtherWindow = lower.contains("اخرى") || lower.contains("أخرى") || lower.contains("منفصلة") ||
+                                lower.contains("كل") || lower.contains("مع بعض") || lower.contains("نوافذ")
+
+            // الأوامر المركبة (فتح عدة نوافذ معاً)
+            if (isShow && (mediaCount >= 2 || (mediaCount >= 1 && isOtherWindow))) {
+                val types = mutableListOf<MediaShelfType>()
+                if (hasVideo) types.add(MediaShelfType.VIDEOS)
+                if (hasPhoto) types.add(MediaShelfType.PHOTOS)
+                if (hasMusic) types.add(MediaShelfType.MUSIC)
+                if (hasNotif) types.add(MediaShelfType.NOTIFICATIONS)
+                if (types.isEmpty()) {
+                    if (hasPhoto) types.add(MediaShelfType.PHOTOS)
+                    else if (hasVideo) types.add(MediaShelfType.VIDEOS)
+                    else if (hasMusic) types.add(MediaShelfType.MUSIC)
+                }
+                EveState.openMultipleShelves(types)
+                speakCleanText("من عيوني يا رمزي، فتحت لك النوافذ معاً على الشاشة.", continueConversation = false)
+            } else if (isShow && hasNotif) {
                 EveState.openShelf(MediaShelfType.NOTIFICATIONS)
                 speakCleanText("تفضل الإشعارات الواردة يا رمزي", continueConversation = false)
-            } else if (isShow && (lower.contains("فيديو") || lower.contains("فيديوهات") || lower.contains("مقاطع") || lower.contains("مقطع"))) {
+            } else if (isShow && hasVideo) {
                 EveState.openShelf(MediaShelfType.VIDEOS)
                 speakCleanText("تفضل مقاطع الفيديو يا رمزي", continueConversation = false)
-            } else if (isShow && (lower.contains("صور") || lower.contains("الصور") || lower.contains("صورة") || lower.contains("البوم") || lower.contains("ألبوم") || lower.contains("معرض"))) {
+            } else if (isShow && hasPhoto) {
                 EveState.openShelf(MediaShelfType.PHOTOS)
                 speakCleanText("تفضل ألبوم الصور", continueConversation = false)
-            } else if (isShow && (lower.contains("موسيقى") || lower.contains("اغاني") || lower.contains("أغاني") || lower.contains("صوتيات") || lower.contains("اناشيد"))) {
+            } else if (isShow && hasMusic) {
                 EveState.openShelf(MediaShelfType.MUSIC)
                 speakCleanText("تفضل قائمة الموسيقى", continueConversation = false)
             } else if (lower.contains("ماذا ترى") || lower.contains("شوفي الشاشة") || lower.contains("حللي الشاشة")) {
@@ -617,7 +658,10 @@ class EveBubbleService : Service() {
 
     override fun onDestroy() {
         super.onDestroy()
-        hideShelfWindow()
+        for (holder in activeShelfWindows.values) {
+            try { windowManager.removeView(holder.view) } catch (_: Exception) {}
+        }
+        activeShelfWindows.clear()
         screenReceiver?.let { unregisterReceiver(it) }
         batteryReceiver?.let { unregisterReceiver(it) }
         exoPlayer?.release()

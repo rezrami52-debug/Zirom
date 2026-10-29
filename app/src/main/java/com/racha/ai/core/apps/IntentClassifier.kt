@@ -9,7 +9,7 @@ object IntentClassifier {
         GET_TIME, GET_DATE, GET_BATTERY, TOGGLE_FLASHLIGHT,
         TOGGLE_BLUETOOTH, GREETING, SMALL_TALK, PRAYER_TIMES,
         FIND_MY_PHONE, MOSQUE_MODE, MACRO_SLEEP, MACRO_CINEMA, MACRO_WORK,
-        OPEN_PHOTOS, OPEN_VIDEOS, OPEN_MUSIC, OPEN_NOTIFICATIONS,
+        OPEN_PHOTOS, OPEN_VIDEOS, OPEN_MUSIC, OPEN_NOTIFICATIONS, OPEN_MULTI_SHELVES,
         CORRECTION, UNKNOWN
     }
 
@@ -19,37 +19,47 @@ object IntentClassifier {
         if (isCorrection(text)) return IntentType.CORRECTION
         if (isSetAlarm(text)) return IntentType.SET_ALARM
 
-        // أوامر عرض واستعراض الإشعارات
-        if (lower.contains("اشعار") || lower.contains("اشعارات") || lower.contains("إشعار") || lower.contains("إشعارات")) {
-            if (lower.contains("اعرض") || lower.contains("اعرضي") || lower.contains("افتح") || lower.contains("افتحي") ||
-                lower.contains("استعرض") || lower.contains("استعرضي") || lower.contains("شوفي") || lower.contains("وريني") || lower.contains("هاتي")) {
-                return IntentType.OPEN_NOTIFICATIONS
-            }
+        // الأفعال بالدارجة التونسية والعربية الفصحى
+        val isMediaCmd = lower.contains("استعرض") || lower.contains("استعرضي") || lower.contains("اعرض") ||
+                         lower.contains("اعرضي") || lower.contains("افتح") || lower.contains("افتحي") ||
+                         lower.contains("وريني") || lower.contains("أرني") || lower.contains("ارني") ||
+                         lower.contains("شوفي") || lower.contains("شوف") || lower.contains("هاتي") ||
+                         lower.contains("هات") || lower.contains("حل") || lower.contains("حليلي") ||
+                         lower.contains("فرجني") || lower.contains("فرّجني") || lower.contains("خرجلي")
+
+        val hasVideo = lower.contains("فيديو") || lower.contains("فيديوهات") || lower.contains("مقاطع") || lower.contains("مقطع")
+        val hasPhoto = lower.contains("صور") || lower.contains("صورة") || lower.contains("صوري") || lower.contains("البوم") || lower.contains("ألبوم") || lower.contains("معرض")
+        val hasMusic = lower.contains("موسيقى") || lower.contains("اغاني") || lower.contains("أغاني") || lower.contains("صوتيات") || lower.contains("غناء")
+        val hasNotif = lower.contains("اشعار") || lower.contains("اشعارات") || lower.contains("إشعار") || lower.contains("إشعارات")
+
+        // 1. فحص الأوامر المركبة (طلب أكثر من نوع، أو طلب نافذة أخرى منفصلة)
+        val mediaCount = listOf(hasVideo, hasPhoto, hasMusic, hasNotif).count { it }
+        val isOtherWindow = lower.contains("اخرى") || lower.contains("أخرى") || lower.contains("منفصلة") ||
+                            lower.contains("كل") || lower.contains("مع بعض") || lower.contains("نوافذ")
+
+        if (isMediaCmd && (mediaCount >= 2 || (mediaCount >= 1 && isOtherWindow))) {
+            return IntentType.OPEN_MULTI_SHELVES
         }
 
-        // أوامر الوسائط
-        val isMediaCmd = lower.contains("استعرض") || lower.contains("استعرضي") || lower.contains("اعرض") ||
-                         lower.contains("اعرضي") || lower.contains("وريني") || lower.contains("أرني") ||
-                         lower.contains("ارني") || lower.contains("شوفي") || lower.contains("شوف") ||
-                         lower.contains("هاتي") || lower.contains("هات")
-
-        if (isMediaCmd && (lower.contains("فيديو") || lower.contains("فيديوهات") || lower.contains("مقاطع") || lower.contains("مقطع"))) return IntentType.OPEN_VIDEOS
-        if (isMediaCmd && (lower.contains("صور") || lower.contains("صورة") || lower.contains("صوري") || lower.contains("البوم") || lower.contains("ألبوم") || lower.contains("معرض"))) return IntentType.OPEN_PHOTOS
-        if (isMediaCmd && (lower.contains("موسيقى") || lower.contains("اغاني") || lower.contains("أغاني") || lower.contains("صوتيات") || lower.contains("غناء"))) return IntentType.OPEN_MUSIC
+        // 2. النوافذ الفردية
+        if (hasNotif && isMediaCmd) return IntentType.OPEN_NOTIFICATIONS
+        if (isMediaCmd && hasVideo) return IntentType.OPEN_VIDEOS
+        if (isMediaCmd && hasPhoto) return IntentType.OPEN_PHOTOS
+        if (isMediaCmd && hasMusic) return IntentType.OPEN_MUSIC
 
         // أوامر فتح التطبيقات
         val isOpenAppCmd = lower.startsWith("افتح") || lower.startsWith("افتحي") || lower.startsWith("شغل") ||
                            lower.startsWith("شغلي") || lower.startsWith("حل") || lower.startsWith("حلي") ||
                            lower.contains("تطبيق") || lower.contains("برنامج")
 
-        if (isOpenAppCmd && !lower.contains("كاميرا") && !lower.contains("متصفح") && !lower.contains("خريطة") && !lower.contains("اشعار")) {
+        if (isOpenAppCmd && !lower.contains("كاميرا") && !lower.contains("متصفح") && !lower.contains("خريطة") && !hasNotif && !hasVideo && !hasPhoto && !hasMusic) {
             return IntentType.OPEN_APP
         }
 
         if (isFindPhoneQuery(lower)) return IntentType.FIND_MY_PHONE
 
         if (lower.contains("وضع المسجد") || lower.contains("صلاة المسجد")) return IntentType.MOSQUE_MODE
-        if (lower.contains("وضع النوم") || lower.contains("تصبح على خير") || lower.contains("نرقد")) return IntentType.MACRO_SLEEP
+        if (lower.contains("وضع النوم") || lower.contains("تصبح على خير") || lower.contains("نرقد") || lower.contains("سكر") || lower.contains("سكّر")) return IntentType.MACRO_SLEEP
         if (lower.contains("وضع السينما") || lower.contains("وضع الفيلم")) return IntentType.MACRO_CINEMA
         if (lower.contains("وضع العمل") || lower.contains("وضع التركيز")) return IntentType.MACRO_WORK
 
