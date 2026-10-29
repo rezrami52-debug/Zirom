@@ -318,7 +318,7 @@ class EveBubbleService : Service() {
         val displayMetrics = resources.displayMetrics
         val screenHeight = displayMetrics.heightPixels
 
-        if (bubbleLayoutParams.y > screenHeight * 0.52f) {
+        if (bubbleLayoutParams.y > screenHeight * 0.50f) {
             closeAndDismiss()
         } else {
             if (appPreferences.isEdgeSnapEnabled()) {
@@ -440,7 +440,7 @@ class EveBubbleService : Service() {
         EveState.setMood(EveMood.AWAKE_SMILING)
 
         voiceInputHelper?.startListening(
-            languageTag = "ar-TN",
+            languageTag = "ar",
             onResult = { text ->
                 isHandlingAwake = false
                 processSpokenText(text)
@@ -625,8 +625,6 @@ class EveBubbleService : Service() {
         tts?.stop()
         tts?.shutdown()
         overlayLifecycleOwner.handleDestroy()
-        
-        // إصلاح الإغلاق النظيف: استخدام bubbleView بدلاً من composeView القديم
         bubbleView?.let {
             try { windowManager.removeView(it) } catch (_: Exception) {}
             bubbleView = null
