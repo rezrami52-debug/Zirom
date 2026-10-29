@@ -4,6 +4,7 @@ import android.content.Context
 import android.content.Intent
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
+import android.media.MediaPlayer
 import android.os.Build
 import android.util.Size
 import android.widget.VideoView
@@ -41,6 +42,7 @@ import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
@@ -322,6 +324,7 @@ fun EveBubbleAvatar(
             }
         }
 
+        // زر إغلاق صريح وفوري بلمسة واحدة
         Box(
             modifier = Modifier
                 .align(Alignment.TopEnd)
@@ -337,7 +340,7 @@ fun EveBubbleAvatar(
 }
 
 /**
- * النافذة العائمة المستقلة تماماً (المشغل السينمائي / الوسائط / الإشعارات)
+ * النافذة العائمة المستقلة تماماً (مشغل سينمائي متكامل مع زر كتم الصوت والزووم الداخلي)
  */
 @Composable
 fun EveStandaloneShelfWindow(
@@ -345,6 +348,7 @@ fun EveStandaloneShelfWindow(
     onClose: () -> Unit,
     onMoveWindow: (dx: Float, dy: Float) -> Unit,
     onResizeWindow: (dw: Float, dh: Float) -> Unit,
+    onBringToFront: () -> Unit = {},
     onPlayAudio: (MediaItemData) -> Unit
 ) {
     val shelfType = targetShelfType
@@ -353,9 +357,13 @@ fun EveStandaloneShelfWindow(
     val notifications by NotificationRepository.notifications.collectAsState()
 
     var activePreviewItem by remember { mutableStateOf<MediaItemData?>(null) }
+    
+    // نسبة الزووم الداخلي للصورة أو الفيديو (1.0x إلى 3.0x)
+    var innerContentZoom by remember { mutableFloatStateOf(1.0f) }
 
     LaunchedEffect(shelfType) {
         activePreviewItem = null
+        innerContentZoom = 1.0f
     }
 
     val mediaItems by produceState<List<MediaItemData>>(initialValue = emptyList(), shelfType) {
@@ -374,7 +382,11 @@ fun EveStandaloneShelfWindow(
     }
 
     Surface(
-        modifier = Modifier.fillMaxSize(),
+        modifier = Modifier
+            .fillMaxSize()
+            .pointerInput(Unit) {
+                detectTapGestures(onTap = { onBringToFront() })
+            },
         shape = RoundedCornerShape(18.dp),
         color = Color(0xFF070B16).copy(alpha = 0.98f),
         border = BorderStroke(1.5.dp, Color(0xFF00E5FF).copy(alpha = 0.8f)),
@@ -382,6 +394,7 @@ fun EveStandaloneShelfWindow(
     ) {
         Box(modifier = Modifier.fillMaxSize()) {
             Column(modifier = Modifier.padding(8.dp).fillMaxSize()) {
+                // شريط العنوان: يدعم سحب وتحريك النافذة بحرية في أي مكان
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -390,6 +403,7 @@ fun EveStandaloneShelfWindow(
                         .pointerInput(Unit) {
                             detectDragGestures { change, dragAmount ->
                                 change.consume()
+                                onBringToFront()
                                 onMoveWindow(dragAmount.x, dragAmount.y)
                             }
                         }
@@ -413,8 +427,26 @@ fun EveStandaloneShelfWindow(
 
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         if (activePreviewItem != null) {
+                            // أزرار تكبير وتصغير المحتوى الداخلي (Zoom In / Out)
+                            IconButton(
+                                onClick = {
+                                    innerContentZoom = if (innerContentZoom >= 2.5f) 1.0f else innerContentZoom + 0.5f
+                                },
+                                modifier = Modifier.size(24.dp)
+                            ) {
+                                Text(
+                                    text = "${String.format(Locale.US, "%.1f", innerContentZoom)}x",
+                                    color = Color(0xFF00E5FF),
+                                    fontSize = 10.sp,
+                                    fontWeight = FontWeight.Bold
+                                )
+                            }
+
                             TextButton(
-                                onClick = { activePreviewItem = null },
+                                onClick = {
+                                    activePreviewItem = null
+                                    innerContentZoom = 1.0f
+                                },
                                 contentPadding = PaddingValues(horizontal = 6.dp, vertical = 2.dp)
                             ) {
                                 Text("رجوع ↩️", color = Color.White, fontSize = 11.sp)
@@ -429,6 +461,7 @@ fun EveStandaloneShelfWindow(
 
                 Divider(color = Color.White.copy(alpha = 0.15f), thickness = 1.dp, modifier = Modifier.padding(vertical = 4.dp))
 
+                // محتوى النافذة
                 if (shelfType == MediaShelfType.NOTIFICATIONS) {
                     if (notifications.isEmpty()) {
                         Box(modifier = Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
@@ -447,8 +480,11 @@ fun EveStandaloneShelfWindow(
                     val currentItem = activePreviewItem!!
                     val currentIndex = mediaItems.indexOfFirst { it.id == currentItem.id }
 
+                    // 1. تشغيل الفيديو مع زر كتم الصوت والزووم
                     if (currentItem.type == "VIDEO") {
                         var videoViewRef by remember { mutableStateOf<VideoView?>(null) }
+                        var mediaPlayerRef by remember { mutableStateOf<MediaPlayer?>(null) }
+                        var isMuted by remember { mutableStateOf(false) }
                         var isPlaying by remember { mutableStateOf(true) }
                         var currentPosition by remember { mutableIntStateOf(0) }
                         var totalDuration by remember { mutableIntStateOf(1) }
@@ -485,8 +521,10 @@ fun EveStandaloneShelfWindow(
                                         VideoView(ctx).apply {
                                             setVideoURI(currentItem.uri)
                                             setOnPreparedListener { mp ->
+                                                mediaPlayerRef = mp
                                                 totalDuration = duration.coerceAtLeast(1)
                                                 mp.isLooping = true
+                                                if (isMuted) mp.setVolume(0f, 0f) else mp.setVolume(1f, 1f)
                                                 start()
                                                 isPlaying = true
                                             }
@@ -494,12 +532,18 @@ fun EveStandaloneShelfWindow(
                                         }
                                     },
                                     update = { vv -> videoViewRef = vv },
-                                    modifier = Modifier.fillMaxSize()
+                                    modifier = Modifier
+                                        .fillMaxSize()
+                                        .graphicsLayer(
+                                            scaleX = innerContentZoom,
+                                            scaleY = innerContentZoom
+                                        )
                                 )
                             }
 
                             Spacer(modifier = Modifier.height(6.dp))
 
+                            // شريط التحكم السفلي المدمج
                             Surface(
                                 shape = RoundedCornerShape(12.dp),
                                 color = Color(0xFF0F172A).copy(alpha = 0.95f),
@@ -526,6 +570,23 @@ fun EveStandaloneShelfWindow(
                                         horizontalArrangement = Arrangement.SpaceEvenly,
                                         verticalAlignment = Alignment.CenterVertically
                                     ) {
+                                        // زر كتم / تشغيل صوت الفيديو بشكل مستقل
+                                        IconButton(
+                                            onClick = {
+                                                isMuted = !isMuted
+                                                val vol = if (isMuted) 0f else 1f
+                                                mediaPlayerRef?.setVolume(vol, vol)
+                                            },
+                                            modifier = Modifier.size(26.dp)
+                                        ) {
+                                            Icon(
+                                                imageVector = if (isMuted) Icons.Default.VolumeOff else Icons.Default.VolumeUp,
+                                                contentDescription = "كتم الصوت",
+                                                tint = if (isMuted) Color(0xFFFF5252) else Color(0xFF00E5FF),
+                                                modifier = Modifier.size(16.dp)
+                                            )
+                                        }
+
                                         IconButton(
                                             onClick = { if (currentIndex > 0) activePreviewItem = mediaItems[currentIndex - 1] },
                                             enabled = currentIndex > 0,
@@ -593,7 +654,9 @@ fun EveStandaloneShelfWindow(
                                 }
                             }
                         }
-                    } else if (currentItem.type == "PHOTO") {
+                    } 
+                    // 2. عارض الصور مع التنقل والزووم الداخلي
+                    else if (currentItem.type == "PHOTO") {
                         val bmp = remember(currentItem) {
                             try {
                                 context.contentResolver.openInputStream(currentItem.uri)?.use { stream ->
@@ -601,13 +664,69 @@ fun EveStandaloneShelfWindow(
                                 }
                             } catch (_: Exception) { null }
                         }
-                        if (bmp != null) {
-                            Image(
-                                bitmap = bmp,
-                                contentDescription = null,
-                                modifier = Modifier.weight(1f).fillMaxWidth().clip(RoundedCornerShape(12.dp)),
-                                contentScale = ContentScale.Fit
-                            )
+
+                        Column(modifier = Modifier.weight(1f).fillMaxWidth()) {
+                            Box(
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .fillMaxWidth()
+                                    .clip(RoundedCornerShape(12.dp))
+                                    .background(Color.Black),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                if (bmp != null) {
+                                    Image(
+                                        bitmap = bmp,
+                                        contentDescription = null,
+                                        modifier = Modifier
+                                            .fillMaxSize()
+                                            .graphicsLayer(
+                                                scaleX = innerContentZoom,
+                                                scaleY = innerContentZoom
+                                            ),
+                                        contentScale = ContentScale.Fit
+                                    )
+                                }
+                            }
+
+                            Spacer(modifier = Modifier.height(6.dp))
+
+                            // شريط التنقل المباشر بين الصور
+                            Surface(
+                                shape = RoundedCornerShape(12.dp),
+                                color = Color(0xFF0F172A).copy(alpha = 0.95f),
+                                border = BorderStroke(1.dp, Color(0xFF00E5FF).copy(alpha = 0.4f)),
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Row(
+                                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp).fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    IconButton(
+                                        onClick = { if (currentIndex > 0) activePreviewItem = mediaItems[currentIndex - 1] },
+                                        enabled = currentIndex > 0,
+                                        modifier = Modifier.size(30.dp)
+                                    ) {
+                                        Icon(Icons.Default.SkipPrevious, contentDescription = "الصورة السابقة", tint = if (currentIndex > 0) Color(0xFF00E5FF) else Color.DarkGray)
+                                    }
+
+                                    Text(
+                                        text = "${currentIndex + 1} / ${mediaItems.size}",
+                                        color = Color.White,
+                                        fontSize = 11.sp,
+                                        fontWeight = FontWeight.Bold
+                                    )
+
+                                    IconButton(
+                                        onClick = { if (currentIndex != -1 && currentIndex < mediaItems.lastIndex) activePreviewItem = mediaItems[currentIndex + 1] },
+                                        enabled = currentIndex != -1 && currentIndex < mediaItems.lastIndex,
+                                        modifier = Modifier.size(30.dp)
+                                    ) {
+                                        Icon(Icons.Default.SkipNext, contentDescription = "الصورة التالية", tint = if (currentIndex != -1 && currentIndex < mediaItems.lastIndex) Color(0xFF00E5FF) else Color.DarkGray)
+                                    }
+                                }
+                            }
                         }
                     }
                 } else {
@@ -647,6 +766,7 @@ fun EveStandaloneShelfWindow(
                     .pointerInput(Unit) {
                         detectDragGestures { change, dragAmount ->
                             change.consume()
+                            onBringToFront()
                             onResizeWindow(dragAmount.x, dragAmount.y)
                         }
                     },

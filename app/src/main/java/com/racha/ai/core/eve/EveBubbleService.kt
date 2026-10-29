@@ -43,11 +43,9 @@ class EveBubbleService : Service() {
     private val overlayLifecycleOwner = OverlayLifecycleOwner()
     private val serviceScope = CoroutineScope(Dispatchers.Main + Job())
 
-    // 1. فقاعة EVE
     private var bubbleView: ComposeView? = null
     private lateinit var bubbleLayoutParams: WindowManager.LayoutParams
 
-    // 2. خريطة النوافذ العائمة المتعددة المستقلة تماماً (True Multi-Window)
     private data class ShelfWindowHolder(
         val type: MediaShelfType,
         val view: ComposeView,
@@ -228,15 +226,11 @@ class EveBubbleService : Service() {
         }
     }
 
-    /**
-     * محرك النوافذ المتعددة المستقلة (مراقبة فتح وإغلاق كل نافذة بمفردها)
-     */
     private fun setupMultiWindowObserver() {
         serviceScope.launch {
             EveState.uiState.collect { state ->
                 val desiredShelves = state.openShelves
 
-                // 1. إغلاق النوافذ التي طلب إغلاقها
                 val toRemove = activeShelfWindows.keys.filter { it !in desiredShelves }
                 for (type in toRemove) {
                     activeShelfWindows[type]?.let { holder ->
@@ -247,7 +241,6 @@ class EveBubbleService : Service() {
                     activeShelfWindows.remove(type)
                 }
 
-                // 2. إنشاء النوافذ الجديدة بترتيب شلالي مستقل
                 var cascadeOffset = 0
                 for (type in desiredShelves) {
                     if (type !in activeShelfWindows) {
@@ -292,6 +285,7 @@ class EveBubbleService : Service() {
                     onClose = { EveState.closeShelf(type) },
                     onMoveWindow = { dx, dy -> updateShelfPosition(type, dx, dy) },
                     onResizeWindow = { dw, dh -> resizeShelfWindow(type, dw, dh) },
+                    onBringToFront = { bringWindowToFront(type) },
                     onPlayAudio = { item -> playSelectedAudio(item) }
                 )
             }
@@ -302,6 +296,18 @@ class EveBubbleService : Service() {
             activeShelfWindows[type] = ShelfWindowHolder(type, view, lp)
         } catch (e: Exception) {
             e.printStackTrace()
+        }
+    }
+
+    /**
+     * نقل النافذة للواجهة والمقدمة فور لمسها (Bring to Front)
+     */
+    private fun bringWindowToFront(type: MediaShelfType) {
+        activeShelfWindows[type]?.let { holder ->
+            try {
+                windowManager.removeView(holder.view)
+                windowManager.addView(holder.view, holder.layoutParams)
+            } catch (_: Exception) {}
         }
     }
 
@@ -375,6 +381,12 @@ class EveBubbleService : Service() {
                 try { windowManager.updateViewLayout(bubbleView, bubbleLayoutParams) } catch (_: Exception) {}
             }
         }.start()
+    }
+
+    private fun handleTapOutside() {
+        EveState.closeShelf()
+        EveState.setMood(EveMood.SLEEPING)
+        stopListening()
     }
 
     private fun playSelectedAudio(item: MediaItemData) {
@@ -507,7 +519,6 @@ class EveBubbleService : Service() {
             val isOtherWindow = lower.contains("اخرى") || lower.contains("أخرى") || lower.contains("منفصلة") ||
                                 lower.contains("كل") || lower.contains("مع بعض") || lower.contains("نوافذ")
 
-            // الأوامر المركبة (فتح عدة نوافذ معاً)
             if (isShow && (mediaCount >= 2 || (mediaCount >= 1 && isOtherWindow))) {
                 val types = mutableListOf<MediaShelfType>()
                 if (hasVideo) types.add(MediaShelfType.VIDEOS)
