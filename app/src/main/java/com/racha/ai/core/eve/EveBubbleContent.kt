@@ -21,6 +21,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.detectDragGestures
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -324,7 +325,6 @@ fun EveBubbleAvatar(
             }
         }
 
-        // زر إغلاق صريح وفوري بلمسة واحدة
         Box(
             modifier = Modifier
                 .align(Alignment.TopEnd)
@@ -357,8 +357,6 @@ fun EveStandaloneShelfWindow(
     val notifications by NotificationRepository.notifications.collectAsState()
 
     var activePreviewItem by remember { mutableStateOf<MediaItemData?>(null) }
-    
-    // نسبة الزووم الداخلي للصورة أو الفيديو (1.0x إلى 3.0x)
     var innerContentZoom by remember { mutableFloatStateOf(1.0f) }
 
     LaunchedEffect(shelfType) {
@@ -394,7 +392,6 @@ fun EveStandaloneShelfWindow(
     ) {
         Box(modifier = Modifier.fillMaxSize()) {
             Column(modifier = Modifier.padding(8.dp).fillMaxSize()) {
-                // شريط العنوان: يدعم سحب وتحريك النافذة بحرية في أي مكان
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -427,7 +424,6 @@ fun EveStandaloneShelfWindow(
 
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         if (activePreviewItem != null) {
-                            // أزرار تكبير وتصغير المحتوى الداخلي (Zoom In / Out)
                             IconButton(
                                 onClick = {
                                     innerContentZoom = if (innerContentZoom >= 2.5f) 1.0f else innerContentZoom + 0.5f
@@ -461,7 +457,6 @@ fun EveStandaloneShelfWindow(
 
                 Divider(color = Color.White.copy(alpha = 0.15f), thickness = 1.dp, modifier = Modifier.padding(vertical = 4.dp))
 
-                // محتوى النافذة
                 if (shelfType == MediaShelfType.NOTIFICATIONS) {
                     if (notifications.isEmpty()) {
                         Box(modifier = Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
@@ -480,7 +475,6 @@ fun EveStandaloneShelfWindow(
                     val currentItem = activePreviewItem!!
                     val currentIndex = mediaItems.indexOfFirst { it.id == currentItem.id }
 
-                    // 1. تشغيل الفيديو مع زر كتم الصوت والزووم
                     if (currentItem.type == "VIDEO") {
                         var videoViewRef by remember { mutableStateOf<VideoView?>(null) }
                         var mediaPlayerRef by remember { mutableStateOf<MediaPlayer?>(null) }
@@ -543,7 +537,6 @@ fun EveStandaloneShelfWindow(
 
                             Spacer(modifier = Modifier.height(6.dp))
 
-                            // شريط التحكم السفلي المدمج
                             Surface(
                                 shape = RoundedCornerShape(12.dp),
                                 color = Color(0xFF0F172A).copy(alpha = 0.95f),
@@ -570,7 +563,6 @@ fun EveStandaloneShelfWindow(
                                         horizontalArrangement = Arrangement.SpaceEvenly,
                                         verticalAlignment = Alignment.CenterVertically
                                     ) {
-                                        // زر كتم / تشغيل صوت الفيديو بشكل مستقل
                                         IconButton(
                                             onClick = {
                                                 isMuted = !isMuted
@@ -654,9 +646,7 @@ fun EveStandaloneShelfWindow(
                                 }
                             }
                         }
-                    } 
-                    // 2. عارض الصور مع التنقل والزووم الداخلي
-                    else if (currentItem.type == "PHOTO") {
+                    } else if (currentItem.type == "PHOTO") {
                         val bmp = remember(currentItem) {
                             try {
                                 context.contentResolver.openInputStream(currentItem.uri)?.use { stream ->
@@ -691,7 +681,6 @@ fun EveStandaloneShelfWindow(
 
                             Spacer(modifier = Modifier.height(6.dp))
 
-                            // شريط التنقل المباشر بين الصور
                             Surface(
                                 shape = RoundedCornerShape(12.dp),
                                 color = Color(0xFF0F172A).copy(alpha = 0.95f),
@@ -758,7 +747,6 @@ fun EveStandaloneShelfWindow(
                 }
             }
 
-            // مقبض التحجيم اليدوي الحر (أفقي وعمودي معاً ⤢)
             Box(
                 modifier = Modifier
                     .align(Alignment.BottomEnd)

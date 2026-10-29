@@ -74,7 +74,6 @@ object EveState {
         )
     }
 
-    // فتح نافذة دون إغلاق النوافذ الأخرى
     fun openShelf(type: MediaShelfType) {
         if (type != MediaShelfType.NONE) {
             val current = _uiState.value.openShelves
@@ -82,17 +81,19 @@ object EveState {
         }
     }
 
-    // فتح عدة نوافذ معاً دفعة واحدة للأوامر المركبة
     fun openMultipleShelves(types: List<MediaShelfType>) {
         val validTypes = types.filter { it != MediaShelfType.NONE }
         val current = _uiState.value.openShelves
         _uiState.value = _uiState.value.copy(openShelves = current + validTypes.toSet())
     }
 
-    // إغلاق نافذة معينة فقط مع بقاء النوافذ الأخرى
-    fun closeShelf(type: MediaShelfType) {
-        val current = _uiState.value.openShelves
-        _uiState.value = _uiState.value.copy(openShelves = current - type)
+    fun closeShelf(type: MediaShelfType = MediaShelfType.NONE) {
+        if (type == MediaShelfType.NONE) {
+            closeAllShelves()
+        } else {
+            val current = _uiState.value.openShelves
+            _uiState.value = _uiState.value.copy(openShelves = current - type)
+        }
     }
 
     fun closeAllShelves() {
