@@ -1,6 +1,7 @@
 package com.racha.ai.core.eve
 
 import android.content.Context
+import android.content.Intent
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.os.Build
@@ -321,9 +322,6 @@ fun EveBubbleAvatar(
     }
 }
 
-/**
- * النافذة العائمة المستقلة تماماً (المشغل السينمائي / الوسائط / الإشعارات)
- */
 @Composable
 fun EveStandaloneShelfWindow(
     onClose: () -> Unit,
@@ -367,7 +365,6 @@ fun EveStandaloneShelfWindow(
     ) {
         Box(modifier = Modifier.fillMaxSize()) {
             Column(modifier = Modifier.padding(8.dp).fillMaxSize()) {
-                // شريط العنوان: يدعم سحب وتحريك النافذة بحرية في أي مكان
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -415,7 +412,6 @@ fun EveStandaloneShelfWindow(
 
                 Divider(color = Color.White.copy(alpha = 0.15f), thickness = 1.dp, modifier = Modifier.padding(vertical = 4.dp))
 
-                // محتوى النافذة
                 if (shelfType == MediaShelfType.NOTIFICATIONS) {
                     if (notifications.isEmpty()) {
                         Box(modifier = Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
@@ -626,7 +622,6 @@ fun EveStandaloneShelfWindow(
                 }
             }
 
-            // مقبض التحجيم اليدوي ثنائي الأبعاد (أفقي وعمودي معاً ⤢)
             Box(
                 modifier = Modifier
                     .align(Alignment.BottomEnd)

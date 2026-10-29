@@ -47,7 +47,7 @@ class EveBubbleService : Service() {
     private var bubbleView: ComposeView? = null
     private lateinit var bubbleLayoutParams: WindowManager.LayoutParams
 
-    // 2. نافذة الوسائط المستقلة تماماً (تعدد النوافذ والتحجيم الحر)
+    // 2. نافذة الوسائط المستقلة تماماً
     private var shelfView: ComposeView? = null
     private var shelfLayoutParams: WindowManager.LayoutParams? = null
     private var isShelfAdded = false
@@ -225,9 +225,6 @@ class EveBubbleService : Service() {
         }
     }
 
-    /**
-     * مراقبة فتح وإغلاق النافذة العائمة المستقلة دون قفلها عند النقر بالخارج
-     */
     private fun setupShelfWindowObserver() {
         serviceScope.launch {
             EveState.uiState.collect { state ->
@@ -358,6 +355,12 @@ class EveBubbleService : Service() {
         }.start()
     }
 
+    private fun handleTapOutside() {
+        EveState.closeShelf()
+        EveState.setMood(EveMood.SLEEPING)
+        stopListening()
+    }
+
     private fun playSelectedAudio(item: MediaItemData) {
         if (item.type == "AUDIO") {
             exoPlayer?.stop()
@@ -477,7 +480,6 @@ class EveBubbleService : Service() {
                          lower.contains("وريني") || lower.contains("أرني") || lower.contains("ارني") ||
                          lower.contains("شوفي") || lower.contains("شوف") || lower.contains("هاتي") || lower.contains("هات")
 
-            // الأوامر المركبة والمتعددة
             if (isShow && (lower.contains("اشعار") || lower.contains("اشعارات") || lower.contains("إشعار") || lower.contains("إشعارات"))) {
                 EveState.openShelf(MediaShelfType.NOTIFICATIONS)
                 speakCleanText("تفضل الإشعارات الواردة يا رمزي", continueConversation = false)
@@ -623,8 +625,11 @@ class EveBubbleService : Service() {
         tts?.stop()
         tts?.shutdown()
         overlayLifecycleOwner.handleDestroy()
-        composeView?.let {
+        
+        // إصلاح الإغلاق النظيف: استخدام bubbleView بدلاً من composeView القديم
+        bubbleView?.let {
             try { windowManager.removeView(it) } catch (_: Exception) {}
+            bubbleView = null
         }
     }
 
