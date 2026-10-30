@@ -12,6 +12,7 @@ import android.provider.MediaStore
 import android.provider.Settings
 import android.util.Log
 import com.racha.ai.core.agent.DynamicActionRunner
+import com.racha.ai.core.contacts.Contact
 import com.racha.ai.core.contacts.ContactResolver
 import com.racha.ai.core.eve.EveAccessibilityService
 import com.racha.ai.core.eve.EveState
@@ -50,11 +51,49 @@ class IntentHandler(
     }
 
     suspend fun handle(text: String): HandlerResult = withContext(Dispatchers.IO) {
-        val intentType = IntentClassifier.classify(text)
-        val lower = text.lowercase()
+        val lower = text.lowercase().trim()
 
+        // 1. الاتصال بآخر رقم في سجل المكالمات
+        if (lower.contains("اخر رقم") || lower.contains("آخر رقم") || lower.contains("اخر مكالمة") || lower.contains("آخر مكالمة")) {
+            val lastNum = contactResolver.getLastCallNumber()
+            return@withContext if (!lastNum.isNullOrBlank()) {
+                makePhoneCall(lastNum)
+            } else {
+                HandlerResult.Error("⚠️ لم أتمكن من العثور على مكالمات سابقة في السجل يا رمزي.")
+            }
+        }
+
+        // 2. فلترة الأسماء التي تبدأ بحرف معين
+        if (lower.contains("تبدأ بحرف") || lower.contains("تبدا بحرف") || lower.contains("يبدأ بحرف") || lower.contains("يبدا بحرف")) {
+            val letter = extractTargetLetter(lower)
+            if (letter != null) {
+                val matches = contactResolver.getContactsByNameStartingWith(letter)
+                return@withContext formatContactsListResult(matches, "تبدأ بحرف '$letter'")
+            }
+        }
+
+        // 3. فلترة الأرقام التي تبدأ برقم معين (مثال: تبدأ بـ 23)
+        if ((lower.contains("تبدأ ب") || lower.contains("تبدا ب") || lower.contains("تبدا برقم") || lower.contains("تبدأ برقم")) &&
+            (lower.contains("ارقام") || lower.contains("أرقام") || lower.contains("نمر"))) {
+            val prefix = Regex("\\d+").find(lower)?.value
+            if (prefix != null) {
+                val matches = contactResolver.getContactsByNumberStartingWith(prefix)
+                return@withContext formatContactsListResult(matches, "تبدأ بـ '$prefix'")
+            }
+        }
+
+        // 4. عرض أي رقم لاسم محدد (مثال: اعرضي أي رقم لمحمد)
+        if ((lower.contains("اعرض") || lower.contains("اعرضي") || lower.contains("وريني") || lower.contains("شوفلي") || lower.contains("هات")) &&
+            (lower.contains("رقم") || lower.contains("نمرة") || lower.contains("ارقام"))) {
+            val targetName = extractName(text)
+            if (targetName != null) {
+                val matches = contactResolver.searchContact(targetName)
+                return@withContext formatContactsListResult(matches, "باسم '$targetName'")
+            }
+        }
+
+        val intentType = IntentClassifier.classify(text)
         return@withContext when (intentType) {
-            // تنفيذ الأوامر المركبة وفتح كل النوافذ المطلوبة معاً
             IntentClassifier.IntentType.OPEN_MULTI_SHELVES -> {
                 val typesToOpen = mutableListOf<MediaShelfType>()
                 if (lower.contains("فيديو") || lower.contains("مقاطع")) typesToOpen.add(MediaShelfType.VIDEOS)
@@ -62,7 +101,6 @@ class IntentHandler(
                 if (lower.contains("موسيقى") || lower.contains("اغاني")) typesToOpen.add(MediaShelfType.MUSIC)
                 if (lower.contains("اشعار") || lower.contains("إشعار")) typesToOpen.add(MediaShelfType.NOTIFICATIONS)
 
-                // إذا طلب نافذة أخرى للصور أو الفيديو دون تحديد الكل
                 if (typesToOpen.isEmpty()) {
                     if (lower.contains("صور")) typesToOpen.add(MediaShelfType.PHOTOS)
                     else if (lower.contains("فيديو")) typesToOpen.add(MediaShelfType.VIDEOS)
@@ -127,6 +165,31 @@ class IntentHandler(
                 }
             }
         }
+    }
+
+    private fun extractTargetLetter(text: String): String? {
+        val letterMap = mapOf(
+            "الف" to "أ", "ألف" to "أ", "باء" to "ب", "تاء" to "ت", "ثاء" to "ث",
+            "جيم" to "ج", "حاء" to "ح", "خاء" to "خ", "دال" to "د", "ذال" to "ذ",
+            "راء" to "ر", "زاي" to "ز", "زين" to "ز", "سين" to "س", "شين" to "ش",
+            "صاد" to "ص", "ضاد" to "ض", "طاء" to "ط", "ظاء" to "ظ", "عين" to "ع",
+            "غين" to "غ", "فاء" to "ف", "قاف" to "ق", "كاف" to "ك", "لام" to "ل",
+            "ميم" to "م", "نون" to "ن", "هاء" to "ه", "واو" to "و", "ياء" to "ي"
+        )
+        for ((word, char) in letterMap) {
+            if (text.contains(word)) return char
+        }
+        val match = Regex("حرف\\s+([\\u0621-\\u064A])").find(text)
+        return match?.groupValues?.getOrNull(1)
+    }
+
+    private fun formatContactsListResult(list: List<Contact>, criteria: String): HandlerResult {
+        if (list.isEmpty()) {
+            return HandlerResult.Error("⚠️ لم أجد أي جهات اتصال $criteria يا رمزي.")
+        }
+        val preview = list.take(15).joinToString("\n") { "👤 ${it.name}: 📞 ${it.phoneNumber}" }
+        val more = if (list.size > 15) "\n... و ${list.size - 15} أرقام أخرى" else ""
+        return HandlerResult.DirectReply("📋 وجدت ${list.size} جهة اتصال $criteria:\n\n$preview$more")
     }
 
     private fun handleOpenApp(text: String): HandlerResult {

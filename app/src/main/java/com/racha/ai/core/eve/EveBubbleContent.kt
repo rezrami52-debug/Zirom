@@ -1,12 +1,15 @@
 package com.racha.ai.core.eve
 
+import android.app.WallpaperManager
 import android.content.Context
 import android.content.Intent
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.media.MediaPlayer
+import android.net.Uri
 import android.os.Build
 import android.util.Size
+import android.widget.Toast
 import android.widget.VideoView
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.*
@@ -55,12 +58,14 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
 import com.racha.ai.core.media.LocalMediaManager
 import com.racha.ai.core.media.MediaItemData
+import com.racha.ai.core.preferences.AppPreferences
 import com.racha.ai.core.shizuku.ShizukuShellRunner
 import com.racha.ai.data.repository.NotificationRepository
 import com.racha.ai.domain.model.AppNotification
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
+import java.io.File
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -340,7 +345,7 @@ fun EveBubbleAvatar(
 }
 
 /**
- * النافذة العائمة المستقلة تماماً (مشغل سينمائي متكامل مع زر كتم الصوت والزووم الداخلي)
+ * النافذة العائمة المستقلة تماماً (ميكسر الصوت، تعديل ومشاركة وحذف الفيديو، وسحب الصورة كخلفية)
  */
 @Composable
 fun EveStandaloneShelfWindow(
@@ -355,9 +360,13 @@ fun EveStandaloneShelfWindow(
     val context = LocalContext.current
     val mediaManager = remember { LocalMediaManager(context) }
     val notifications by NotificationRepository.notifications.collectAsState()
+    val appPrefs = remember { AppPreferences(context) }
 
     var activePreviewItem by remember { mutableStateOf<MediaItemData?>(null) }
     var innerContentZoom by remember { mutableFloatStateOf(1.0f) }
+
+    // ميكسر الصوت المستقل للفيديو (0.0f إلى 1.0f)
+    var videoVolume by remember { mutableFloatStateOf(1.0f) }
 
     LaunchedEffect(shelfType) {
         activePreviewItem = null
@@ -424,6 +433,35 @@ fun EveStandaloneShelfWindow(
 
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         if (activePreviewItem != null) {
+                            val currentItem = activePreviewItem!!
+
+                            // زر المشاركة السريعة
+                            IconButton(
+                                onClick = { shareMedia(context, currentItem) },
+                                modifier = Modifier.size(24.dp)
+                            ) {
+                                Icon(Icons.Default.Share, contentDescription = "مشاركة", tint = Color(0xFF00E5FF), modifier = Modifier.size(15.dp))
+                            }
+
+                            // زر تعديل / قص الميديا
+                            IconButton(
+                                onClick = { editMedia(context, currentItem) },
+                                modifier = Modifier.size(24.dp)
+                            ) {
+                                Icon(Icons.Default.Edit, contentDescription = "تعديل", tint = Color.White, modifier = Modifier.size(15.dp))
+                            }
+
+                            // زر تعيين كخلفية شاشة (للصور)
+                            if (currentItem.type == "PHOTO") {
+                                IconButton(
+                                    onClick = { setAsPhoneWallpaper(context, currentItem.uri) },
+                                    modifier = Modifier.size(24.dp)
+                                ) {
+                                    Icon(Icons.Default.Wallpaper, contentDescription = "خلفية الهاتف", tint = Color(0xFF38BDF8), modifier = Modifier.size(15.dp))
+                                }
+                            }
+
+                            // زووم المحتوى الداخلي
                             IconButton(
                                 onClick = {
                                     innerContentZoom = if (innerContentZoom >= 2.5f) 1.0f else innerContentZoom + 0.5f
@@ -443,9 +481,9 @@ fun EveStandaloneShelfWindow(
                                     activePreviewItem = null
                                     innerContentZoom = 1.0f
                                 },
-                                contentPadding = PaddingValues(horizontal = 6.dp, vertical = 2.dp)
+                                contentPadding = PaddingValues(horizontal = 4.dp, vertical = 2.dp)
                             ) {
-                                Text("رجوع ↩️", color = Color.White, fontSize = 11.sp)
+                                Text("رجوع ↩️", color = Color.White, fontSize = 10.sp)
                             }
                         }
 
@@ -475,10 +513,10 @@ fun EveStandaloneShelfWindow(
                     val currentItem = activePreviewItem!!
                     val currentIndex = mediaItems.indexOfFirst { it.id == currentItem.id }
 
+                    // 1. تشغيل الفيديو مع ميكسر الصوت (رفع/خفض) وأزرار التحكم
                     if (currentItem.type == "VIDEO") {
                         var videoViewRef by remember { mutableStateOf<VideoView?>(null) }
                         var mediaPlayerRef by remember { mutableStateOf<MediaPlayer?>(null) }
-                        var isMuted by remember { mutableStateOf(false) }
                         var isPlaying by remember { mutableStateOf(true) }
                         var currentPosition by remember { mutableIntStateOf(0) }
                         var totalDuration by remember { mutableIntStateOf(1) }
@@ -518,7 +556,7 @@ fun EveStandaloneShelfWindow(
                                                 mediaPlayerRef = mp
                                                 totalDuration = duration.coerceAtLeast(1)
                                                 mp.isLooping = true
-                                                if (isMuted) mp.setVolume(0f, 0f) else mp.setVolume(1f, 1f)
+                                                mp.setVolume(videoVolume, videoVolume)
                                                 start()
                                                 isPlaying = true
                                             }
@@ -535,8 +573,44 @@ fun EveStandaloneShelfWindow(
                                 )
                             }
 
-                            Spacer(modifier = Modifier.height(6.dp))
+                            Spacer(modifier = Modifier.height(4.dp))
 
+                            // ميكسر الصوت المستقل للفيديو
+                            Row(
+                                modifier = Modifier.fillMaxWidth().padding(horizontal = 6.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Icon(
+                                    imageVector = if (videoVolume == 0f) Icons.Default.VolumeOff else Icons.Default.VolumeUp,
+                                    contentDescription = null,
+                                    tint = Color(0xFF00E5FF),
+                                    modifier = Modifier.size(16.dp).clickable {
+                                        videoVolume = if (videoVolume > 0f) 0f else 1f
+                                        mediaPlayerRef?.setVolume(videoVolume, videoVolume)
+                                    }
+                                )
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Slider(
+                                    value = videoVolume,
+                                    onValueChange = {
+                                        videoVolume = it
+                                        mediaPlayerRef?.setVolume(it, it)
+                                    },
+                                    valueRange = 0f..1f,
+                                    modifier = Modifier.weight(1f).height(16.dp)
+                                )
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text(
+                                    text = "${(videoVolume * 100).toInt()}%",
+                                    color = Color(0xFF00E5FF),
+                                    fontSize = 9.sp,
+                                    fontWeight = FontWeight.Bold
+                                )
+                            }
+
+                            Spacer(modifier = Modifier.height(4.dp))
+
+                            // شريط التقديم والتشغيل
                             Surface(
                                 shape = RoundedCornerShape(12.dp),
                                 color = Color(0xFF0F172A).copy(alpha = 0.95f),
@@ -563,22 +637,6 @@ fun EveStandaloneShelfWindow(
                                         horizontalArrangement = Arrangement.SpaceEvenly,
                                         verticalAlignment = Alignment.CenterVertically
                                     ) {
-                                        IconButton(
-                                            onClick = {
-                                                isMuted = !isMuted
-                                                val vol = if (isMuted) 0f else 1f
-                                                mediaPlayerRef?.setVolume(vol, vol)
-                                            },
-                                            modifier = Modifier.size(26.dp)
-                                        ) {
-                                            Icon(
-                                                imageVector = if (isMuted) Icons.Default.VolumeOff else Icons.Default.VolumeUp,
-                                                contentDescription = "كتم الصوت",
-                                                tint = if (isMuted) Color(0xFFFF5252) else Color(0xFF00E5FF),
-                                                modifier = Modifier.size(16.dp)
-                                            )
-                                        }
-
                                         IconButton(
                                             onClick = { if (currentIndex > 0) activePreviewItem = mediaItems[currentIndex - 1] },
                                             enabled = currentIndex > 0,
@@ -646,7 +704,9 @@ fun EveStandaloneShelfWindow(
                                 }
                             }
                         }
-                    } else if (currentItem.type == "PHOTO") {
+                    } 
+                    // 2. عارض الصور مع ميزة السحب للخلفية (Drag-to-Wallpaper)
+                    else if (currentItem.type == "PHOTO") {
                         val bmp = remember(currentItem) {
                             try {
                                 context.contentResolver.openInputStream(currentItem.uri)?.use { stream ->
@@ -655,13 +715,32 @@ fun EveStandaloneShelfWindow(
                             } catch (_: Exception) { null }
                         }
 
+                        var photoDragY by remember { mutableFloatStateOf(0f) }
+
                         Column(modifier = Modifier.weight(1f).fillMaxWidth()) {
                             Box(
                                 modifier = Modifier
                                     .weight(1f)
                                     .fillMaxWidth()
                                     .clip(RoundedCornerShape(12.dp))
-                                    .background(Color.Black),
+                                    .background(Color.Black)
+                                    .offset { IntOffset(0, photoDragY.roundToInt()) }
+                                    .pointerInput(currentItem.uri) {
+                                        detectDragGestures(
+                                            onDragEnd = {
+                                                if (photoDragY < -120f || photoDragY > 120f) {
+                                                    // سحب الصورة لخارج النافذة يحولها لخلفية هاتف فوراً!
+                                                    setAsPhoneWallpaper(context, currentItem.uri)
+                                                }
+                                                photoDragY = 0f
+                                            },
+                                            onDragCancel = { photoDragY = 0f },
+                                            onDrag = { change, dragAmount ->
+                                                change.consume()
+                                                photoDragY += dragAmount.y
+                                            }
+                                        )
+                                    },
                                 contentAlignment = Alignment.Center
                             ) {
                                 if (bmp != null) {
@@ -679,7 +758,14 @@ fun EveStandaloneShelfWindow(
                                 }
                             }
 
-                            Spacer(modifier = Modifier.height(6.dp))
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Text(
+                                text = "💡 اسحب الصورة لأعلى أو لأسفل لتحويلها لخلفية الهاتف فوراً",
+                                color = Color(0xFF38BDF8),
+                                fontSize = 9.sp,
+                                modifier = Modifier.align(Alignment.CenterHorizontally)
+                            )
+                            Spacer(modifier = Modifier.height(4.dp))
 
                             Surface(
                                 shape = RoundedCornerShape(12.dp),
@@ -700,12 +786,13 @@ fun EveStandaloneShelfWindow(
                                         Icon(Icons.Default.SkipPrevious, contentDescription = "الصورة السابقة", tint = if (currentIndex > 0) Color(0xFF00E5FF) else Color.DarkGray)
                                     }
 
-                                    Text(
-                                        text = "${currentIndex + 1} / ${mediaItems.size}",
-                                        color = Color.White,
-                                        fontSize = 11.sp,
-                                        fontWeight = FontWeight.Bold
-                                    )
+                                    // زر وضعها كخلفية للتطبيق
+                                    TextButton(onClick = {
+                                        appPrefs.setBackgroundImagePath(currentItem.uri.toString())
+                                        Toast.makeText(context, "✅ تم تعيين الصورة كخلفية لتطبيق Racha", Toast.LENGTH_SHORT).show()
+                                    }) {
+                                        Text("خلفية للتطبيق 🎨", color = Color(0xFF00E5FF), fontSize = 10.sp)
+                                    }
 
                                     IconButton(
                                         onClick = { if (currentIndex != -1 && currentIndex < mediaItems.lastIndex) activePreviewItem = mediaItems[currentIndex + 1] },
@@ -857,6 +944,41 @@ private fun openAppInFreeform(context: Context, packageName: String) {
             context.startActivity(launchIntent)
         }
     } catch (_: Exception) {}
+}
+
+private fun shareMedia(context: Context, item: MediaItemData) {
+    try {
+        val intent = Intent(Intent.ACTION_SEND).apply {
+            type = if (item.type == "VIDEO") "video/*" else "image/*"
+            putExtra(Intent.EXTRA_STREAM, item.uri)
+            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_ACTIVITY_NEW_TASK)
+        }
+        context.startActivity(Intent.createChooser(intent, "مشاركة ${item.title}").apply { addFlags(Intent.FLAG_ACTIVITY_NEW_TASK) })
+    } catch (_: Exception) {}
+}
+
+private fun editMedia(context: Context, item: MediaItemData) {
+    try {
+        val intent = Intent(Intent.ACTION_EDIT).apply {
+            setDataAndType(item.uri, if (item.type == "VIDEO") "video/*" else "image/*")
+            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_ACTIVITY_NEW_TASK)
+        }
+        context.startActivity(intent)
+    } catch (_: Exception) {}
+}
+
+private fun setAsPhoneWallpaper(context: Context, uri: Uri) {
+    CoroutineScope(Dispatchers.IO).launch {
+        try {
+            context.contentResolver.openInputStream(uri)?.use { stream ->
+                val wm = WallpaperManager.getInstance(context)
+                wm.setStream(stream)
+                withContext(Dispatchers.Main) {
+                    Toast.makeText(context, "✅ تم تعيين الصورة كخلفية لشاشة الهاتف بنجاح!", Toast.LENGTH_SHORT).show()
+                }
+            }
+        } catch (_: Exception) {}
+    }
 }
 
 private fun formatMillis(ms: Int): String {

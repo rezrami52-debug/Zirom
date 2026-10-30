@@ -1,68 +1,99 @@
 package com.racha.ai.core.contacts
 
-import android.Manifest
 import android.content.Context
-import android.content.pm.PackageManager
+import android.provider.CallLog
 import android.provider.ContactsContract
 import android.util.Log
-import androidx.core.content.ContextCompat
+
+data class Contact(val name: String, val phoneNumber: String)
 
 class ContactResolver(private val context: Context) {
-    companion object { private const val TAG = "RachaContactResolver" }
 
-    data class ContactInfo(val name: String, val phoneNumber: String)
-
-    fun hasPermission(): Boolean {
-        return ContextCompat.checkSelfPermission(context, Manifest.permission.READ_CONTACTS) == PackageManager.PERMISSION_GRANTED
+    companion object {
+        private const val TAG = "ContactResolver"
     }
 
-    fun searchContact(nameQuery: String): List<ContactInfo> {
-        if (!hasPermission() || nameQuery.isBlank()) return emptyList()
-
-        val contacts = mutableListOf<ContactInfo>()
-        val uri = ContactsContract.CommonDataKinds.Phone.CONTENT_URI
-        val projection = arrayOf(ContactsContract.CommonDataKinds.Phone.DISPLAY_NAME, ContactsContract.CommonDataKinds.Phone.NUMBER)
-
+    fun getAllContacts(): List<Contact> {
+        val list = mutableListOf<Contact>()
         try {
-            val cursor = context.contentResolver.query(uri, projection, null, null, null)
+            val cursor = context.contentResolver.query(
+                ContactsContract.CommonDataKinds.Phone.CONTENT_URI,
+                arrayOf(
+                    ContactsContract.CommonDataKinds.Phone.DISPLAY_NAME,
+                    ContactsContract.CommonDataKinds.Phone.NUMBER
+                ),
+                null,
+                null,
+                "${ContactsContract.CommonDataKinds.Phone.DISPLAY_NAME} ASC"
+            )
+
             cursor?.use {
-                val nameIndex = it.getColumnIndex(ContactsContract.CommonDataKinds.Phone.DISPLAY_NAME)
-                val numberIndex = it.getColumnIndex(ContactsContract.CommonDataKinds.Phone.NUMBER)
-                
-                val normalizedQuery = normalizeArabic(nameQuery)
-
+                val nameCol = it.getColumnIndex(ContactsContract.CommonDataKinds.Phone.DISPLAY_NAME)
+                val numCol = it.getColumnIndex(ContactsContract.CommonDataKinds.Phone.NUMBER)
                 while (it.moveToNext()) {
-                    val name = it.getString(nameIndex) ?: continue
-                    val number = it.getString(numberIndex) ?: continue
-                    
-                    val normalizedName = normalizeArabic(name)
-                    val normalizedNumber = number.replace(Regex("\\s+"), "") // إزالة المسافات من الرقم للمطابقة
-
-                    // 🌟 التحسين 3: مطابقة مرنة جداً (الاسم يحتوي الاستعلام، أو العكس، أو تطابق مع الرقم)
-                    val isMatch = normalizedName.contains(normalizedQuery) || 
-                                  normalizedQuery.contains(normalizedName) ||
-                                  normalizedNumber.contains(normalizedQuery) ||
-                                  normalizedQuery.contains(normalizedNumber)
-
-                    if (isMatch) {
-                        contacts.add(ContactInfo(name, number))
+                    val name = if (nameCol != -1) it.getString(nameCol) else ""
+                    val num = if (numCol != -1) it.getString(numCol) else ""
+                    if (name.isNotBlank() && num.isNotBlank()) {
+                        list.add(Contact(name.trim(), num.trim()))
                     }
                 }
             }
-        } catch (e: SecurityException) {
-            Log.e(TAG, "صلاحية مفقودة", e)
         } catch (e: Exception) {
-            Log.e(TAG, "خطأ في البحث", e)
+            Log.e(TAG, "Error fetching contacts", e)
         }
-        return contacts
+        return list
     }
 
-    private fun normalizeArabic(text: String): String {
-        return text.lowercase()
-            .replace("إ", "ا").replace("أ", "ا").replace("آ", "ا")
-            .replace("ة", "ه").replace("ى", "ي")
-            .replace(Regex("[\\u064B-\\u065F\\u0670]"), "") // إزالة التشكيل
-            .replace(Regex("\\s+"), "") // إزالة المسافات للمطابقة الأفضل
-            .trim()
+    fun searchContact(nameQuery: String): List<Contact> {
+        val q = nameQuery.trim().lowercase()
+        return getAllContacts().filter { it.name.lowercase().contains(q) }
+    }
+
+    /**
+     * فلترة الأسماء التي تبدأ بحرف معين (مثال: حرف الميم أو 'م')
+     */
+    fun getContactsByNameStartingWith(letter: String): List<Contact> {
+        val cleanLetter = letter.trim().take(1).lowercase()
+        return getAllContacts().filter {
+            it.name.trim().lowercase().startsWith(cleanLetter)
+        }
+    }
+
+    /**
+     * فلترة الأرقام التي تبدأ ببادئة معينة (مثال: الأرقام التي تبدأ بـ 23 أو 20 أو 98)
+     */
+    fun getContactsByNumberStartingWith(prefix: String): List<Contact> {
+        val cleanPrefix = prefix.replace(Regex("[^0-9]"), "")
+        if (cleanPrefix.isBlank()) return emptyList()
+
+        return getAllContacts().filter {
+            val rawNum = it.phoneNumber.replace(Regex("[^0-9]"), "")
+            // يدعم الرقم المباشر (مثل 23xxxxxx) أو الرقم بالرمز الدولي التونسي (21623xxxxxx)
+            rawNum.startsWith(cleanPrefix) || rawNum.startsWith("216$cleanPrefix")
+        }
+    }
+
+    /**
+     * جلب آخر رقم تم التفاعل معه في سجل المكالمات (الصادرة أو الواردة)
+     */
+    fun getLastCallNumber(): String? {
+        return try {
+            val cursor = context.contentResolver.query(
+                CallLog.Calls.CONTENT_URI,
+                arrayOf(CallLog.Calls.NUMBER),
+                null,
+                null,
+                "${CallLog.Calls.DATE} DESC"
+            )
+            cursor?.use {
+                if (it.moveToFirst()) {
+                    val idx = it.getColumnIndex(CallLog.Calls.NUMBER)
+                    if (idx != -1) it.getString(idx) else null
+                } else null
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Error fetching last call log", e)
+            null
+        }
     }
 }
