@@ -347,7 +347,7 @@ fun EveBubbleAvatar(
 }
 
 /**
- * النافذة العائمة المستقلة تماماً (مشغل سينمائي متكامل مع زر كتم الصوت والزووم الداخلي)
+ * النافذة العائمة المستقلة تماماً (مع شريط سحب مخصص وحرية كاملة للتمرير الداخلي)
  */
 @Composable
 fun EveStandaloneShelfWindow(
@@ -389,11 +389,7 @@ fun EveStandaloneShelfWindow(
     }
 
     Surface(
-        modifier = Modifier
-            .fillMaxSize()
-            .pointerInput(Unit) {
-                detectTapGestures(onTap = { onBringToFront() })
-            },
+        modifier = Modifier.fillMaxSize(),
         shape = RoundedCornerShape(18.dp),
         color = Color(0xFF070B16).copy(alpha = 0.98f),
         border = BorderStroke(1.5.dp, Color(0xFF00E5FF).copy(alpha = 0.8f)),
@@ -401,35 +397,46 @@ fun EveStandaloneShelfWindow(
     ) {
         Box(modifier = Modifier.fillMaxSize()) {
             Column(modifier = Modifier.padding(8.dp).fillMaxSize()) {
+                // شريط العنوان العلوي: هو المخصص حصرياً لسحب وتحريك النافذة
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
                         .clip(RoundedCornerShape(8.dp))
-                        .background(Color.White.copy(alpha = 0.05f))
+                        .background(Color.White.copy(alpha = 0.08f))
                         .pointerInput(Unit) {
-                            detectDragGestures { change, dragAmount ->
-                                change.consume()
-                                onBringToFront()
-                                onMoveWindow(dragAmount.x, dragAmount.y)
-                            }
+                            detectDragGestures(
+                                onDragStart = { onBringToFront() },
+                                onDrag = { change, dragAmount ->
+                                    change.consume()
+                                    onMoveWindow(dragAmount.x, dragAmount.y)
+                                }
+                            )
                         }
                         .padding(horizontal = 8.dp, vertical = 6.dp),
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Text(
-                        text = when {
-                            activePreviewItem != null -> "🎬 المشغل السينمائي"
-                            shelfType == MediaShelfType.NOTIFICATIONS -> "الإشعارات (${notifications.size}) 🔔"
-                            shelfType == MediaShelfType.MUSIC -> "الموسيقى (${mediaItems.size}) 🎶"
-                            shelfType == MediaShelfType.VIDEOS -> "الفيديوهات (${mediaItems.size}) 📽️"
-                            shelfType == MediaShelfType.PHOTOS -> "الصور (${mediaItems.size}) 🖼️"
-                            else -> ""
-                        },
-                        color = Color(0xFF00E5FF),
-                        fontSize = 12.sp,
-                        fontWeight = FontWeight.Bold
-                    )
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(
+                            Icons.Default.DragHandle,
+                            contentDescription = "سحب",
+                            tint = Color(0xFF00E5FF),
+                            modifier = Modifier.size(16.dp).padding(end = 4.dp)
+                        )
+                        Text(
+                            text = when {
+                                activePreviewItem != null -> "🎬 المشغل السينمائي"
+                                shelfType == MediaShelfType.NOTIFICATIONS -> "الإشعارات (${notifications.size}) 🔔"
+                                shelfType == MediaShelfType.MUSIC -> "الموسيقى (${mediaItems.size}) 🎶"
+                                shelfType == MediaShelfType.VIDEOS -> "الفيديوهات (${mediaItems.size}) 📽️"
+                                shelfType == MediaShelfType.PHOTOS -> "الصور (${mediaItems.size}) 🖼️"
+                                else -> ""
+                            },
+                            color = Color(0xFF00E5FF),
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
 
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         if (activePreviewItem != null) {
@@ -491,13 +498,17 @@ fun EveStandaloneShelfWindow(
 
                 Divider(color = Color.White.copy(alpha = 0.15f), thickness = 1.dp, modifier = Modifier.padding(vertical = 4.dp))
 
+                // محتوى القوائم والتمرير الحر السلس
                 if (shelfType == MediaShelfType.NOTIFICATIONS) {
                     if (notifications.isEmpty()) {
                         Box(modifier = Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
                             Text("لا توجد إشعارات جديدة حالياً يا رمزي", color = Color.Gray, fontSize = 11.sp)
                         }
                     } else {
-                        LazyColumn(modifier = Modifier.weight(1f).fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        LazyColumn(
+                            modifier = Modifier.weight(1f).fillMaxWidth(),
+                            verticalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
                             items(notifications) { notif ->
                                 NotificationItemRow(notif = notif) {
                                     openAppInFreeform(context, notif.packageName)
@@ -750,7 +761,7 @@ fun EveStandaloneShelfWindow(
 
                             Spacer(modifier = Modifier.height(4.dp))
                             Text(
-                                text = "💡 اسحب الصورة لأعلى أو لأسفل لتحويلها لخلفية الهاتف فوراً",
+                                text = "💡 اسحب الصورة لأعلى أو لأسفل لتحويلها لخلفية الهاتف",
                                 color = Color(0xFF38BDF8),
                                 fontSize = 9.sp,
                                 modifier = Modifier.align(Alignment.CenterHorizontally)
@@ -800,7 +811,11 @@ fun EveStandaloneShelfWindow(
                             Text("لا توجد ملفات أو جاري الفحص...", color = Color.Gray, fontSize = 11.sp)
                         }
                     } else {
-                        LazyColumn(modifier = Modifier.weight(1f).fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        // قائمة الملفات (التمرير أصبح حراً وسلساً 100%)
+                        LazyColumn(
+                            modifier = Modifier.weight(1f).fillMaxWidth(),
+                            verticalArrangement = Arrangement.spacedBy(4.dp)
+                        ) {
                             items(mediaItems) { item ->
                                 Row(
                                     modifier = Modifier
@@ -823,6 +838,7 @@ fun EveStandaloneShelfWindow(
                 }
             }
 
+            // مقبض التحجيم اليدوي ثنائي الأبعاد في الزاوية
             Box(
                 modifier = Modifier
                     .align(Alignment.BottomEnd)

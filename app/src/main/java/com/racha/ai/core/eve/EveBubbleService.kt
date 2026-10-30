@@ -36,6 +36,7 @@ import kotlinx.coroutines.*
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import kotlin.math.roundToInt
 
 class EveBubbleService : Service() {
 
@@ -299,9 +300,6 @@ class EveBubbleService : Service() {
         }
     }
 
-    /**
-     * نقل النافذة للواجهة والمقدمة فور لمسها (Bring to Front)
-     */
     private fun bringWindowToFront(type: MediaShelfType) {
         activeShelfWindows[type]?.let { holder ->
             try {
@@ -311,16 +309,18 @@ class EveBubbleService : Service() {
         }
     }
 
+    // تحريك النافذة بسلاسة ومتابعة حركة الإصبع بدقة بكسل
     private fun updateShelfPosition(type: MediaShelfType, dx: Float, dy: Float) {
         activeShelfWindows[type]?.let { holder ->
-            holder.layoutParams.x += dx.toInt()
-            holder.layoutParams.y += dy.toInt()
+            holder.layoutParams.x += dx.roundToInt()
+            holder.layoutParams.y += dy.roundToInt()
             try {
                 windowManager.updateViewLayout(holder.view, holder.layoutParams)
             } catch (_: Exception) {}
         }
     }
 
+    // تحجيم حر ثنائي الأبعاد
     private fun resizeShelfWindow(type: MediaShelfType, dw: Float, dh: Float) {
         activeShelfWindows[type]?.let { holder ->
             val dm = resources.displayMetrics
@@ -329,8 +329,8 @@ class EveBubbleService : Service() {
             val maxW = dm.widthPixels - 20
             val maxH = dm.heightPixels - 120
 
-            holder.layoutParams.width = (holder.layoutParams.width + dw.toInt()).coerceIn(minW, maxW)
-            holder.layoutParams.height = (holder.layoutParams.height + dh.toInt()).coerceIn(minH, maxH)
+            holder.layoutParams.width = (holder.layoutParams.width + dw.roundToInt()).coerceIn(minW, maxW)
+            holder.layoutParams.height = (holder.layoutParams.height + dh.roundToInt()).coerceIn(minH, maxH)
             try {
                 windowManager.updateViewLayout(holder.view, holder.layoutParams)
             } catch (_: Exception) {}
@@ -381,12 +381,6 @@ class EveBubbleService : Service() {
                 try { windowManager.updateViewLayout(bubbleView, bubbleLayoutParams) } catch (_: Exception) {}
             }
         }.start()
-    }
-
-    private fun handleTapOutside() {
-        EveState.closeShelf()
-        EveState.setMood(EveMood.SLEEPING)
-        stopListening()
     }
 
     private fun playSelectedAudio(item: MediaItemData) {
@@ -641,8 +635,8 @@ class EveBubbleService : Service() {
     }
 
     private fun updateBubblePosition(dx: Float, dy: Float) {
-        bubbleLayoutParams.x += dx.toInt()
-        bubbleLayoutParams.y += dy.toInt()
+        bubbleLayoutParams.x += dx.roundToInt()
+        bubbleLayoutParams.y += dy.roundToInt()
         try { windowManager.updateViewLayout(bubbleView, bubbleLayoutParams) } catch (_: Exception) {}
     }
 
