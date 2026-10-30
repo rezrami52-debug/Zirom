@@ -44,9 +44,11 @@ class EveBubbleService : Service() {
     private val overlayLifecycleOwner = OverlayLifecycleOwner()
     private val serviceScope = CoroutineScope(Dispatchers.Main + Job())
 
+    // 1. فقاعة EVE
     private var bubbleView: ComposeView? = null
     private lateinit var bubbleLayoutParams: WindowManager.LayoutParams
 
+    // 2. خريطة النوافذ العائمة المتعددة المستقلة تماماً (True Multi-Window)
     private data class ShelfWindowHolder(
         val type: MediaShelfType,
         val view: ComposeView,
@@ -309,7 +311,6 @@ class EveBubbleService : Service() {
         }
     }
 
-    // تحريك النافذة بسلاسة ومتابعة حركة الإصبع بدقة بكسل
     private fun updateShelfPosition(type: MediaShelfType, dx: Float, dy: Float) {
         activeShelfWindows[type]?.let { holder ->
             holder.layoutParams.x += dx.roundToInt()
@@ -320,7 +321,6 @@ class EveBubbleService : Service() {
         }
     }
 
-    // تحجيم حر ثنائي الأبعاد
     private fun resizeShelfWindow(type: MediaShelfType, dw: Float, dh: Float) {
         activeShelfWindows[type]?.let { holder ->
             val dm = resources.displayMetrics

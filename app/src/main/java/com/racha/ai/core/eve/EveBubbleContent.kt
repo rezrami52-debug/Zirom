@@ -24,7 +24,6 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.detectDragGestures
-import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -67,7 +66,6 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import java.io.File
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -347,7 +345,7 @@ fun EveBubbleAvatar(
 }
 
 /**
- * النافذة العائمة المستقلة تماماً (مع شريط سحب مخصص وحرية كاملة للتمرير الداخلي)
+ * النافذة المستقلة الحرة: تحريك سلس بشريط العنوان + تمرير حر 100% دون تجميد
  */
 @Composable
 fun EveStandaloneShelfWindow(
@@ -397,7 +395,7 @@ fun EveStandaloneShelfWindow(
     ) {
         Box(modifier = Modifier.fillMaxSize()) {
             Column(modifier = Modifier.padding(8.dp).fillMaxSize()) {
-                // شريط العنوان العلوي: هو المخصص حصرياً لسحب وتحريك النافذة
+                // شريط العنوان العلوي: هو المخصص حصرياً لتحريك النافذة دون التشويش على القائمة
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -405,7 +403,6 @@ fun EveStandaloneShelfWindow(
                         .background(Color.White.copy(alpha = 0.08f))
                         .pointerInput(Unit) {
                             detectDragGestures(
-                                onDragStart = { onBringToFront() },
                                 onDrag = { change, dragAmount ->
                                     change.consume()
                                     onMoveWindow(dragAmount.x, dragAmount.y)
@@ -439,6 +436,14 @@ fun EveStandaloneShelfWindow(
                     }
 
                     Row(verticalAlignment = Alignment.CenterVertically) {
+                        // زر رفع النافذة للطبقة العليا
+                        IconButton(
+                            onClick = onBringToFront,
+                            modifier = Modifier.size(24.dp)
+                        ) {
+                            Icon(Icons.Default.Layers, contentDescription = "للمقدمة", tint = Color(0xFF38BDF8), modifier = Modifier.size(15.dp))
+                        }
+
                         if (activePreviewItem != null) {
                             val currentItem = activePreviewItem!!
 
@@ -498,17 +503,14 @@ fun EveStandaloneShelfWindow(
 
                 Divider(color = Color.White.copy(alpha = 0.15f), thickness = 1.dp, modifier = Modifier.padding(vertical = 4.dp))
 
-                // محتوى القوائم والتمرير الحر السلس
+                // محتوى القوائم: متحرر بالكامل للتمرير السلس
                 if (shelfType == MediaShelfType.NOTIFICATIONS) {
                     if (notifications.isEmpty()) {
                         Box(modifier = Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
                             Text("لا توجد إشعارات جديدة حالياً يا رمزي", color = Color.Gray, fontSize = 11.sp)
                         }
                     } else {
-                        LazyColumn(
-                            modifier = Modifier.weight(1f).fillMaxWidth(),
-                            verticalArrangement = Arrangement.spacedBy(6.dp)
-                        ) {
+                        LazyColumn(modifier = Modifier.weight(1f).fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                             items(notifications) { notif ->
                                 NotificationItemRow(notif = notif) {
                                     openAppInFreeform(context, notif.packageName)
@@ -811,7 +813,7 @@ fun EveStandaloneShelfWindow(
                             Text("لا توجد ملفات أو جاري الفحص...", color = Color.Gray, fontSize = 11.sp)
                         }
                     } else {
-                        // قائمة الملفات (التمرير أصبح حراً وسلساً 100%)
+                        // التمرير أصبح حراً 100% وبدون أي مقاطعة
                         LazyColumn(
                             modifier = Modifier.weight(1f).fillMaxWidth(),
                             verticalArrangement = Arrangement.spacedBy(4.dp)
@@ -846,7 +848,6 @@ fun EveStandaloneShelfWindow(
                     .pointerInput(Unit) {
                         detectDragGestures { change, dragAmount ->
                             change.consume()
-                            onBringToFront()
                             onResizeWindow(dragAmount.x, dragAmount.y)
                         }
                     },
