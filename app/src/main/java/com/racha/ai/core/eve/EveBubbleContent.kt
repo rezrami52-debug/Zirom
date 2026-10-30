@@ -62,8 +62,10 @@ import com.racha.ai.core.preferences.AppPreferences
 import com.racha.ai.core.shizuku.ShizukuShellRunner
 import com.racha.ai.data.repository.NotificationRepository
 import com.racha.ai.domain.model.AppNotification
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
 import java.text.SimpleDateFormat
@@ -345,7 +347,7 @@ fun EveBubbleAvatar(
 }
 
 /**
- * النافذة العائمة المستقلة تماماً (ميكسر الصوت، تعديل ومشاركة وحذف الفيديو، وسحب الصورة كخلفية)
+ * النافذة العائمة المستقلة تماماً (مشغل سينمائي متكامل مع زر كتم الصوت والزووم الداخلي)
  */
 @Composable
 fun EveStandaloneShelfWindow(
@@ -364,8 +366,6 @@ fun EveStandaloneShelfWindow(
 
     var activePreviewItem by remember { mutableStateOf<MediaItemData?>(null) }
     var innerContentZoom by remember { mutableFloatStateOf(1.0f) }
-
-    // ميكسر الصوت المستقل للفيديو (0.0f إلى 1.0f)
     var videoVolume by remember { mutableFloatStateOf(1.0f) }
 
     LaunchedEffect(shelfType) {
@@ -435,7 +435,6 @@ fun EveStandaloneShelfWindow(
                         if (activePreviewItem != null) {
                             val currentItem = activePreviewItem!!
 
-                            // زر المشاركة السريعة
                             IconButton(
                                 onClick = { shareMedia(context, currentItem) },
                                 modifier = Modifier.size(24.dp)
@@ -443,7 +442,6 @@ fun EveStandaloneShelfWindow(
                                 Icon(Icons.Default.Share, contentDescription = "مشاركة", tint = Color(0xFF00E5FF), modifier = Modifier.size(15.dp))
                             }
 
-                            // زر تعديل / قص الميديا
                             IconButton(
                                 onClick = { editMedia(context, currentItem) },
                                 modifier = Modifier.size(24.dp)
@@ -451,7 +449,6 @@ fun EveStandaloneShelfWindow(
                                 Icon(Icons.Default.Edit, contentDescription = "تعديل", tint = Color.White, modifier = Modifier.size(15.dp))
                             }
 
-                            // زر تعيين كخلفية شاشة (للصور)
                             if (currentItem.type == "PHOTO") {
                                 IconButton(
                                     onClick = { setAsPhoneWallpaper(context, currentItem.uri) },
@@ -461,7 +458,6 @@ fun EveStandaloneShelfWindow(
                                 }
                             }
 
-                            // زووم المحتوى الداخلي
                             IconButton(
                                 onClick = {
                                     innerContentZoom = if (innerContentZoom >= 2.5f) 1.0f else innerContentZoom + 0.5f
@@ -513,7 +509,6 @@ fun EveStandaloneShelfWindow(
                     val currentItem = activePreviewItem!!
                     val currentIndex = mediaItems.indexOfFirst { it.id == currentItem.id }
 
-                    // 1. تشغيل الفيديو مع ميكسر الصوت (رفع/خفض) وأزرار التحكم
                     if (currentItem.type == "VIDEO") {
                         var videoViewRef by remember { mutableStateOf<VideoView?>(null) }
                         var mediaPlayerRef by remember { mutableStateOf<MediaPlayer?>(null) }
@@ -575,7 +570,6 @@ fun EveStandaloneShelfWindow(
 
                             Spacer(modifier = Modifier.height(4.dp))
 
-                            // ميكسر الصوت المستقل للفيديو
                             Row(
                                 modifier = Modifier.fillMaxWidth().padding(horizontal = 6.dp),
                                 verticalAlignment = Alignment.CenterVertically
@@ -610,7 +604,6 @@ fun EveStandaloneShelfWindow(
 
                             Spacer(modifier = Modifier.height(4.dp))
 
-                            // شريط التقديم والتشغيل
                             Surface(
                                 shape = RoundedCornerShape(12.dp),
                                 color = Color(0xFF0F172A).copy(alpha = 0.95f),
@@ -704,9 +697,7 @@ fun EveStandaloneShelfWindow(
                                 }
                             }
                         }
-                    } 
-                    // 2. عارض الصور مع ميزة السحب للخلفية (Drag-to-Wallpaper)
-                    else if (currentItem.type == "PHOTO") {
+                    } else if (currentItem.type == "PHOTO") {
                         val bmp = remember(currentItem) {
                             try {
                                 context.contentResolver.openInputStream(currentItem.uri)?.use { stream ->
@@ -729,7 +720,6 @@ fun EveStandaloneShelfWindow(
                                         detectDragGestures(
                                             onDragEnd = {
                                                 if (photoDragY < -120f || photoDragY > 120f) {
-                                                    // سحب الصورة لخارج النافذة يحولها لخلفية هاتف فوراً!
                                                     setAsPhoneWallpaper(context, currentItem.uri)
                                                 }
                                                 photoDragY = 0f
@@ -786,7 +776,6 @@ fun EveStandaloneShelfWindow(
                                         Icon(Icons.Default.SkipPrevious, contentDescription = "الصورة السابقة", tint = if (currentIndex > 0) Color(0xFF00E5FF) else Color.DarkGray)
                                     }
 
-                                    // زر وضعها كخلفية للتطبيق
                                     TextButton(onClick = {
                                         appPrefs.setBackgroundImagePath(currentItem.uri.toString())
                                         Toast.makeText(context, "✅ تم تعيين الصورة كخلفية لتطبيق Racha", Toast.LENGTH_SHORT).show()
