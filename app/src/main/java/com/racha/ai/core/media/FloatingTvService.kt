@@ -72,19 +72,23 @@ class FloatingTvService : Service() {
                     channelName = channelName,
                     streamUrl = streamUrl,
                     onDrag = { dx, dy ->
-                        layoutParams.x += dx.toInt()
-                        layoutParams.y += dy.toInt()
-                        windowManager.updateViewLayout(this@apply, layoutParams)
+                        this@FloatingTvService.layoutParams.x += dx.toInt()
+                        this@FloatingTvService.layoutParams.y += dy.toInt()
+                        composeView?.let { view ->
+                            windowManager.updateViewLayout(view, this@FloatingTvService.layoutParams)
+                        }
                     },
                     onToggleResize = {
-                        if (layoutParams.width == dpToPx(320)) {
-                            layoutParams.width = dpToPx(480)
-                            layoutParams.height = dpToPx(300)
+                        if (this@FloatingTvService.layoutParams.width == dpToPx(320)) {
+                            this@FloatingTvService.layoutParams.width = dpToPx(480)
+                            this@FloatingTvService.layoutParams.height = dpToPx(300)
                         } else {
-                            layoutParams.width = dpToPx(320)
-                            layoutParams.height = dpToPx(220)
+                            this@FloatingTvService.layoutParams.width = dpToPx(320)
+                            this@FloatingTvService.layoutParams.height = dpToPx(220)
                         }
-                        windowManager.updateViewLayout(this@apply, layoutParams)
+                        composeView?.let { view ->
+                            windowManager.updateViewLayout(view, this@FloatingTvService.layoutParams)
+                        }
                     },
                     onClose = { stopSelf() }
                 )
