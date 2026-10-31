@@ -9,7 +9,7 @@ object IntentClassifier {
         GET_TIME, GET_DATE, GET_BATTERY, TOGGLE_FLASHLIGHT,
         TOGGLE_BLUETOOTH, GREETING, SMALL_TALK, PRAYER_TIMES,
         FIND_MY_PHONE, MOSQUE_MODE, MACRO_SLEEP, MACRO_CINEMA, MACRO_WORK,
-        OPEN_PHOTOS, OPEN_VIDEOS, OPEN_MUSIC, OPEN_NOTIFICATIONS, OPEN_MULTI_SHELVES,
+        OPEN_PHOTOS, OPEN_VIDEOS, OPEN_MUSIC, OPEN_NOTIFICATIONS, OPEN_MULTI_SHELVES, OPEN_TV,
         CORRECTION, UNKNOWN
     }
 
@@ -80,6 +80,14 @@ object IntentClassifier {
         if (lower.contains("كاميرا")) return IntentType.OPEN_CAMERA
         if (lower.contains("واي فاي") || lower.contains("wifi") || lower.contains("ويفي")) return IntentType.TOGGLE_WIFI
         if (lower.contains("صامت") || lower.contains("اهتزاز") || lower.contains("عادي") || lower.contains("رنين")) return IntentType.SET_RINGER
+
+
+        // أوامر التلفاز (بعد الوسائط، لتجنب التعارض مع "اعرض فيديو")
+        val hasTv = lower.contains("تلفاز") || lower.contains("تلفزيون") || lower.contains("قناة") || lower.contains("قنوات") || lower.contains("بث") || lower.contains("مشاهدة")
+        if (hasTv && isMediaCmd) {
+            // إذا كان الطلب يحتوي على "قناة" أو "تلفاز" أو "بث" أو "مشاهدة"
+            return IntentType.OPEN_TV
+        }
 
         return IntentType.UNKNOWN
     }

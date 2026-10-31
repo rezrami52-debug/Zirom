@@ -15,6 +15,8 @@ import com.racha.ai.core.contacts.Contact
 import com.racha.ai.core.contacts.ContactResolver
 import com.racha.ai.core.eve.EveAccessibilityService
 import com.racha.ai.core.eve.EveState
+import com.racha.ai.core.media.IptvManager
+import com.racha.ai.core.media.FloatingTvService
 import com.racha.ai.core.eve.MediaShelfType
 import com.racha.ai.core.shizuku.ShizukuShellRunner
 import com.racha.ai.services.location.LocationHelper
@@ -106,6 +108,7 @@ class IntentHandler(
                 val suffix = getFriendlyName().let { if (it.isNotBlank()) " $it" else "" }
                 HandlerResult.DirectReply("🪟 من عيوني$suffix، تم فتح النوافذ المستقلة معاً على الشاشة.")
             }
+            IntentClassifier.IntentType.OPEN_TV -> handleOpenTv(text)
             IntentClassifier.IntentType.OPEN_NOTIFICATIONS -> {
                 EveState.openShelf(MediaShelfType.NOTIFICATIONS)
                 val suffix = getFriendlyName().let { if (it.isNotBlank()) " $it" else "" }
@@ -274,6 +277,35 @@ class IntentHandler(
             if (idx >= 0) return text.substring(idx + kw.length).trim()
         }
         return "مرحباً، أرسل لك هذه الرسالة عبر المساعد الذكي."
+    }
+
+
+    private suspend fun handleOpenTv(text: String): HandlerResult {
+        val iptvManager = IptvManager(context)
+        val channels = iptvManager.getAllChannels()
+
+        if (channels.isEmpty()) {
+            return HandlerResult.Error("⚠️ لا توجد قنوات متاحة حالياً.")
+        }
+
+        // البحث عن القناة المطلوبة
+        val query = text.replace(Regex("(?i)افتح|اعرض|شغل|شغلي|قناة|قنوات|تلفاز|تلفزيون|بث|مشاهدة|يا رمزي|رمزي"), "").trim()
+        val matchedChannel = if (query.isNotBlank()) {
+            channels.find { it.name.contains(query, ignoreCase = true) }
+        } else {
+            null
+        }
+
+        val channelToPlay = matchedChannel ?: channels.first()
+
+        // تشغيل الخدمة
+        val intent = android.content.Intent(context, FloatingTvService::class.java).apply {
+            putExtra(FloatingTvService.EXTRA_CHANNEL_NAME, channelToPlay.name)
+            putExtra(FloatingTvService.EXTRA_STREAM_URL, channelToPlay.streamUrl)
+        }
+        context.startService(intent)
+
+        return HandlerResult.DirectReply("📺 تم فتح قناة ${channelToPlay.name} يا رمزي.")
     }
 
     private suspend fun handleFindMyPhone(): HandlerResult {
