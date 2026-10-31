@@ -1,6 +1,9 @@
 package com.racha.ai.data.llm
 
 import android.content.Context
+import android.content.Intent
+import android.content.IntentFilter
+import android.os.BatteryManager
 import android.util.Log
 import com.google.mediapipe.tasks.genai.llminference.LlmInference
 import com.racha.ai.data.local.ChatMessageEntity
@@ -9,6 +12,9 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import java.io.File
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 
 class QwenService(private val context: Context) : LLMProvider {
 
@@ -48,8 +54,10 @@ class QwenService(private val context: Context) : LLMProvider {
                     return@withContext Result.failure(Exception("ملف Qwen غير موجود"))
                 }
 
+                // ضبط معايير الاستدلال لمعالجات الهواتف
                 val options = LlmInference.LlmInferenceOptions.builder()
                     .setModelPath(modelFile.absolutePath)
+                    .setMaxTokens(1024)
                     .build()
 
                 llmInference = LlmInference.createFromOptions(context, options)
@@ -91,18 +99,42 @@ class QwenService(private val context: Context) : LLMProvider {
         }
     }
 
+    private fun getLivePhoneContext(): String {
+        return try {
+            val time = SimpleDateFormat("HH:mm", Locale.getDefault()).format(Date())
+            val bIntent = context.registerReceiver(null, IntentFilter(Intent.ACTION_BATTERY_CHANGED))
+            val level = bIntent?.getIntExtra(BatteryManager.EXTRA_LEVEL, -1) ?: -1
+            val scale = bIntent?.getIntExtra(BatteryManager.EXTRA_SCALE, -1) ?: -1
+            val pct = if (level >= 0 && scale > 0) (level * 100) / scale else 75
+            val charging = bIntent?.getIntExtra(BatteryManager.EXTRA_STATUS, -1) == BatteryManager.BATTERY_STATUS_CHARGING
+            "الوقت: $time | البطارية: $pct% ${if (charging) "(في الشاحن)" else ""} | الموقع: سوسة، تونس"
+        } catch (_: Exception) {
+            "الموقع: سوسة، تونس"
+        }
+    }
+
     private fun buildPrompt(
         history: List<ChatMessageEntity>,
         userMessage: String,
         userProfileContext: String
     ): String {
         val sb = StringBuilder()
+        val phoneStatus = getLivePhoneContext()
+
         sb.append("<|im_start|>system\n")
-        sb.append("أنت EVE و Racha، رفيق شخصي ومساعد ذكي لصديقك رمزي.\n")
-        sb.append("قواعد:\n")
-        sb.append("1. أجب بالعربية العفوية والطبيعية.\n")
-        sb.append("2. كن مقتضباً وذكياً (1 إلى 2 أسطر كحد أقصى).\n")
-        sb.append("3. خاطب المستخدم باسمه 'رمزي' ولا تستخدم ألقاباً رسمية.\n")
+        sb.append("أنت EVE و Racha، رفيق ذكي وخبير برمجيات وأنظمة لصديقك رمزي.\n")
+        sb.append("معطيات الهاتف الحية: [$phoneStatus].\n\n")
+
+        sb.append("قواعد السلوك:\n")
+        sb.append("1. أجب بالعربية العفوية والطبيعية وتحدث معه باسمه 'رمزي' كصديق مقرب.\n")
+        sb.append("2. إجاباتك ذكية ومباشرة (1 إلى 2 أسطر).\n")
+        sb.append("3. افهم اللهجة التونسية بطلاقة (مثال: 'شنية أحوالك' = كيف حالك، 'حللي' = افتح لي، 'وقتاش' = متى).\n")
+        sb.append("4. إذا طلب رمزي فتح تطبيق أو فيديو أو تشغيل فلاش، وافق بود وأضف وسماً برمجياً في نهاية ردك:\n")
+        sb.append("   - لفتح تطبيق: [ACTION: OPEN_APP(اسم التطبيق بالإنجليزية مثل facebook, tiktok, youtube)]\n")
+        sb.append("   - لفتح الفيديوهات: [ACTION: OPEN_VIDEOS]\n")
+        sb.append("   - لفتح الصور: [ACTION: OPEN_PHOTOS]\n")
+        sb.append("   - لتشغيل الفلاش: [ACTION: FLASHLIGHT(on)] ولإطفائه: [ACTION: FLASHLIGHT(off)]\n")
+        sb.append("   - لقفل الشاشة: [ACTION: LOCK_SCREEN]\n")
         sb.append("<|im_end|>\n")
 
         for (msg in history.takeLast(4)) {

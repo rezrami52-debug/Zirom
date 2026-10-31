@@ -123,7 +123,6 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
             _uiState.update { it.copy(isLoading = true) }
 
             try {
-                // تشغيل IntentHandler داخل Dispatchers.IO تماماً لمنع أي تجميد للواجهة
                 val result = withContext(Dispatchers.IO) { intentHandler.handle(trimmed) }
                 when (result) {
                     is IntentHandler.HandlerResult.DirectReply -> {
@@ -158,7 +157,9 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         if (selectedProvider == "qwen" && qwenService.isModelPresent()) {
             try {
                 val localReply = qwenService.generateResponse(query)
-                appendMessage(ChatMessage(text = "$localReply \n\n📱 [Qwen محلي أوفلاين]", isFromUser = false))
+                // تنفيذ الأوامر المرفقة من كوين وحذف الوسم من الشاشة
+                val cleanText = executeActionsIfPresent(localReply)
+                appendMessage(ChatMessage(text = "$cleanText \n\n📱 [Qwen محلي أوفلاين]", isFromUser = false))
                 _uiState.update { it.copy(isLoading = false) }
                 return@withContext
             } catch (_: Exception) {}
@@ -178,7 +179,8 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         if (qwenService.isModelPresent()) {
             try {
                 val fallbackReply = qwenService.generateResponse(query)
-                appendMessage(ChatMessage(text = "$fallbackReply \n\n📱 [Qwen وضع أوفلاين التلقائي]", isFromUser = false))
+                val cleanText = executeActionsIfPresent(fallbackReply)
+                appendMessage(ChatMessage(text = "$cleanText \n\n📱 [Qwen وضع أوفلاين التلقائي]", isFromUser = false))
                 _uiState.update { it.copy(isLoading = false) }
                 return@withContext
             } catch (_: Exception) {}
@@ -189,6 +191,38 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
             isFromUser = false
         ))
         _uiState.update { it.copy(isLoading = false) }
+    }
+
+    /**
+     * قراءة وسوم الأوامر الصادرة من Qwen وتنفيذها فوراً في الهاتف
+     */
+    private suspend fun executeActionsIfPresent(rawText: String): String {
+        val actionRegex = Regex("\\[ACTION:\\s*([^\\]]+)\\]")
+        val match = actionRegex.find(rawText)
+
+        if (match != null) {
+            val actionBody = match.groupValues[1].trim()
+            val commandToRun = when {
+                actionBody.startsWith("OPEN_APP") -> {
+                    val app = actionBody.substringAfter("(").substringBefore(")").trim()
+                    "افتحي $app في نافذة صغيرة"
+                }
+                actionBody == "OPEN_VIDEOS" -> "اعرضي مقاطع الفيديو"
+                actionBody == "OPEN_PHOTOS" -> "اعرضي ألبوم الصور"
+                actionBody.contains("FLASHLIGHT(on)") -> "شغلي الفلاش"
+                actionBody.contains("FLASHLIGHT(off)") -> "طفي الفلاش"
+                actionBody == "LOCK_SCREEN" -> "اقفلي الشاشة"
+                else -> null
+            }
+
+            if (commandToRun != null) {
+                try {
+                    intentHandler.handle(commandToRun)
+                } catch (_: Exception) {}
+            }
+        }
+
+        return rawText.replace(actionRegex, "").trim()
     }
 
     fun onAppChosen(app: AppResolver.InstalledApp, pendingAction: PendingAction) {
