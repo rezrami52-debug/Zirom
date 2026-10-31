@@ -13,6 +13,8 @@ import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.core.content.ContextCompat
 import com.racha.ai.core.proactive.ProactiveScheduler
+import com.racha.ai.core.media.IptvManager
+import kotlinx.coroutines.launch
 import com.racha.ai.ui.navigation.RachaApp
 import com.racha.ai.ui.theme.RachaTheme
 
@@ -43,6 +45,12 @@ class MainActivity : ComponentActivity() {
 
         // 🚀 تفعيل مراقبة الإنترنت والعمل الاستباقي لـ JARVIS
         ProactiveScheduler.scheduleNewsWorker(this)
+        
+        // ✅ تحميل قائمة IPTV تلقائياً (مرة واحدة)
+        val iptvManager = IptvManager(this)
+        kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.IO).launch {
+            iptvManager.loadCustomM3uFromUrl("https://iptv-org.github.io/iptv/index.m3u")
+        }
 
         setContent {
             RachaTheme {
