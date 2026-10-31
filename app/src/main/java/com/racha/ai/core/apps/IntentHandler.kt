@@ -10,7 +10,6 @@ import android.net.Uri
 import android.os.BatteryManager
 import android.provider.MediaStore
 import android.provider.Settings
-import android.util.Log
 import com.racha.ai.core.agent.DynamicActionRunner
 import com.racha.ai.core.contacts.Contact
 import com.racha.ai.core.contacts.ContactResolver
@@ -53,7 +52,6 @@ class IntentHandler(
     suspend fun handle(text: String): HandlerResult = withContext(Dispatchers.IO) {
         val lower = text.lowercase().trim()
 
-        // 1. الاتصال بآخر رقم في سجل المكالمات
         if (lower.contains("اخر رقم") || lower.contains("آخر رقم") || lower.contains("اخر مكالمة") || lower.contains("آخر مكالمة")) {
             val lastNum = contactResolver.getLastCallNumber()
             return@withContext if (!lastNum.isNullOrBlank()) {
@@ -63,7 +61,6 @@ class IntentHandler(
             }
         }
 
-        // 2. فلترة الأسماء التي تبدأ بحرف معين
         if (lower.contains("تبدأ بحرف") || lower.contains("تبدا بحرف") || lower.contains("يبدأ بحرف") || lower.contains("يبدا بحرف")) {
             val letter = extractTargetLetter(lower)
             if (letter != null) {
@@ -72,7 +69,6 @@ class IntentHandler(
             }
         }
 
-        // 3. فلترة الأرقام التي تبدأ برقم معين (مثال: تبدأ بـ 23)
         if ((lower.contains("تبدأ ب") || lower.contains("تبدا ب") || lower.contains("تبدا برقم") || lower.contains("تبدأ برقم")) &&
             (lower.contains("ارقام") || lower.contains("أرقام") || lower.contains("نمر"))) {
             val prefix = Regex("\\d+").find(lower)?.value
@@ -82,7 +78,6 @@ class IntentHandler(
             }
         }
 
-        // 4. عرض أي رقم لاسم محدد (مثال: اعرضي أي رقم لمحمد)
         if ((lower.contains("اعرض") || lower.contains("اعرضي") || lower.contains("وريني") || lower.contains("شوفلي") || lower.contains("هات")) &&
             (lower.contains("رقم") || lower.contains("نمرة") || lower.contains("ارقام"))) {
             val targetName = extractName(text)
@@ -225,20 +220,23 @@ class IntentHandler(
             val launchIntent = context.packageManager.getLaunchIntentForPackage(pkgToOpen)
             val componentName = launchIntent?.component?.flattenToShortString()
 
-            return try {
-                if (isSmallWindow && componentName != null) {
-                    ShizukuShellRunner.execCommand("am start -n $componentName --windowingMode 5")
-                    HandlerResult.DirectReply("✅ تم فتح $finalAppName في نافذة مصغرة يا رمزي.")
-                } else if (launchIntent != null) {
-                    launchIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                    context.startActivity(launchIntent)
-                    HandlerResult.DirectReply("✅ تم فتح $finalAppName يا رمزي.")
-                } else {
-                    HandlerResult.Error("⚠️ لم أتمكن من العثور على تطبيق $finalAppName مثبت في هاتفك.")
+            if (isSmallWindow) {
+                if (ShizukuShellRunner.isShizukuAvailable() && componentName != null) {
+                    ShizukuShellRunner.enableFreeformSupport()
+                    val res = ShizukuShellRunner.execCommand("am start -n $componentName --windowingMode 5")
+                    if (!res.contains("فشل") && !res.contains("Error")) {
+                        return HandlerResult.DirectReply("✅ تم فتح $finalAppName في نافذة مصغرة يا رمزي.")
+                    }
                 }
-            } catch (_: Exception) {
-                appResolver.openApp(pkgToOpen)
-                HandlerResult.DirectReply("✅ تم فتح $finalAppName يا رمزي.")
+            }
+
+            if (launchIntent != null) {
+                launchIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                context.startActivity(launchIntent)
+                val note = if (isSmallWindow) " (تم الفتح بشكل قياسي لأن Shizuku أو النوافذ الحرة معطلة)" else ""
+                return HandlerResult.DirectReply("✅ تم فتح $finalAppName يا رمزي$note.")
+            } else {
+                return HandlerResult.Error("⚠️ لم أتمكن من العثور على تطبيق $finalAppName مثبت في هاتفك.")
             }
         }
 
@@ -539,7 +537,7 @@ class IntentHandler(
                     addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
                 }
                 context.startActivity(intent)
-            } catch (e: Exception) { Log.e(TAG, "فشل الاتصال", e) }
+            } catch (_: Exception) {}
         }
     }
 
@@ -555,7 +553,7 @@ class IntentHandler(
             try {
                 val intent = Intent(MediaStore.INTENT_ACTION_STILL_IMAGE_CAMERA).apply { addFlags(Intent.FLAG_ACTIVITY_NEW_TASK) }
                 context.startActivity(intent)
-            } catch (e: Exception) { Log.e(TAG, "فشل فتح الكاميرا", e) }
+            } catch (_: Exception) {}
         }
     }
 

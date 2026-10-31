@@ -1,30 +1,61 @@
 package com.racha.ai.core.shizuku
 
+import android.content.pm.PackageManager
+import rikka.shizuku.Shizuku
 import java.io.BufferedReader
 import java.io.InputStreamReader
 import java.util.concurrent.TimeUnit
 
 object ShizukuShellRunner {
 
+    fun isShizukuAvailable(): Boolean {
+        return try {
+            Shizuku.pingBinder() && Shizuku.checkSelfPermission() == PackageManager.PERMISSION_GRANTED
+        } catch (_: Throwable) {
+            false
+        }
+    }
+
     fun execCommand(command: String): String {
         return try {
-            val process = Runtime.getRuntime().exec(arrayOf("rish", "-c", command))
+            val process = if (isShizukuAvailable()) {
+                val newProcessMethod = Shizuku::class.java.getMethod(
+                    "newProcess",
+                    Array<String>::class.java,
+                    Array<String>::class.java,
+                    String::class.java
+                )
+                newProcessMethod.invoke(null, arrayOf("sh", "-c", command), null, null) as Process
+            } else {
+                Runtime.getRuntime().exec(arrayOf("sh", "-c", command))
+            }
+
             val reader = BufferedReader(InputStreamReader(process.inputStream))
             val output = StringBuilder()
             var line: String?
             while (reader.readLine().also { line = it } != null) {
                 output.append(line).append("\n")
             }
+
             val finished = process.waitFor(3, TimeUnit.SECONDS)
             if (!finished) {
                 process.destroyForcibly()
                 return "انتهت المهلة"
             }
+
             val exitCode = process.exitValue()
             if (exitCode == 0) output.toString().trim() else "فشل ($exitCode)"
-        } catch (e: Exception) {
+        } catch (e: Throwable) {
             "فشل: ${e.message}"
         }
+    }
+
+    fun enableFreeformSupport(): Boolean {
+        val cmd1 = "settings put global enable_freeform_support 1"
+        val cmd2 = "settings put secure force_resizable_activities 1"
+        val r1 = execCommand(cmd1)
+        val r2 = execCommand(cmd2)
+        return !r1.contains("فشل") && !r2.contains("فشل")
     }
 
     fun setWifiEnabled(enable: Boolean): Boolean {
