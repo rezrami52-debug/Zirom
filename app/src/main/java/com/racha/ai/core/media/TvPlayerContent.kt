@@ -35,8 +35,9 @@ fun TvPlayerContent(
     onToggleResize: () -> Unit,
     onClose: () -> Unit
 ) {
+    val context = LocalContext.current
     val player = remember {
-        ExoPlayer.Builder(LocalContext.current).build().apply {
+        ExoPlayer.Builder(context).build().apply {
             setMediaItem(MediaItem.fromUri(streamUrl))
             prepare()
             playWhenReady = true
