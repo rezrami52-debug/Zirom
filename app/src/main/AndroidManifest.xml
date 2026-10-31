@@ -85,5 +85,11 @@
             </intent-filter>
             <meta-data android:name="android.accessibilityservice" android:resource="@xml/eve_accessibility_service_config" />
         </service>
+    
+        <service
+            android:name=".core.media.FloatingTvService"
+            android:enabled="true"
+            android:exported="false"
+            android:foregroundServiceType="mediaPlayback" />
     </application>
 </manifest>
