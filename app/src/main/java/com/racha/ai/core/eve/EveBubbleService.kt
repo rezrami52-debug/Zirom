@@ -253,6 +253,16 @@ class EveBubbleService : Service() {
         }
     }
 
+    
+    private fun bringShelfToFront(type: MediaShelfType) {
+        activeShelfWindows[type]?.let { holder ->
+            try {
+                windowManager.removeView(holder.view)
+                windowManager.addView(holder.view, holder.layoutParams)
+            } catch (_: Exception) {}
+        }
+    }
+
     private fun createAndAddShelfWindow(type: MediaShelfType, offset: Int) {
         val layoutType = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY
@@ -284,10 +294,14 @@ class EveBubbleService : Service() {
                 EveStandaloneShelfWindow(
                     targetShelfType = type,
                     onClose = { EveState.closeShelf(type) },
-                    onMoveWindow = { dx, dy -> updateShelfPosition(type, dx, dy) },
+                    onMoveWindow = { dx, dy -> 
+                        bringShelfToFront(type)
+                        updateShelfPosition(type, dx, dy) 
+                    },
                     onResizeWindow = { dw, dh -> resizeShelfWindow(type, dw, dh) },
                     onToggleFullscreen = { toggleShelfFullscreen(type) },
-                    onPlayAudio = { item -> playSelectedAudio(item) }
+                    onPlayAudio = { item -> playSelectedAudio(item) },
+                    onFocusWindow = { bringShelfToFront(type) }
                 )
             }
         }
@@ -471,24 +485,38 @@ class EveBubbleService : Service() {
         registerReceiver(batteryReceiver, IntentFilter(Intent.ACTION_BATTERY_CHANGED))
     }
 
+    private var listeningWatchdogJob: Job? = null
+
     fun triggerDirectVoiceListening() {
-        if (isHandlingAwake) return
+        if (isHandlingAwake) {
+            stopListening()
+        }
         isHandlingAwake = true
         EveState.setMood(EveMood.AWAKE_SMILING)
+
+        listeningWatchdogJob?.cancel()
+        listeningWatchdogJob = serviceScope.launch {
+            delay(9000)
+            if (isHandlingAwake) {
+                isHandlingAwake = false
+                voiceInputHelper?.stopListening()
+                EveState.setMood(EveMood.SLEEPING)
+            }
+        }
 
         voiceInputHelper?.startListening(
             languageTag = "ar",
             onResult = { text ->
+                listeningWatchdogJob?.cancel()
                 isHandlingAwake = false
                 processSpokenText(text)
             },
             onError = { errorMsg ->
+                listeningWatchdogJob?.cancel()
                 isHandlingAwake = false
+                EveState.setMood(EveMood.SLEEPING)
                 if (errorMsg.contains("لم أسمع") || errorMsg.contains("مهلة صمت")) {
                     speakCleanText("لم أسمعك بوضوح يا رمزي، تفضل بإعادة طلبك.", continueConversation = false)
-                    EveState.setMood(EveMood.SLEEPING)
-                } else {
-                    EveState.setMood(EveMood.SLEEPING)
                 }
             }
         )
@@ -645,8 +673,9 @@ class EveBubbleService : Service() {
     }
 
     private fun stopListening() {
+        listeningWatchdogJob?.cancel()
         isHandlingAwake = false
-        voiceInputHelper?.stopListening()
+        try { voiceInputHelper?.stopListening() } catch (_: Exception) {}
     }
 
     private fun updateBubblePosition(dx: Float, dy: Float) {
@@ -657,7 +686,11 @@ class EveBubbleService : Service() {
 
     private fun handleEveClick() {
         if (tts?.isSpeaking == true) tts?.stop()
-        triggerDirectVoiceListening()
+        stopListening()
+        serviceScope.launch {
+            delay(120)
+            triggerDirectVoiceListening()
+        }
     }
 
     private fun startForegroundServiceNotification() {

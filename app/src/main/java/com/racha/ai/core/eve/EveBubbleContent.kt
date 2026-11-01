@@ -1,3 +1,4 @@
+import androidx.compose.foundation.gestures.detectTransformGestures
 package com.racha.ai.core.eve
 
 import android.app.WallpaperManager
@@ -359,7 +360,8 @@ fun EveStandaloneShelfWindow(
     onMoveWindow: (dx: Float, dy: Float) -> Unit,
     onResizeWindow: (dw: Float, dh: Float) -> Unit,
     onToggleFullscreen: () -> Unit = {},
-    onPlayAudio: (MediaItemData) -> Unit
+    onPlayAudio: (MediaItemData) -> Unit,
+    onFocusWindow: () -> Unit = {}
 ) {
     val shelfType = targetShelfType
     val context = LocalContext.current
@@ -781,7 +783,9 @@ fun EveStandaloneShelfWindow(
                                 context.contentResolver.openInputStream(currentItem.uri)?.use { stream -> BitmapFactory.decodeStream(stream)?.asImageBitmap() }
                             } catch (_: Exception) { null }
                         }
-                        var photoDragY by remember { mutableFloatStateOf(0f) }
+                        var zoomScale by remember(currentItem.uri) { mutableFloatStateOf(1f) }
+                        var panOffsetX by remember(currentItem.uri) { mutableFloatStateOf(0f) }
+                        var panOffsetY by remember(currentItem.uri) { mutableFloatStateOf(0f) }
 
                         Column(modifier = Modifier.weight(1f).fillMaxWidth()) {
                             Box(
@@ -790,21 +794,34 @@ fun EveStandaloneShelfWindow(
                                     .fillMaxWidth()
                                     .clip(RoundedCornerShape(12.dp))
                                     .background(Color.Black)
-                                    .offset { IntOffset(0, photoDragY.roundToInt()) }
                                     .pointerInput(currentItem.uri) {
-                                        detectDragGestures(
-                                            onDragEnd = {
-                                                if (photoDragY < -120f || photoDragY > 120f) setAsPhoneWallpaper(context, currentItem.uri)
-                                                photoDragY = 0f
-                                            },
-                                            onDragCancel = { photoDragY = 0f },
-                                            onDrag = { change, dragAmount -> change.consume(); photoDragY += dragAmount.y }
-                                        )
+                                        detectTransformGestures { _, pan, zoom, _ ->
+                                            zoomScale = (zoomScale * zoom).coerceIn(1f, 5f)
+                                            if (zoomScale > 1f) {
+                                                panOffsetX += pan.x * zoomScale
+                                                panOffsetY += pan.y * zoomScale
+                                            } else {
+                                                panOffsetX = 0f
+                                                panOffsetY = 0f
+                                            }
+                                        }
                                     },
                                 contentAlignment = Alignment.Center
                             ) {
                                 if (bmp != null) {
-                                    Image(bitmap = bmp, contentDescription = null, modifier = Modifier.fillMaxSize().graphicsLayer(scaleX = innerContentZoom, scaleY = innerContentZoom), contentScale = ContentScale.Fit)
+                                    Image(
+                                        bitmap = bmp,
+                                        contentDescription = null,
+                                        modifier = Modifier
+                                            .fillMaxSize()
+                                            .graphicsLayer(
+                                                scaleX = zoomScale,
+                                                scaleY = zoomScale,
+                                                translationX = panOffsetX,
+                                                translationY = panOffsetY
+                                            ),
+                                        contentScale = ContentScale.Fit
+                                    )
                                 }
                             }
 

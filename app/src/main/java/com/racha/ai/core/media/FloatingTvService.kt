@@ -12,9 +12,11 @@ import android.os.Build
 import android.os.IBinder
 import android.view.Gravity
 import android.view.WindowManager
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.platform.ComposeView
 import androidx.core.app.NotificationCompat
 import com.racha.ai.core.overlay.OverlayLifecycleOwner
+import kotlin.math.roundToInt
 
 class FloatingTvService : Service() {
 
@@ -23,9 +25,14 @@ class FloatingTvService : Service() {
     private val lifecycleOwner = OverlayLifecycleOwner()
     private lateinit var layoutParams: WindowManager.LayoutParams
 
+    private val currentChannelName = mutableStateOf("بث مباشر")
+    private val currentStreamUrl = mutableStateOf("")
+    private var isExpanded = false
+
     companion object {
         const val EXTRA_CHANNEL_NAME = "EXTRA_CHANNEL_NAME"
         const val EXTRA_STREAM_URL = "EXTRA_STREAM_URL"
+        const val ACTION_STOP_TV = "ACTION_STOP_TV"
     }
 
     override fun onBind(intent: Intent?): IBinder? = null
@@ -37,7 +44,96 @@ class FloatingTvService : Service() {
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        if (intent?.action == ACTION_STOP_TV) {
+            stopSelf()
+            return START_NOT_STICKY
+        }
+
+        val channel = intent?.getStringExtra(EXTRA_CHANNEL_NAME) ?: "بث مباشر"
+        val url = intent?.getStringExtra(EXTRA_STREAM_URL) ?: ""
+
+        if (url.isNotBlank()) {
+            currentChannelName.value = channel
+            currentStreamUrl.value = url
+
+            if (composeView == null) {
+                setupFloatingTvWindow()
+            }
+        }
+
         return START_NOT_STICKY
+    }
+
+    private fun setupFloatingTvWindow() {
+        val layoutType = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY
+        } else {
+            @Suppress("DEPRECATION")
+            WindowManager.LayoutParams.TYPE_PHONE
+        }
+
+        val density = resources.displayMetrics.density
+        val defaultWidth = (300 * density).toInt()
+        val defaultHeight = (195 * density).toInt()
+
+        layoutParams = WindowManager.LayoutParams(
+            defaultWidth,
+            defaultHeight,
+            layoutType,
+            WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
+            WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS,
+            PixelFormat.TRANSLUCENT
+        ).apply {
+            gravity = Gravity.TOP or Gravity.START
+            x = 40
+            y = 200
+        }
+
+        composeView = ComposeView(this).apply {
+            lifecycleOwner.attachToComposeView(this)
+            setContent {
+                TvPlayerContent(
+                    channelName = currentChannelName.value,
+                    streamUrl = currentStreamUrl.value,
+                    onDrag = { dx, dy -> updateTvPosition(dx, dy) },
+                    onToggleResize = { toggleTvResize() },
+                    onClose = { stopSelf() }
+                )
+            }
+        }
+
+        try {
+            windowManager.addView(composeView, layoutParams)
+            lifecycleOwner.handleResume()
+        } catch (e: Exception) {
+            e.printStackTrace()
+            stopSelf()
+        }
+    }
+
+    private fun updateTvPosition(dx: Float, dy: Float) {
+        layoutParams.x += dx.roundToInt()
+        layoutParams.y += dy.roundToInt()
+        try {
+            windowManager.updateViewLayout(composeView, layoutParams)
+        } catch (_: Exception) {}
+    }
+
+    private fun toggleTvResize() {
+        val dm = resources.displayMetrics
+        val density = dm.density
+        if (!isExpanded) {
+            layoutParams.width = (dm.widthPixels * 0.94f).toInt()
+            layoutParams.height = (layoutParams.width * 9 / 16) + (34 * density).toInt()
+            isExpanded = true
+        } else {
+            layoutParams.width = (300 * density).toInt()
+            layoutParams.height = (195 * density).toInt()
+            isExpanded = false
+        }
+        try {
+            windowManager.updateViewLayout(composeView, layoutParams)
+        } catch (_: Exception) {}
     }
 
     private fun startForegroundServiceNotification() {
