@@ -20,6 +20,47 @@ data class TvChannel(
 
 class IptvManager(private val context: Context) {
 
+    suspend fun loadCustomM3uFromUrl(urlString: String): Boolean = withContext(Dispatchers.IO) {
+        try {
+            val appDir = File(context.getExternalFilesDir(null), "iptv")
+            if (!appDir.exists()) appDir.mkdirs()
+
+            val primaryFile = File(CUSTOM_M3U_PATH)
+            val parent = primaryFile.parentFile
+            if (parent != null && !parent.exists()) {
+                try { parent.mkdirs() } catch (_: Exception) {}
+            }
+
+            val targetFile = if (primaryFile.parentFile?.canWrite() == true) primaryFile else File(appDir, "channels.m3u")
+
+            // إذا كان الملف موجوداً بالفعل وله حجم كافٍ، لا داعي لإعادة التحميل
+            if (targetFile.exists() && targetFile.length() > 500) {
+                return@withContext true
+            }
+
+            val url = URL(urlString)
+            val conn = (url.openConnection() as HttpURLConnection).apply {
+                connectTimeout = 10000
+                readTimeout = 15000
+                requestMethod = "GET"
+            }
+
+            if (conn.responseCode == HttpURLConnection.HTTP_OK) {
+                conn.inputStream.use { input ->
+                    targetFile.outputStream().use { output ->
+                        input.copyTo(output)
+                    }
+                }
+                return@withContext true
+            }
+            false
+        } catch (e: Exception) {
+            e.printStackTrace()
+            false
+        }
+    }
+
+
     companion object {
         private const val CUSTOM_M3U_PATH = "/storage/emulated/0/Racha/iptv/channels.m3u"
         private const val CUSTOM_M3U_ALT = "/sdcard/Racha/iptv/channels.m3u"
