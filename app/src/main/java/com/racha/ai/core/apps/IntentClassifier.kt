@@ -9,7 +9,8 @@ object IntentClassifier {
         GET_TIME, GET_DATE, GET_BATTERY, TOGGLE_FLASHLIGHT,
         TOGGLE_BLUETOOTH, GREETING, SMALL_TALK, PRAYER_TIMES,
         FIND_MY_PHONE, MOSQUE_MODE, MACRO_SLEEP, MACRO_CINEMA, MACRO_WORK,
-        OPEN_PHOTOS, OPEN_VIDEOS, OPEN_MUSIC, OPEN_NOTIFICATIONS, OPEN_MULTI_SHELVES, OPEN_TV,
+        OPEN_PHOTOS, OPEN_VIDEOS, OPEN_MUSIC, OPEN_NOTIFICATIONS, OPEN_MULTI_SHELVES,
+        OPEN_LIVE_TV, WATCH_MATCH,
         CORRECTION, UNKNOWN
     }
 
@@ -19,7 +20,16 @@ object IntentClassifier {
         if (isCorrection(text)) return IntentType.CORRECTION
         if (isSetAlarm(text)) return IntentType.SET_ALARM
 
-        // الأفعال بالدارجة التونسية والعربية الفصحى
+        // أوامر مباريات البث المباشر
+        if (lower.contains("ماتش") || lower.contains("مباراة") || lower.contains("مقابلة")) {
+            return IntentType.WATCH_MATCH
+        }
+
+        // أوامر التلفاز والقنوات
+        if (lower.contains("تلفزة") || lower.contains("تلفاز") || lower.contains("تلفزيون") || lower.contains("قنوات") || lower.contains("قناة") || lower.contains("iptv")) {
+            return IntentType.OPEN_LIVE_TV
+        }
+
         val isMediaCmd = lower.contains("استعرض") || lower.contains("استعرضي") || lower.contains("اعرض") ||
                          lower.contains("اعرضي") || lower.contains("افتح") || lower.contains("افتحي") ||
                          lower.contains("وريني") || lower.contains("أرني") || lower.contains("ارني") ||
@@ -32,7 +42,6 @@ object IntentClassifier {
         val hasMusic = lower.contains("موسيقى") || lower.contains("اغاني") || lower.contains("أغاني") || lower.contains("صوتيات") || lower.contains("غناء")
         val hasNotif = lower.contains("اشعار") || lower.contains("اشعارات") || lower.contains("إشعار") || lower.contains("إشعارات")
 
-        // 1. فحص الأوامر المركبة (طلب أكثر من نوع، أو طلب نافذة أخرى منفصلة)
         val mediaCount = listOf(hasVideo, hasPhoto, hasMusic, hasNotif).count { it }
         val isOtherWindow = lower.contains("اخرى") || lower.contains("أخرى") || lower.contains("منفصلة") ||
                             lower.contains("كل") || lower.contains("مع بعض") || lower.contains("نوافذ")
@@ -41,13 +50,11 @@ object IntentClassifier {
             return IntentType.OPEN_MULTI_SHELVES
         }
 
-        // 2. النوافذ الفردية
         if (hasNotif && isMediaCmd) return IntentType.OPEN_NOTIFICATIONS
         if (isMediaCmd && hasVideo) return IntentType.OPEN_VIDEOS
         if (isMediaCmd && hasPhoto) return IntentType.OPEN_PHOTOS
         if (isMediaCmd && hasMusic) return IntentType.OPEN_MUSIC
 
-        // أوامر فتح التطبيقات
         val isOpenAppCmd = lower.startsWith("افتح") || lower.startsWith("افتحي") || lower.startsWith("شغل") ||
                            lower.startsWith("شغلي") || lower.startsWith("حل") || lower.startsWith("حلي") ||
                            lower.contains("تطبيق") || lower.contains("برنامج")
@@ -80,14 +87,6 @@ object IntentClassifier {
         if (lower.contains("كاميرا")) return IntentType.OPEN_CAMERA
         if (lower.contains("واي فاي") || lower.contains("wifi") || lower.contains("ويفي")) return IntentType.TOGGLE_WIFI
         if (lower.contains("صامت") || lower.contains("اهتزاز") || lower.contains("عادي") || lower.contains("رنين")) return IntentType.SET_RINGER
-
-
-        // أوامر التلفاز (بعد الوسائط، لتجنب التعارض مع "اعرض فيديو")
-        val hasTv = lower.contains("تلفاز") || lower.contains("تلفزيون") || lower.contains("قناة") || lower.contains("قنوات") || lower.contains("بث") || lower.contains("مشاهدة")
-        if (hasTv && isMediaCmd) {
-            // إذا كان الطلب يحتوي على "قناة" أو "تلفاز" أو "بث" أو "مشاهدة"
-            return IntentType.OPEN_TV
-        }
 
         return IntentType.UNKNOWN
     }

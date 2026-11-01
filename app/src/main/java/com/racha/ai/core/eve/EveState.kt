@@ -10,7 +10,7 @@ enum class EveMood {
 }
 
 enum class MediaShelfType {
-    NONE, PHOTOS, VIDEOS, MUSIC, NOTIFICATIONS
+    NONE, PHOTOS, VIDEOS, MUSIC, NOTIFICATIONS, LIVE_TV
 }
 
 data class MediaPlaybackState(
@@ -32,7 +32,9 @@ data class EveUiState(
     val mood: EveMood = EveMood.SLEEPING,
     val config: EveCustomizationConfig = EveCustomizationConfig(),
     val playback: MediaPlaybackState = MediaPlaybackState(),
-    val openShelves: Set<MediaShelfType> = emptySet()
+    val openShelves: Set<MediaShelfType> = emptySet(),
+    val selectedTvChannelUrl: String? = null,
+    val selectedTvChannelName: String? = null
 ) {
     val shelfType: MediaShelfType get() = openShelves.firstOrNull() ?: MediaShelfType.NONE
 }
@@ -81,6 +83,15 @@ object EveState {
         }
     }
 
+    fun openTvWithChannel(channelName: String, streamUrl: String) {
+        val current = _uiState.value.openShelves
+        _uiState.value = _uiState.value.copy(
+            openShelves = current + MediaShelfType.LIVE_TV,
+            selectedTvChannelName = channelName,
+            selectedTvChannelUrl = streamUrl
+        )
+    }
+
     fun openMultipleShelves(types: List<MediaShelfType>) {
         val validTypes = types.filter { it != MediaShelfType.NONE }
         val current = _uiState.value.openShelves
@@ -97,7 +108,7 @@ object EveState {
     }
 
     fun closeAllShelves() {
-        _uiState.value = _uiState.value.copy(openShelves = emptySet())
+        _uiState.value = _uiState.value.copy(openShelves = emptySet(), selectedTvChannelUrl = null)
     }
 
     fun addNotification() {

@@ -15,9 +15,8 @@ import com.racha.ai.core.contacts.Contact
 import com.racha.ai.core.contacts.ContactResolver
 import com.racha.ai.core.eve.EveAccessibilityService
 import com.racha.ai.core.eve.EveState
-import com.racha.ai.core.media.IptvManager
-import com.racha.ai.core.media.FloatingTvService
 import com.racha.ai.core.eve.MediaShelfType
+import com.racha.ai.core.media.IptvManager
 import com.racha.ai.core.shizuku.ShizukuShellRunner
 import com.racha.ai.services.location.LocationHelper
 import kotlinx.coroutines.CoroutineScope
@@ -38,6 +37,7 @@ class IntentHandler(
     companion object { private const val TAG = "RachaIntentHandler" }
     private val setAlarmHandler = SetAlarmHandler(context)
     private val dynamicActionRunner = DynamicActionRunner(context)
+    private val iptvManager = IptvManager(context)
 
     private fun getFriendlyName(): String {
         return listOf("يا رمزي", "رمزي", "صديقي", "يا غالي", "").random()
@@ -53,6 +53,27 @@ class IntentHandler(
 
     suspend fun handle(text: String): HandlerResult = withContext(Dispatchers.IO) {
         val lower = text.lowercase().trim()
+
+        // 1. تشغيل البث المباشر لمباراة معينة
+        if (lower.contains("ماتش") || lower.contains("مباراة") || lower.contains("مقابلة")) {
+            val teamName = text.replace(Regex("(?i)حطيلي|شوفيلي|اعرضي|افتحي|بث مباشر|ماتش|مباراة|مقابلة|يا رمزي|رمزي"), "").trim()
+            val matchChannel = iptvManager.findMatchStream(teamName)
+            return@withContext if (matchChannel != null) {
+                EveState.openTvWithChannel(matchChannel.name, matchChannel.streamUrl)
+                val suffix = getFriendlyName().let { if (it.isNotBlank()) " $it" else "" }
+                HandlerResult.DirectReply("⚽ من عيوني$suffix، فتحت لك البث المباشر على قناة ${matchChannel.name}.")
+            } else {
+                EveState.openShelf(MediaShelfType.LIVE_TV)
+                HandlerResult.DirectReply("⚽ فتحت لك باقة القنوات الرياضية لمتابعة المباراة يا رمزي.")
+            }
+        }
+
+        // 2. فتح التلفاز والقنوات
+        if (lower.contains("تلفزة") || lower.contains("تلفاز") || lower.contains("تلفزيون") || lower.contains("قنوات") || lower.contains("iptv")) {
+            EveState.openShelf(MediaShelfType.LIVE_TV)
+            val suffix = getFriendlyName().let { if (it.isNotBlank()) " $it" else "" }
+            return@withContext HandlerResult.DirectReply("📺 تفضل$suffix، تم فتح شاشة التلفاز والبث المباشر.")
+        }
 
         if (lower.contains("اخر رقم") || lower.contains("آخر رقم") || lower.contains("اخر مكالمة") || lower.contains("آخر مكالمة")) {
             val lastNum = contactResolver.getLastCallNumber()
@@ -91,12 +112,19 @@ class IntentHandler(
 
         val intentType = IntentClassifier.classify(text)
         return@withContext when (intentType) {
+            IntentClassifier.IntentType.WATCH_MATCH,
+            IntentClassifier.IntentType.OPEN_LIVE_TV -> {
+                EveState.openShelf(MediaShelfType.LIVE_TV)
+                val suffix = getFriendlyName().let { if (it.isNotBlank()) " $it" else "" }
+                HandlerResult.DirectReply("📺 تفضل$suffix، تم تشغيل التلفاز والبث المباشر.")
+            }
             IntentClassifier.IntentType.OPEN_MULTI_SHELVES -> {
                 val typesToOpen = mutableListOf<MediaShelfType>()
                 if (lower.contains("فيديو") || lower.contains("مقاطع")) typesToOpen.add(MediaShelfType.VIDEOS)
                 if (lower.contains("صور") || lower.contains("معرض") || lower.contains("البوم")) typesToOpen.add(MediaShelfType.PHOTOS)
                 if (lower.contains("موسيقى") || lower.contains("اغاني")) typesToOpen.add(MediaShelfType.MUSIC)
                 if (lower.contains("اشعار") || lower.contains("إشعار")) typesToOpen.add(MediaShelfType.NOTIFICATIONS)
+                if (lower.contains("تلفزة") || lower.contains("تلفاز") || lower.contains("قنوات")) typesToOpen.add(MediaShelfType.LIVE_TV)
 
                 if (typesToOpen.isEmpty()) {
                     if (lower.contains("صور")) typesToOpen.add(MediaShelfType.PHOTOS)
@@ -108,7 +136,6 @@ class IntentHandler(
                 val suffix = getFriendlyName().let { if (it.isNotBlank()) " $it" else "" }
                 HandlerResult.DirectReply("🪟 من عيوني$suffix، تم فتح النوافذ المستقلة معاً على الشاشة.")
             }
-            IntentClassifier.IntentType.OPEN_TV -> handleOpenTv(text)
             IntentClassifier.IntentType.OPEN_NOTIFICATIONS -> {
                 EveState.openShelf(MediaShelfType.NOTIFICATIONS)
                 val suffix = getFriendlyName().let { if (it.isNotBlank()) " $it" else "" }
@@ -277,35 +304,6 @@ class IntentHandler(
             if (idx >= 0) return text.substring(idx + kw.length).trim()
         }
         return "مرحباً، أرسل لك هذه الرسالة عبر المساعد الذكي."
-    }
-
-
-    private suspend fun handleOpenTv(text: String): HandlerResult {
-        val iptvManager = IptvManager(context)
-        val channels = iptvManager.getAllChannels()
-
-        if (channels.isEmpty()) {
-            return HandlerResult.Error("⚠️ لا توجد قنوات متاحة حالياً.")
-        }
-
-        // البحث عن القناة المطلوبة
-        val query = text.replace(Regex("(?i)افتح|اعرض|شغل|شغلي|قناة|قنوات|تلفاز|تلفزيون|بث|مشاهدة|يا رمزي|رمزي"), "").trim()
-        val matchedChannel = if (query.isNotBlank()) {
-            channels.find { it.name.contains(query, ignoreCase = true) }
-        } else {
-            null
-        }
-
-        val channelToPlay = matchedChannel ?: channels.first()
-
-        // تشغيل الخدمة
-        val intent = android.content.Intent(context, FloatingTvService::class.java).apply {
-            putExtra(FloatingTvService.EXTRA_CHANNEL_NAME, channelToPlay.name)
-            putExtra(FloatingTvService.EXTRA_STREAM_URL, channelToPlay.streamUrl)
-        }
-        context.startService(intent)
-
-        return HandlerResult.DirectReply("📺 تم فتح قناة ${channelToPlay.name} يا رمزي.")
     }
 
     private suspend fun handleFindMyPhone(): HandlerResult {

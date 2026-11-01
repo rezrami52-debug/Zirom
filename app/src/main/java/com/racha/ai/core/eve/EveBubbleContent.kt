@@ -24,8 +24,10 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.detectDragGestures
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -55,8 +57,10 @@ import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
+import com.racha.ai.core.media.IptvManager
 import com.racha.ai.core.media.LocalMediaManager
 import com.racha.ai.core.media.MediaItemData
+import com.racha.ai.core.media.TvChannel
 import com.racha.ai.core.preferences.AppPreferences
 import com.racha.ai.core.shizuku.ShizukuShellRunner
 import com.racha.ai.data.repository.NotificationRepository
@@ -66,6 +70,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import java.io.File
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -345,7 +350,7 @@ fun EveBubbleAvatar(
 }
 
 /**
- * النافذة المستقلة الحرة: تحريك سلس بشريط العنوان + تمرير حر 100% دون تجميد
+ * النافذة المستقلة: تدعم التلفاز، المشغل السينمائي، الصور، والموسيقى
  */
 @Composable
 fun EveStandaloneShelfWindow(
@@ -359,20 +364,49 @@ fun EveStandaloneShelfWindow(
     val shelfType = targetShelfType
     val context = LocalContext.current
     val mediaManager = remember { LocalMediaManager(context) }
+    val iptvManager = remember { IptvManager(context) }
     val notifications by NotificationRepository.notifications.collectAsState()
     val appPrefs = remember { AppPreferences(context) }
+    val eveUiState by EveState.uiState.collectAsState()
 
     var activePreviewItem by remember { mutableStateOf<MediaItemData?>(null) }
+    var activeTvChannel by remember { mutableStateOf<TvChannel?>(null) }
+
     var innerContentZoom by remember { mutableFloatStateOf(1.0f) }
     var videoVolume by remember { mutableFloatStateOf(1.0f) }
 
+    // فلاتر التلفاز
+    var selectedCategory by remember { mutableStateOf("الكل") }
+    var selectedCountry by remember { mutableStateOf("الكل") }
+    var tvSearchQuery by remember { mutableStateOf("") }
+
+    // فتح قناة مباشرة إذا طُلبت بالصوت (مثل بث مباراة)
+    LaunchedEffect(eveUiState.selectedTvChannelUrl) {
+        val url = eveUiState.selectedTvChannelUrl
+        val name = eveUiState.selectedTvChannelName ?: "بث مباشر"
+        if (!url.isNullOrBlank()) {
+            activeTvChannel = TvChannel("live_direct", name, "رياضة", "بث مباشر", url)
+        }
+    }
+
     LaunchedEffect(shelfType) {
         activePreviewItem = null
+        if (shelfType != MediaShelfType.LIVE_TV) {
+            activeTvChannel = null
+        }
         innerContentZoom = 1.0f
     }
 
+    // جلب قنوات التلفاز
+    val tvChannels by produceState<List<TvChannel>>(initialValue = emptyList(), shelfType) {
+        if (shelfType == MediaShelfType.LIVE_TV) {
+            value = iptvManager.getAllChannels()
+        }
+    }
+
+    // جلب الوسائط المحلية
     val mediaItems by produceState<List<MediaItemData>>(initialValue = emptyList(), shelfType) {
-        if (shelfType != MediaShelfType.NONE && shelfType != MediaShelfType.NOTIFICATIONS) {
+        if (shelfType != MediaShelfType.NONE && shelfType != MediaShelfType.NOTIFICATIONS && shelfType != MediaShelfType.LIVE_TV) {
             value = withContext(Dispatchers.IO) {
                 when (shelfType) {
                     MediaShelfType.MUSIC -> mediaManager.getLocalAudios()
@@ -381,8 +415,6 @@ fun EveStandaloneShelfWindow(
                     else -> emptyList()
                 }
             }
-        } else {
-            value = emptyList()
         }
     }
 
@@ -395,7 +427,7 @@ fun EveStandaloneShelfWindow(
     ) {
         Box(modifier = Modifier.fillMaxSize()) {
             Column(modifier = Modifier.padding(8.dp).fillMaxSize()) {
-                // شريط العنوان العلوي: هو المخصص حصرياً لتحريك النافذة دون التشويش على القائمة
+                // شريط العنوان العلوي وسحب النافذة
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -422,7 +454,9 @@ fun EveStandaloneShelfWindow(
                         )
                         Text(
                             text = when {
+                                activeTvChannel != null -> "📺 ${activeTvChannel?.name} 🔴 مباشر"
                                 activePreviewItem != null -> "🎬 المشغل السينمائي"
+                                shelfType == MediaShelfType.LIVE_TV -> "التلفاز المباشر (${tvChannels.size}) 📺"
                                 shelfType == MediaShelfType.NOTIFICATIONS -> "الإشعارات (${notifications.size}) 🔔"
                                 shelfType == MediaShelfType.MUSIC -> "الموسيقى (${mediaItems.size}) 🎶"
                                 shelfType == MediaShelfType.VIDEOS -> "الفيديوهات (${mediaItems.size}) 📽️"
@@ -431,12 +465,14 @@ fun EveStandaloneShelfWindow(
                             },
                             color = Color(0xFF00E5FF),
                             fontSize = 12.sp,
-                            fontWeight = FontWeight.Bold
+                            fontWeight = FontWeight.Bold,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.widthIn(max = 160.dp)
                         )
                     }
 
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        // زر رفع النافذة للطبقة العليا
                         IconButton(
                             onClick = onBringToFront,
                             modifier = Modifier.size(24.dp)
@@ -444,49 +480,11 @@ fun EveStandaloneShelfWindow(
                             Icon(Icons.Default.Layers, contentDescription = "للمقدمة", tint = Color(0xFF38BDF8), modifier = Modifier.size(15.dp))
                         }
 
-                        if (activePreviewItem != null) {
-                            val currentItem = activePreviewItem!!
-
-                            IconButton(
-                                onClick = { shareMedia(context, currentItem) },
-                                modifier = Modifier.size(24.dp)
-                            ) {
-                                Icon(Icons.Default.Share, contentDescription = "مشاركة", tint = Color(0xFF00E5FF), modifier = Modifier.size(15.dp))
-                            }
-
-                            IconButton(
-                                onClick = { editMedia(context, currentItem) },
-                                modifier = Modifier.size(24.dp)
-                            ) {
-                                Icon(Icons.Default.Edit, contentDescription = "تعديل", tint = Color.White, modifier = Modifier.size(15.dp))
-                            }
-
-                            if (currentItem.type == "PHOTO") {
-                                IconButton(
-                                    onClick = { setAsPhoneWallpaper(context, currentItem.uri) },
-                                    modifier = Modifier.size(24.dp)
-                                ) {
-                                    Icon(Icons.Default.Wallpaper, contentDescription = "خلفية الهاتف", tint = Color(0xFF38BDF8), modifier = Modifier.size(15.dp))
-                                }
-                            }
-
-                            IconButton(
-                                onClick = {
-                                    innerContentZoom = if (innerContentZoom >= 2.5f) 1.0f else innerContentZoom + 0.5f
-                                },
-                                modifier = Modifier.size(24.dp)
-                            ) {
-                                Text(
-                                    text = "${String.format(Locale.US, "%.1f", innerContentZoom)}x",
-                                    color = Color(0xFF00E5FF),
-                                    fontSize = 10.sp,
-                                    fontWeight = FontWeight.Bold
-                                )
-                            }
-
+                        if (activePreviewItem != null || activeTvChannel != null) {
                             TextButton(
                                 onClick = {
                                     activePreviewItem = null
+                                    activeTvChannel = null
                                     innerContentZoom = 1.0f
                                 },
                                 contentPadding = PaddingValues(horizontal = 4.dp, vertical = 2.dp)
@@ -503,8 +501,144 @@ fun EveStandaloneShelfWindow(
 
                 Divider(color = Color.White.copy(alpha = 0.15f), thickness = 1.dp, modifier = Modifier.padding(vertical = 4.dp))
 
-                // محتوى القوائم: متحرر بالكامل للتمرير السلس
-                if (shelfType == MediaShelfType.NOTIFICATIONS) {
+                // 1. شاشة التلفاز والقنوات المباشرة (LIVE_TV)
+                if (shelfType == MediaShelfType.LIVE_TV) {
+                    if (activeTvChannel != null) {
+                        val currentCh = activeTvChannel!!
+                        var videoViewRef by remember { mutableStateOf<VideoView?>(null) }
+                        var mediaPlayerRef by remember { mutableStateOf<MediaPlayer?>(null) }
+
+                        Column(modifier = Modifier.weight(1f).fillMaxWidth()) {
+                            Box(
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .fillMaxWidth()
+                                    .clip(RoundedCornerShape(12.dp))
+                                    .background(Color.Black)
+                            ) {
+                                AndroidView(
+                                    factory = { ctx ->
+                                        VideoView(ctx).apply {
+                                            setVideoURI(Uri.parse(currentCh.streamUrl))
+                                            setOnPreparedListener { mp ->
+                                                mediaPlayerRef = mp
+                                                mp.setVolume(videoVolume, videoVolume)
+                                                start()
+                                            }
+                                            videoViewRef = this
+                                        }
+                                    },
+                                    modifier = Modifier.fillMaxSize()
+                                )
+                            }
+
+                            Spacer(modifier = Modifier.height(4.dp))
+
+                            // شريط تحكم البث المباشر وميكسر الصوت
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clip(RoundedCornerShape(10.dp))
+                                    .background(Color(0xFF0F172A))
+                                    .padding(horizontal = 8.dp, vertical = 6.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Icon(
+                                        imageVector = if (videoVolume == 0f) Icons.Default.VolumeOff else Icons.Default.VolumeUp,
+                                        contentDescription = null,
+                                        tint = Color(0xFF00E5FF),
+                                        modifier = Modifier.size(18.dp).clickable {
+                                            videoVolume = if (videoVolume > 0f) 0f else 1f
+                                            mediaPlayerRef?.setVolume(videoVolume, videoVolume)
+                                        }
+                                    )
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Slider(
+                                        value = videoVolume,
+                                        onValueChange = {
+                                            videoVolume = it
+                                            mediaPlayerRef?.setVolume(it, it)
+                                        },
+                                        valueRange = 0f..1f,
+                                        modifier = Modifier.width(110.dp).height(16.dp)
+                                    )
+                                }
+
+                                Text("🔴 بث مباشر", color = Color(0xFFFF1744), fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                            }
+                        }
+                    } else {
+                        // قائمة القنوات مع فلاتر النوعية والبلد
+                        Column(modifier = Modifier.weight(1f).fillMaxWidth()) {
+                            // فلاتر الفئات
+                            LazyRow(
+                                horizontalArrangement = Arrangement.spacedBy(4.dp),
+                                modifier = Modifier.fillMaxWidth().padding(bottom = 4.dp)
+                            ) {
+                                val categories = listOf("الكل", "تونس", "رياضة", "أخبار", "عام", "وثائقي")
+                                items(categories) { cat ->
+                                    FilterChip(
+                                        selected = selectedCategory == cat,
+                                        onClick = { selectedCategory = cat },
+                                        label = { Text(cat, fontSize = 10.sp) },
+                                        colors = FilterChipDefaults.filterChipColors(
+                                            selectedContainerColor = Color(0xFF00E5FF).copy(alpha = 0.25f),
+                                            selectedLabelColor = Color(0xFF00E5FF)
+                                        )
+                                    )
+                                }
+                            }
+
+                            val filteredChannels = remember(tvChannels, selectedCategory, selectedCountry, tvSearchQuery) {
+                                tvChannels.filter { ch ->
+                                    (selectedCategory == "الكل" || ch.category.contains(selectedCategory) || (selectedCategory == "رياضة" && ch.country == "رياضة")) &&
+                                    (selectedCountry == "الكل" || ch.country.contains(selectedCountry)) &&
+                                    (tvSearchQuery.isBlank() || ch.name.lowercase().contains(tvSearchQuery.lowercase()))
+                                }
+                            }
+
+                            if (filteredChannels.isEmpty()) {
+                                Box(modifier = Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
+                                    Text("لا توجد قنوات مطابقة في هذه الفئة...", color = Color.Gray, fontSize = 11.sp)
+                                }
+                            } else {
+                                LazyColumn(
+                                    modifier = Modifier.weight(1f).fillMaxWidth(),
+                                    verticalArrangement = Arrangement.spacedBy(4.dp)
+                                ) {
+                                    items(filteredChannels) { ch ->
+                                        Row(
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .clip(RoundedCornerShape(8.dp))
+                                                .clickable { activeTvChannel = ch }
+                                                .background(Color.White.copy(alpha = 0.05f))
+                                                .padding(horizontal = 8.dp, vertical = 6.dp),
+                                            verticalAlignment = Alignment.CenterVertically
+                                        ) {
+                                            Icon(
+                                                Icons.Default.Tv,
+                                                contentDescription = null,
+                                                tint = Color(0xFF00E5FF),
+                                                modifier = Modifier.size(18.dp)
+                                            )
+                                            Spacer(modifier = Modifier.width(8.dp))
+                                            Column(modifier = Modifier.weight(1f)) {
+                                                Text(ch.name, color = Color.White, fontSize = 11.sp, fontWeight = FontWeight.Bold, maxLines = 1)
+                                                Text("${ch.category} • ${ch.country}", color = Color.Gray, fontSize = 9.sp)
+                                            }
+                                            Icon(Icons.Default.PlayArrow, contentDescription = null, tint = Color(0xFF00E5FF), modifier = Modifier.size(16.dp))
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+                // 2. بقية الرفوف (الإشعارات والوسائط)
+                else if (shelfType == MediaShelfType.NOTIFICATIONS) {
                     if (notifications.isEmpty()) {
                         Box(modifier = Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
                             Text("لا توجد إشعارات جديدة حالياً يا رمزي", color = Color.Gray, fontSize = 11.sp)
@@ -572,21 +706,13 @@ fun EveStandaloneShelfWindow(
                                         }
                                     },
                                     update = { vv -> videoViewRef = vv },
-                                    modifier = Modifier
-                                        .fillMaxSize()
-                                        .graphicsLayer(
-                                            scaleX = innerContentZoom,
-                                            scaleY = innerContentZoom
-                                        )
+                                    modifier = Modifier.fillMaxSize().graphicsLayer(scaleX = innerContentZoom, scaleY = innerContentZoom)
                                 )
                             }
 
                             Spacer(modifier = Modifier.height(4.dp))
 
-                            Row(
-                                modifier = Modifier.fillMaxWidth().padding(horizontal = 6.dp),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
+                            Row(modifier = Modifier.fillMaxWidth().padding(horizontal = 6.dp), verticalAlignment = Alignment.CenterVertically) {
                                 Icon(
                                     imageVector = if (videoVolume == 0f) Icons.Default.VolumeOff else Icons.Default.VolumeUp,
                                     contentDescription = null,
@@ -607,12 +733,7 @@ fun EveStandaloneShelfWindow(
                                     modifier = Modifier.weight(1f).height(16.dp)
                                 )
                                 Spacer(modifier = Modifier.width(6.dp))
-                                Text(
-                                    text = "${(videoVolume * 100).toInt()}%",
-                                    color = Color(0xFF00E5FF),
-                                    fontSize = 9.sp,
-                                    fontWeight = FontWeight.Bold
-                                )
+                                Text(text = "${(videoVolume * 100).toInt()}%", color = Color(0xFF00E5FF), fontSize = 9.sp, fontWeight = FontWeight.Bold)
                             }
 
                             Spacer(modifier = Modifier.height(4.dp))
@@ -638,72 +759,20 @@ fun EveStandaloneShelfWindow(
                                         Text(formatMillis(totalDuration), color = Color.Gray, fontSize = 9.sp)
                                     }
 
-                                    Row(
-                                        modifier = Modifier.fillMaxWidth(),
-                                        horizontalArrangement = Arrangement.SpaceEvenly,
-                                        verticalAlignment = Alignment.CenterVertically
-                                    ) {
-                                        IconButton(
-                                            onClick = { if (currentIndex > 0) activePreviewItem = mediaItems[currentIndex - 1] },
-                                            enabled = currentIndex > 0,
-                                            modifier = Modifier.size(28.dp)
-                                        ) {
+                                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly, verticalAlignment = Alignment.CenterVertically) {
+                                        IconButton(onClick = { if (currentIndex > 0) activePreviewItem = mediaItems[currentIndex - 1] }, enabled = currentIndex > 0, modifier = Modifier.size(28.dp)) {
                                             Icon(Icons.Default.SkipPrevious, contentDescription = null, tint = if (currentIndex > 0) Color(0xFF00E5FF) else Color.DarkGray, modifier = Modifier.size(18.dp))
                                         }
-
-                                        IconButton(
-                                            onClick = {
-                                                videoViewRef?.let { vv ->
-                                                    val target = (vv.currentPosition - 10000).coerceAtLeast(0)
-                                                    vv.seekTo(target)
-                                                    currentPosition = target
-                                                }
-                                            },
-                                            modifier = Modifier.size(26.dp)
-                                        ) {
+                                        IconButton(onClick = { videoViewRef?.let { vv -> val target = (vv.currentPosition - 10000).coerceAtLeast(0); vv.seekTo(target); currentPosition = target } }, modifier = Modifier.size(26.dp)) {
                                             Icon(Icons.Default.FastRewind, contentDescription = null, tint = Color.White, modifier = Modifier.size(16.dp))
                                         }
-
-                                        IconButton(
-                                            onClick = {
-                                                videoViewRef?.let { vv ->
-                                                    if (vv.isPlaying) {
-                                                        vv.pause()
-                                                        isPlaying = false
-                                                    } else {
-                                                        vv.start()
-                                                        isPlaying = true
-                                                    }
-                                                }
-                                            },
-                                            modifier = Modifier.size(34.dp).background(Color(0xFF00E5FF), CircleShape)
-                                        ) {
-                                            Icon(
-                                                imageVector = if (isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
-                                                contentDescription = null,
-                                                tint = Color.Black,
-                                                modifier = Modifier.size(20.dp)
-                                            )
+                                        IconButton(onClick = { videoViewRef?.let { vv -> if (vv.isPlaying) { vv.pause(); isPlaying = false } else { vv.start(); isPlaying = true } } }, modifier = Modifier.size(34.dp).background(Color(0xFF00E5FF), CircleShape)) {
+                                            Icon(imageVector = if (isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow, contentDescription = null, tint = Color.Black, modifier = Modifier.size(20.dp))
                                         }
-
-                                        IconButton(
-                                            onClick = {
-                                                videoViewRef?.let { vv ->
-                                                    val target = (vv.currentPosition + 10000).coerceAtMost(vv.duration)
-                                                    vv.seekTo(target)
-                                                    currentPosition = target
-                                                }
-                                            },
-                                            modifier = Modifier.size(26.dp)
-                                        ) {
+                                        IconButton(onClick = { videoViewRef?.let { vv -> val target = (vv.currentPosition + 10000).coerceAtMost(vv.duration); vv.seekTo(target); currentPosition = target } }, modifier = Modifier.size(26.dp)) {
                                             Icon(Icons.Default.FastForward, contentDescription = null, tint = Color.White, modifier = Modifier.size(16.dp))
                                         }
-
-                                        IconButton(
-                                            onClick = { if (currentIndex != -1 && currentIndex < mediaItems.lastIndex) activePreviewItem = mediaItems[currentIndex + 1] },
-                                            enabled = currentIndex != -1 && currentIndex < mediaItems.lastIndex,
-                                            modifier = Modifier.size(28.dp)
-                                        ) {
+                                        IconButton(onClick = { if (currentIndex != -1 && currentIndex < mediaItems.lastIndex) activePreviewItem = mediaItems[currentIndex + 1] }, enabled = currentIndex != -1 && currentIndex < mediaItems.lastIndex, modifier = Modifier.size(28.dp)) {
                                             Icon(Icons.Default.SkipNext, contentDescription = null, tint = if (currentIndex != -1 && currentIndex < mediaItems.lastIndex) Color(0xFF00E5FF) else Color.DarkGray, modifier = Modifier.size(18.dp))
                                         }
                                     }
@@ -713,12 +782,9 @@ fun EveStandaloneShelfWindow(
                     } else if (currentItem.type == "PHOTO") {
                         val bmp = remember(currentItem) {
                             try {
-                                context.contentResolver.openInputStream(currentItem.uri)?.use { stream ->
-                                    BitmapFactory.decodeStream(stream)?.asImageBitmap()
-                                }
+                                context.contentResolver.openInputStream(currentItem.uri)?.use { stream -> BitmapFactory.decodeStream(stream)?.asImageBitmap() }
                             } catch (_: Exception) { null }
                         }
-
                         var photoDragY by remember { mutableFloatStateOf(0f) }
 
                         Column(modifier = Modifier.weight(1f).fillMaxWidth()) {
@@ -732,42 +798,22 @@ fun EveStandaloneShelfWindow(
                                     .pointerInput(currentItem.uri) {
                                         detectDragGestures(
                                             onDragEnd = {
-                                                if (photoDragY < -120f || photoDragY > 120f) {
-                                                    setAsPhoneWallpaper(context, currentItem.uri)
-                                                }
+                                                if (photoDragY < -120f || photoDragY > 120f) setAsPhoneWallpaper(context, currentItem.uri)
                                                 photoDragY = 0f
                                             },
                                             onDragCancel = { photoDragY = 0f },
-                                            onDrag = { change, dragAmount ->
-                                                change.consume()
-                                                photoDragY += dragAmount.y
-                                            }
+                                            onDrag = { change, dragAmount -> change.consume(); photoDragY += dragAmount.y }
                                         )
                                     },
                                 contentAlignment = Alignment.Center
                             ) {
                                 if (bmp != null) {
-                                    Image(
-                                        bitmap = bmp,
-                                        contentDescription = null,
-                                        modifier = Modifier
-                                            .fillMaxSize()
-                                            .graphicsLayer(
-                                                scaleX = innerContentZoom,
-                                                scaleY = innerContentZoom
-                                            ),
-                                        contentScale = ContentScale.Fit
-                                    )
+                                    Image(bitmap = bmp, contentDescription = null, modifier = Modifier.fillMaxSize().graphicsLayer(scaleX = innerContentZoom, scaleY = innerContentZoom), contentScale = ContentScale.Fit)
                                 }
                             }
 
                             Spacer(modifier = Modifier.height(4.dp))
-                            Text(
-                                text = "💡 اسحب الصورة لأعلى أو لأسفل لتحويلها لخلفية الهاتف",
-                                color = Color(0xFF38BDF8),
-                                fontSize = 9.sp,
-                                modifier = Modifier.align(Alignment.CenterHorizontally)
-                            )
+                            Text(text = "💡 اسحب الصورة لأعلى أو لأسفل لتحويلها لخلفية الهاتف", color = Color(0xFF38BDF8), fontSize = 9.sp, modifier = Modifier.align(Alignment.CenterHorizontally))
                             Spacer(modifier = Modifier.height(4.dp))
 
                             Surface(
@@ -776,32 +822,18 @@ fun EveStandaloneShelfWindow(
                                 border = BorderStroke(1.dp, Color(0xFF00E5FF).copy(alpha = 0.4f)),
                                 modifier = Modifier.fillMaxWidth()
                             ) {
-                                Row(
-                                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp).fillMaxWidth(),
-                                    horizontalArrangement = Arrangement.SpaceBetween,
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
-                                    IconButton(
-                                        onClick = { if (currentIndex > 0) activePreviewItem = mediaItems[currentIndex - 1] },
-                                        enabled = currentIndex > 0,
-                                        modifier = Modifier.size(30.dp)
-                                    ) {
-                                        Icon(Icons.Default.SkipPrevious, contentDescription = "الصورة السابقة", tint = if (currentIndex > 0) Color(0xFF00E5FF) else Color.DarkGray)
+                                Row(modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp).fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                                    IconButton(onClick = { if (currentIndex > 0) activePreviewItem = mediaItems[currentIndex - 1] }, enabled = currentIndex > 0, modifier = Modifier.size(30.dp)) {
+                                        Icon(Icons.Default.SkipPrevious, contentDescription = null, tint = if (currentIndex > 0) Color(0xFF00E5FF) else Color.DarkGray)
                                     }
-
                                     TextButton(onClick = {
                                         appPrefs.setBackgroundImagePath(currentItem.uri.toString())
                                         Toast.makeText(context, "✅ تم تعيين الصورة كخلفية لتطبيق Racha", Toast.LENGTH_SHORT).show()
                                     }) {
                                         Text("خلفية للتطبيق 🎨", color = Color(0xFF00E5FF), fontSize = 10.sp)
                                     }
-
-                                    IconButton(
-                                        onClick = { if (currentIndex != -1 && currentIndex < mediaItems.lastIndex) activePreviewItem = mediaItems[currentIndex + 1] },
-                                        enabled = currentIndex != -1 && currentIndex < mediaItems.lastIndex,
-                                        modifier = Modifier.size(30.dp)
-                                    ) {
-                                        Icon(Icons.Default.SkipNext, contentDescription = "الصورة التالية", tint = if (currentIndex != -1 && currentIndex < mediaItems.lastIndex) Color(0xFF00E5FF) else Color.DarkGray)
+                                    IconButton(onClick = { if (currentIndex != -1 && currentIndex < mediaItems.lastIndex) activePreviewItem = mediaItems[currentIndex + 1] }, enabled = currentIndex != -1 && currentIndex < mediaItems.lastIndex, modifier = Modifier.size(30.dp)) {
+                                        Icon(Icons.Default.SkipNext, contentDescription = null, tint = if (currentIndex != -1 && currentIndex < mediaItems.lastIndex) Color(0xFF00E5FF) else Color.DarkGray)
                                     }
                                 }
                             }
@@ -813,11 +845,7 @@ fun EveStandaloneShelfWindow(
                             Text("لا توجد ملفات أو جاري الفحص...", color = Color.Gray, fontSize = 11.sp)
                         }
                     } else {
-                        // التمرير أصبح حراً 100% وبدون أي مقاطعة
-                        LazyColumn(
-                            modifier = Modifier.weight(1f).fillMaxWidth(),
-                            verticalArrangement = Arrangement.spacedBy(4.dp)
-                        ) {
+                        LazyColumn(modifier = Modifier.weight(1f).fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                             items(mediaItems) { item ->
                                 Row(
                                     modifier = Modifier
@@ -840,7 +868,6 @@ fun EveStandaloneShelfWindow(
                 }
             }
 
-            // مقبض التحجيم اليدوي ثنائي الأبعاد في الزاوية
             Box(
                 modifier = Modifier
                     .align(Alignment.BottomEnd)
@@ -848,6 +875,7 @@ fun EveStandaloneShelfWindow(
                     .pointerInput(Unit) {
                         detectDragGestures { change, dragAmount ->
                             change.consume()
+                            onBringToFront()
                             onResizeWindow(dragAmount.x, dragAmount.y)
                         }
                     },
