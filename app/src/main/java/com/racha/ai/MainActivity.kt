@@ -46,10 +46,11 @@ class MainActivity : ComponentActivity() {
         // 🚀 تفعيل مراقبة الإنترنت والعمل الاستباقي لـ JARVIS
         ProactiveScheduler.scheduleNewsWorker(this)
         
-        // ✅ تحميل قائمة IPTV تلقائياً (مرة واحدة)
+        // ✅ تحميل قوائم الأفلام والقنوات العربية تلقائياً
         val iptvManager = IptvManager(this)
         kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.IO).launch {
-            iptvManager.loadCustomM3uFromUrl("https://iptv-org.github.io/iptv/index.m3u")
+            iptvManager.loadCustomM3uFromUrl("https://iptv-org.github.io/iptv/categories/movies.m3u", "movies.m3u")
+            iptvManager.loadCustomM3uFromUrl("https://iptv-org.github.io/iptv/languages/ara.m3u", "arabic.m3u")
         }
 
         setContent {
