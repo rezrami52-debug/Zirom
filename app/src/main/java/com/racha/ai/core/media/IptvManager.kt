@@ -20,7 +20,7 @@ data class TvChannel(
 
 class IptvManager(private val context: Context) {
 
-    suspend fun loadCustomM3uFromUrl(urlString: String): Boolean = withContext(Dispatchers.IO) {
+    suspend fun loadCustomM3uFromUrl(urlString: String, targetFileName: String = "channels.m3u"): Boolean = withContext(Dispatchers.IO) {
         try {
             val appDir = File(context.getExternalFilesDir(null), "iptv")
             if (!appDir.exists()) appDir.mkdirs()
@@ -31,7 +31,7 @@ class IptvManager(private val context: Context) {
                 try { parent.mkdirs() } catch (_: Exception) {}
             }
 
-            val targetFile = if (primaryFile.parentFile?.canWrite() == true) primaryFile else File(appDir, "channels.m3u")
+            val targetFile = File(appDir, targetFileName)
 
             // إذا كان الملف موجوداً بالفعل وله حجم كافٍ، لا داعي لإعادة التحميل
             if (targetFile.exists() && targetFile.length() > 500) {
