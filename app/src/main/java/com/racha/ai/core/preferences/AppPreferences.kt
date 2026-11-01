@@ -6,6 +6,15 @@ import androidx.security.crypto.MasterKey
 
 class AppPreferences(context: Context) {
 
+    fun isEveBubbleEnabled(): Boolean {
+        return prefs.getBoolean("eve_bubble_active", true)
+    }
+
+    fun setEveBubbleEnabled(enabled: Boolean) {
+        prefs.edit().putBoolean("eve_bubble_active", enabled).apply()
+    }
+
+
     private val masterKey = MasterKey.Builder(context)
         .setKeyScheme(MasterKey.KeyScheme.AES256_GCM)
         .build()
