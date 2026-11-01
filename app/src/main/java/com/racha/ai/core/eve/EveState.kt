@@ -1,6 +1,7 @@
 package com.racha.ai.core.eve
 
 import androidx.compose.ui.graphics.Color
+import com.racha.ai.core.media.TvChannel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -33,8 +34,7 @@ data class EveUiState(
     val config: EveCustomizationConfig = EveCustomizationConfig(),
     val playback: MediaPlaybackState = MediaPlaybackState(),
     val openShelves: Set<MediaShelfType> = emptySet(),
-    val selectedTvChannelUrl: String? = null,
-    val selectedTvChannelName: String? = null
+    val activeTvChannel: TvChannel? = null
 ) {
     val shelfType: MediaShelfType get() = openShelves.firstOrNull() ?: MediaShelfType.NONE
 }
@@ -83,12 +83,12 @@ object EveState {
         }
     }
 
-    fun openTvWithChannel(channelName: String, streamUrl: String) {
+    fun setActiveTvChannel(channel: TvChannel?) {
         val current = _uiState.value.openShelves
+        val updatedShelves = if (channel != null) current + MediaShelfType.LIVE_TV else current
         _uiState.value = _uiState.value.copy(
-            openShelves = current + MediaShelfType.LIVE_TV,
-            selectedTvChannelName = channelName,
-            selectedTvChannelUrl = streamUrl
+            activeTvChannel = channel,
+            openShelves = updatedShelves
         )
     }
 
@@ -103,12 +103,13 @@ object EveState {
             closeAllShelves()
         } else {
             val current = _uiState.value.openShelves
-            _uiState.value = _uiState.value.copy(openShelves = current - type)
+            val channel = if (type == MediaShelfType.LIVE_TV) null else _uiState.value.activeTvChannel
+            _uiState.value = _uiState.value.copy(openShelves = current - type, activeTvChannel = channel)
         }
     }
 
     fun closeAllShelves() {
-        _uiState.value = _uiState.value.copy(openShelves = emptySet(), selectedTvChannelUrl = null)
+        _uiState.value = _uiState.value.copy(openShelves = emptySet(), activeTvChannel = null)
     }
 
     fun addNotification() {

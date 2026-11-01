@@ -350,7 +350,7 @@ fun EveBubbleAvatar(
 }
 
 /**
- * النافذة المستقلة فائقة الأداء: تدعم ملايين القنوات بدون أي تهنيج
+ * النافذة المستقلة: تدعم التلفاز، المشغل السينمائي، الصور، والموسيقى
  */
 @Composable
 fun EveStandaloneShelfWindow(
@@ -358,7 +358,7 @@ fun EveStandaloneShelfWindow(
     onClose: () -> Unit,
     onMoveWindow: (dx: Float, dy: Float) -> Unit,
     onResizeWindow: (dw: Float, dh: Float) -> Unit,
-    onBringToFront: () -> Unit = {},
+    onToggleFullscreen: () -> Unit = {},
     onPlayAudio: (MediaItemData) -> Unit
 ) {
     val shelfType = targetShelfType
@@ -370,7 +370,7 @@ fun EveStandaloneShelfWindow(
     val eveUiState by EveState.uiState.collectAsState()
 
     var activePreviewItem by remember { mutableStateOf<MediaItemData?>(null) }
-    var activeTvChannel by remember { mutableStateOf<TvChannel?>(null) }
+    val activeTvChannel = eveUiState.activeTvChannel
     var isTvLoading by remember { mutableStateOf(false) }
 
     var innerContentZoom by remember { mutableFloatStateOf(1.0f) }
@@ -379,27 +379,12 @@ fun EveStandaloneShelfWindow(
     var selectedCategory by remember { mutableStateOf("الكل") }
     var tvSearchQuery by remember { mutableStateOf("") }
 
-    LaunchedEffect(eveUiState.selectedTvChannelUrl) {
-        val url = eveUiState.selectedTvChannelUrl
-        val name = eveUiState.selectedTvChannelName ?: "بث مباشر"
-        if (!url.isNullOrBlank()) {
-            activeTvChannel = TvChannel("live_direct", name, "رياضة", "بث مباشر", url)
-        }
-    }
-
-    LaunchedEffect(shelfType) {
-        activePreviewItem = null
-        if (shelfType != MediaShelfType.LIVE_TV) activeTvChannel = null
-        innerContentZoom = 1.0f
-    }
-
     val tvChannels by produceState<List<TvChannel>>(initialValue = emptyList(), shelfType) {
         if (shelfType == MediaShelfType.LIVE_TV) {
             value = withContext(Dispatchers.IO) { iptvManager.getAllChannels() }
         }
     }
 
-    // تصفية ذكية في الخلفية بحد أقصى 100 قناة لتكون الاستجابة 60 إطاراً في الثانية
     val filteredTvChannels by produceState<List<TvChannel>>(
         initialValue = emptyList(),
         tvChannels, selectedCategory, tvSearchQuery
@@ -435,6 +420,7 @@ fun EveStandaloneShelfWindow(
     ) {
         Box(modifier = Modifier.fillMaxSize()) {
             Column(modifier = Modifier.padding(8.dp).fillMaxSize()) {
+                // شريط العنوان العلوي وسحب النافذة
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -442,7 +428,6 @@ fun EveStandaloneShelfWindow(
                         .background(Color.White.copy(alpha = 0.08f))
                         .pointerInput(Unit) {
                             detectDragGestures(
-                                onDragStart = { onBringToFront() },
                                 onDrag = { change, dragAmount ->
                                     change.consume()
                                     onMoveWindow(dragAmount.x, dragAmount.y)
@@ -462,7 +447,7 @@ fun EveStandaloneShelfWindow(
                         )
                         Text(
                             text = when {
-                                activeTvChannel != null -> "📺 ${activeTvChannel?.name} 🔴"
+                                activeTvChannel != null -> "📺 ${activeTvChannel.name} 🔴"
                                 activePreviewItem != null -> "🎬 المشغل السينمائي"
                                 shelfType == MediaShelfType.LIVE_TV -> "التلفاز (${tvChannels.size}) 📺"
                                 shelfType == MediaShelfType.NOTIFICATIONS -> "الإشعارات (${notifications.size}) 🔔"
@@ -481,15 +466,19 @@ fun EveStandaloneShelfWindow(
                     }
 
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        IconButton(onClick = onBringToFront, modifier = Modifier.size(24.dp)) {
-                            Icon(Icons.Default.Layers, contentDescription = "للمقدمة", tint = Color(0xFF38BDF8), modifier = Modifier.size(15.dp))
+                        // زر ملء الشاشة الفوري الجديد
+                        IconButton(
+                            onClick = onToggleFullscreen,
+                            modifier = Modifier.size(24.dp)
+                        ) {
+                            Icon(Icons.Default.Fullscreen, contentDescription = "ملء الشاشة", tint = Color(0xFF00E5FF), modifier = Modifier.size(18.dp))
                         }
 
                         if (activePreviewItem != null || activeTvChannel != null) {
                             TextButton(
                                 onClick = {
                                     activePreviewItem = null
-                                    activeTvChannel = null
+                                    EveState.setActiveTvChannel(null)
                                     isTvLoading = false
                                 },
                                 contentPadding = PaddingValues(horizontal = 4.dp, vertical = 2.dp)
@@ -509,7 +498,7 @@ fun EveStandaloneShelfWindow(
                 // 1. شاشة التلفاز التفاعلية
                 if (shelfType == MediaShelfType.LIVE_TV) {
                     if (activeTvChannel != null) {
-                        val currentCh = activeTvChannel!!
+                        val currentCh = activeTvChannel
                         var mediaPlayerRef by remember { mutableStateOf<MediaPlayer?>(null) }
 
                         Column(modifier = Modifier.weight(1f).fillMaxWidth()) {
@@ -616,7 +605,7 @@ fun EveStandaloneShelfWindow(
                                             modifier = Modifier
                                                 .fillMaxWidth()
                                                 .clip(RoundedCornerShape(8.dp))
-                                                .clickable { activeTvChannel = ch }
+                                                .clickable { EveState.setActiveTvChannel(ch) }
                                                 .background(Color.White.copy(alpha = 0.05f))
                                                 .padding(horizontal = 8.dp, vertical = 6.dp),
                                             verticalAlignment = Alignment.CenterVertically
@@ -635,7 +624,7 @@ fun EveStandaloneShelfWindow(
                         }
                     }
                 }
-                // 2. بقية الرفوف (الإشعارات والوسائط)
+                // 2. بقية الرفوف
                 else if (shelfType == MediaShelfType.NOTIFICATIONS) {
                     if (notifications.isEmpty()) {
                         Box(modifier = Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
@@ -864,6 +853,7 @@ fun EveStandaloneShelfWindow(
                 }
             }
 
+            // مقبض التحجيم اليدوي بالبكسل في الزاوية
             Box(
                 modifier = Modifier
                     .align(Alignment.BottomEnd)
@@ -871,7 +861,6 @@ fun EveStandaloneShelfWindow(
                     .pointerInput(Unit) {
                         detectDragGestures { change, dragAmount ->
                             change.consume()
-                            onBringToFront()
                             onResizeWindow(dragAmount.x, dragAmount.y)
                         }
                     },

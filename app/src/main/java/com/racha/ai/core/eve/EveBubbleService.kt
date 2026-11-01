@@ -44,11 +44,9 @@ class EveBubbleService : Service() {
     private val overlayLifecycleOwner = OverlayLifecycleOwner()
     private val serviceScope = CoroutineScope(Dispatchers.Main + Job())
 
-    // 1. فقاعة EVE
     private var bubbleView: ComposeView? = null
     private lateinit var bubbleLayoutParams: WindowManager.LayoutParams
 
-    // 2. خريطة النوافذ العائمة المتعددة المستقلة تماماً (True Multi-Window)
     private data class ShelfWindowHolder(
         val type: MediaShelfType,
         val view: ComposeView,
@@ -288,7 +286,7 @@ class EveBubbleService : Service() {
                     onClose = { EveState.closeShelf(type) },
                     onMoveWindow = { dx, dy -> updateShelfPosition(type, dx, dy) },
                     onResizeWindow = { dw, dh -> resizeShelfWindow(type, dw, dh) },
-                    onBringToFront = { bringWindowToFront(type) },
+                    onToggleFullscreen = { toggleShelfFullscreen(type) },
                     onPlayAudio = { item -> playSelectedAudio(item) }
                 )
             }
@@ -302,11 +300,28 @@ class EveBubbleService : Service() {
         }
     }
 
-    private fun bringWindowToFront(type: MediaShelfType) {
+    // زر تكبير ملء الشاشة الفوري بلمسة واحدة دون سحب
+    private fun toggleShelfFullscreen(type: MediaShelfType) {
         activeShelfWindows[type]?.let { holder ->
+            val dm = resources.displayMetrics
+            val defaultW = (280 * dm.density).toInt()
+            val defaultH = (380 * dm.density).toInt()
+            val maxW = dm.widthPixels - 20
+            val maxH = dm.heightPixels - 120
+
+            if (holder.layoutParams.width > defaultW + 60) {
+                holder.layoutParams.width = defaultW
+                holder.layoutParams.height = defaultH
+                holder.layoutParams.x = (50 * dm.density).toInt()
+                holder.layoutParams.y = (150 * dm.density).toInt()
+            } else {
+                holder.layoutParams.width = maxW
+                holder.layoutParams.height = maxH
+                holder.layoutParams.x = 10
+                holder.layoutParams.y = 70
+            }
             try {
-                windowManager.removeView(holder.view)
-                windowManager.addView(holder.view, holder.layoutParams)
+                windowManager.updateViewLayout(holder.view, holder.layoutParams)
             } catch (_: Exception) {}
         }
     }
