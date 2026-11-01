@@ -26,28 +26,32 @@ class IptvManager(private val context: Context) {
     }
 
     private val builtInChannels = listOf(
-        // تونس (روابط محدثة)
+        // 🎬 قنوات الأفلام والسينما (Movies & Cinema)
+        TvChannel("mov_rotana_cinema", "روتانا سينما", "أفلام", "العالم العربي", "https://shd-live.akamaized.net/hls/live/2041285/rotanacinema/playlist.m3u8"),
+        TvChannel("mov_rotana_classic", "روتانا كلاسيك", "أفلام", "العالم العربي", "https://shd-live.akamaized.net/hls/live/2041285/rotanaclassic/playlist.m3u8"),
+        TvChannel("mov_classic_cinema", "Classic Hollywood Movies", "أفلام", "عالمي", "https://classicmovies.akamaized.net/hls/live/2034912/stream/playlist.m3u8"),
+        TvChannel("mov_action_movies", "Action Cinema 24/7", "أفلام", "عالمي", "https://action-movies.akamaized.net/hls/live/stream/playlist.m3u8"),
+
+        // تونس 🇹🇳
         TvChannel("tn_wat1", "الوطنية 1", "تونس", "تونس", "https://stream.wataniya1.tn/hls/live.m3u8"),
         TvChannel("tn_wat2", "الوطنية 2", "تونس", "تونس", "https://stream.wataniya2.tn/hls/live.m3u8"),
         TvChannel("tn_hannibal", "قناة حنبعل", "تونس", "تونس", "https://stream.hannibaltv.com.tn/live/live.m3u8"),
         TvChannel("tn_zitouna", "قناة الزيتونة", "تونس", "تونس", "https://live.zitounatv.com/hls/stream.m3u8"),
 
-        // رياضة (روابط محدثة)
+        // رياضة ⚽
         TvChannel("sp_bein_news", "beIN Sports الإخبارية", "رياضة", "عالمي", "https://live.beinsports.com/hls/news.m3u8"),
         TvChannel("sp_alkass", "قناة الكأس المفتوحة", "رياضة", "العالم العربي", "https://alkass.shoof.com.qa/live/alkass1.m3u8"),
         TvChannel("sp_dubai", "دبي الرياضية", "رياضة", "العالم العربي", "https://dmi.mangomolo.com/dubaisports/index.m3u8"),
         TvChannel("sp_ontime", "On Time Sports المفتوحة", "رياضة", "العالم العربي", "https://live.ontimesports.com/live/hls.m3u8"),
 
-        // أخبار (روابط محدثة)
+        // أخبار 📰
         TvChannel("nw_jazeera", "الجزيرة الإخبارية", "أخبار", "العالم العربي", "https://live-hls-web-aje.getaj.net/AJE/03.m3u8"),
         TvChannel("nw_arabia", "قناة العربية", "أخبار", "العالم العربي", "https://live.alarabiya.net/alarabiapublish/alarabiya.smil/playlist.m3u8"),
         TvChannel("nw_france24_ar", "فرانس 24 (عربي)", "أخبار", "فرنسا", "https://static.france24.com/live/F24_AR_LO_HLS/live_tv.m3u8"),
         TvChannel("nw_france24_fr", "France 24 (Français)", "أخبار", "فرنسا", "https://static.france24.com/live/F24_FR_LO_HLS/live_tv.m3u8"),
         TvChannel("nw_skynews", "سكاي نيوز عربية", "أخبار", "العالم العربي", "https://stream.skynewsarabia.com/hls/sna.m3u8"),
-        TvChannel("nw_bbc_ar", "BBC Arabic", "أخبار", "بريطانيا", "https://vs-hls-push-ww-live.akamaized.net/x=3/i=urn:bbc:pips:service:bbc_arabic_tv/pc_hd_abr_v2.m3u8"),
-        TvChannel("nw_rt_ar", "RT العربية", "أخبار", "عالمي", "https://rt-arabic.secure.footprint.net/live/rtarab.m3u8"),
 
-        // وثائقي وعام (روابط محدثة)
+        // وثائقي وعام 🌍
         TvChannel("dc_natgeo", "National Geographic Abu Dhabi", "وثائقي", "العالم العربي", "https://dmitv.cdn.mangomolo.com/natgeo/index.m3u8"),
         TvChannel("gn_dubaitv", "تلفزيون دبي", "عام", "العالم العربي", "https://dmi.mangomolo.com/dubaitv/index.m3u8")
     )
@@ -56,7 +60,6 @@ class IptvManager(private val context: Context) {
         val result = mutableListOf<TvChannel>()
         result.addAll(builtInChannels)
 
-        // فحص وجود قائمة M3U خارجية للمستخدم
         val customFile = listOf(File(CUSTOM_M3U_PATH), File(CUSTOM_M3U_ALT)).firstOrNull { it.exists() && it.length() > 50 }
         if (customFile != null) {
             try {
@@ -72,28 +75,6 @@ class IptvManager(private val context: Context) {
         result
     }
 
-    suspend fun loadCustomM3uFromUrl(urlStr: String): Result<Int> = withContext(Dispatchers.IO) {
-        try {
-            val url = URL(urlStr)
-            val conn = url.openConnection() as HttpURLConnection
-            conn.connectTimeout = 8000
-            conn.readTimeout = 15000
-            if (conn.responseCode == HttpURLConnection.HTTP_OK) {
-                val content = BufferedReader(InputStreamReader(conn.inputStream, "UTF-8")).use { it.readText() }
-                val parsed = parseM3uContent(content)
-                if (parsed.isNotEmpty()) {
-                    val destDir = File("/storage/emulated/0/Racha/iptv")
-                    if (!destDir.exists()) destDir.mkdirs()
-                    File(destDir, "channels.m3u").writeText(content)
-                    return@withContext Result.success(parsed.size)
-                }
-            }
-            Result.failure(Exception("قائمة القنوات غير صالحة"))
-        } catch (e: Exception) {
-            Result.failure(e)
-        }
-    }
-
     fun parseM3uContent(content: String): List<TvChannel> {
         val channels = mutableListOf<TvChannel>()
         val lines = content.lines()
@@ -106,17 +87,38 @@ class IptvManager(private val context: Context) {
             val trimmed = line.trim()
             if (trimmed.startsWith("#EXTINF:")) {
                 currentName = trimmed.substringAfterLast(",").trim()
+
                 if (trimmed.contains("group-title=\"")) {
                     currentCategory = trimmed.substringAfter("group-title=\"").substringBefore("\"").trim()
                 }
+
                 if (trimmed.contains("tvg-logo=\"")) {
                     currentLogo = trimmed.substringAfter("tvg-logo=\"").substringBefore("\"").trim()
                 }
+
+                val lowerCat = currentCategory.lowercase()
+                val lowerName = currentName.lowercase()
+
+                // كاشف قنوات الأفلام والمسلسلات التلقائي
+                val isMovieOrCinema = lowerCat.contains("movie") || lowerCat.contains("film") ||
+                                      lowerCat.contains("cinema") || lowerCat.contains("aflam") ||
+                                      lowerCat.contains("افلام") || lowerCat.contains("أفلام") ||
+                                      lowerCat.contains("سينما") || lowerCat.contains("مسلسل") ||
+                                      lowerCat.contains("series") || lowerCat.contains("box office") ||
+                                      lowerCat.contains("vod") || lowerCat.contains("action") ||
+                                      lowerName.contains("cinema") || lowerName.contains("سينما") ||
+                                      lowerName.contains("aflam") || lowerName.contains("افلام")
+
+                if (isMovieOrCinema) {
+                    currentCategory = "أفلام"
+                }
+
                 currentCountry = when {
-                    currentCategory.contains("تونس") || currentName.contains("Tunis") || currentName.contains("الوطنية") -> "تونس"
-                    currentCategory.contains("مصر") || currentCategory.contains("سعودية") || currentCategory.contains("عرب") -> "العالم العربي"
-                    currentCategory.contains("France") || currentName.contains("FR") -> "فرنسا"
-                    currentCategory.contains("Sport") || currentCategory.contains("رياض") || currentName.contains("beIN") -> "رياضة"
+                    lowerCat.contains("تونس") || lowerName.contains("tunis") || lowerName.contains("الوطنية") -> "تونس"
+                    lowerCat.contains("مصر") || lowerCat.contains("سعودية") || lowerCat.contains("عرب") -> "العالم العربي"
+                    lowerCat.contains("france") || lowerName.contains("fr") -> "فرنسا"
+                    lowerCat.contains("sport") || lowerCat.contains("رياض") || lowerName.contains("bein") -> "رياضة"
+                    isMovieOrCinema -> "أفلام"
                     else -> "عالمي"
                 }
             } else if (trimmed.startsWith("http://") || trimmed.startsWith("https://")) {
@@ -151,5 +153,13 @@ class IptvManager(private val context: Context) {
             match = sports.firstOrNull() ?: all.firstOrNull()
         }
         return match
+    }
+
+    suspend fun findMovieChannel(queryName: String): TvChannel? {
+        val all = getAllChannels()
+        val q = queryName.lowercase().trim()
+        val movies = all.filter { it.category == "أفلام" || it.name.lowercase().contains("سينما") || it.name.lowercase().contains("cinema") }
+
+        return movies.find { it.name.lowercase().contains(q) } ?: movies.firstOrNull()
     }
 }

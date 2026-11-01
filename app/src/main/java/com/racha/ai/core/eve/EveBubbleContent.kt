@@ -350,7 +350,7 @@ fun EveBubbleAvatar(
 }
 
 /**
- * النافذة المستقلة: تدعم التلفاز، المشغل السينمائي، الصور، والموسيقى
+ * النافذة المستقلة: تدعم التلفاز، قنوات الأفلام، المشغل السينمائي، الصور، والموسيقى
  */
 @Composable
 fun EveStandaloneShelfWindow(
@@ -376,6 +376,7 @@ fun EveStandaloneShelfWindow(
     var innerContentZoom by remember { mutableFloatStateOf(1.0f) }
     var videoVolume by remember { mutableFloatStateOf(1.0f) }
 
+    // فئات التلفاز (مع إضافة فئة الأفلام 🎬)
     var selectedCategory by remember { mutableStateOf("الكل") }
     var tvSearchQuery by remember { mutableStateOf("") }
 
@@ -392,7 +393,10 @@ fun EveStandaloneShelfWindow(
         value = withContext(Dispatchers.IO) {
             val q = tvSearchQuery.trim().lowercase()
             tvChannels.asSequence().filter { ch ->
-                (selectedCategory == "الكل" || ch.category.contains(selectedCategory, ignoreCase = true) || (selectedCategory == "رياضة" && ch.country.contains("رياض", ignoreCase = true))) &&
+                (selectedCategory == "الكل" || 
+                 ch.category.contains(selectedCategory, ignoreCase = true) || 
+                 (selectedCategory == "أفلام" && (ch.category == "أفلام" || ch.name.lowercase().contains("cinema") || ch.name.contains("سينما"))) ||
+                 (selectedCategory == "رياضة" && ch.country.contains("رياض", ignoreCase = true))) &&
                 (q.isBlank() || ch.name.lowercase().contains(q))
             }.take(100).toList()
         }
@@ -420,7 +424,6 @@ fun EveStandaloneShelfWindow(
     ) {
         Box(modifier = Modifier.fillMaxSize()) {
             Column(modifier = Modifier.padding(8.dp).fillMaxSize()) {
-                // شريط العنوان العلوي وسحب النافذة
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -449,7 +452,7 @@ fun EveStandaloneShelfWindow(
                             text = when {
                                 activeTvChannel != null -> "📺 ${activeTvChannel.name} 🔴"
                                 activePreviewItem != null -> "🎬 المشغل السينمائي"
-                                shelfType == MediaShelfType.LIVE_TV -> "التلفاز (${tvChannels.size}) 📺"
+                                shelfType == MediaShelfType.LIVE_TV -> "التلفاز والسينما (${tvChannels.size}) 🎬"
                                 shelfType == MediaShelfType.NOTIFICATIONS -> "الإشعارات (${notifications.size}) 🔔"
                                 shelfType == MediaShelfType.MUSIC -> "الموسيقى (${mediaItems.size}) 🎶"
                                 shelfType == MediaShelfType.VIDEOS -> "الفيديوهات (${mediaItems.size}) 📽️"
@@ -466,7 +469,6 @@ fun EveStandaloneShelfWindow(
                     }
 
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        // زر ملء الشاشة الفوري الجديد
                         IconButton(
                             onClick = onToggleFullscreen,
                             modifier = Modifier.size(24.dp)
@@ -495,7 +497,7 @@ fun EveStandaloneShelfWindow(
 
                 Divider(color = Color.White.copy(alpha = 0.15f), thickness = 1.dp, modifier = Modifier.padding(vertical = 4.dp))
 
-                // 1. شاشة التلفاز التفاعلية
+                // 1. شاشة التلفاز والأفلام المباشرة
                 if (shelfType == MediaShelfType.LIVE_TV) {
                     if (activeTvChannel != null) {
                         val currentCh = activeTvChannel
@@ -573,19 +575,23 @@ fun EveStandaloneShelfWindow(
                         }
                     } else {
                         Column(modifier = Modifier.weight(1f).fillMaxWidth()) {
+                            // فلاتر الفئات (مع تبويب 🎬 أفلام الجديد)
                             LazyRow(
                                 horizontalArrangement = Arrangement.spacedBy(4.dp),
                                 modifier = Modifier.fillMaxWidth().padding(bottom = 4.dp)
                             ) {
-                                val categories = listOf("الكل", "تونس", "رياضة", "أخبار", "عام", "وثائقي")
+                                val categories = listOf("الكل", "أفلام", "تونس", "رياضة", "أخبار", "عام", "وثائقي")
                                 items(categories) { cat ->
+                                    val isMovie = cat == "أفلام"
                                     FilterChip(
                                         selected = selectedCategory == cat,
                                         onClick = { selectedCategory = cat },
-                                        label = { Text(cat, fontSize = 10.sp) },
+                                        label = { 
+                                            Text(if (isMovie) "🎬 أفلام" else cat, fontSize = 10.sp, fontWeight = if (isMovie) FontWeight.Bold else FontWeight.Normal) 
+                                        },
                                         colors = FilterChipDefaults.filterChipColors(
-                                            selectedContainerColor = Color(0xFF00E5FF).copy(alpha = 0.25f),
-                                            selectedLabelColor = Color(0xFF00E5FF)
+                                            selectedContainerColor = if (isMovie) Color(0xFFFF9100).copy(alpha = 0.35f) else Color(0xFF00E5FF).copy(alpha = 0.25f),
+                                            selectedLabelColor = if (isMovie) Color(0xFFFFB74D) else Color(0xFF00E5FF)
                                         )
                                     )
                                 }
@@ -593,7 +599,7 @@ fun EveStandaloneShelfWindow(
 
                             if (filteredTvChannels.isEmpty()) {
                                 Box(modifier = Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
-                                    Text("جاري معالجة القنوات أو لا توجد نتائج...", color = Color.Gray, fontSize = 11.sp)
+                                    Text("جاري استخراج القنوات أو لا توجد نتائج...", color = Color.Gray, fontSize = 11.sp)
                                 }
                             } else {
                                 LazyColumn(
@@ -610,7 +616,12 @@ fun EveStandaloneShelfWindow(
                                                 .padding(horizontal = 8.dp, vertical = 6.dp),
                                             verticalAlignment = Alignment.CenterVertically
                                         ) {
-                                            Icon(Icons.Default.Tv, contentDescription = null, tint = Color(0xFF00E5FF), modifier = Modifier.size(18.dp))
+                                            Icon(
+                                                imageVector = if (ch.category == "أفلام") Icons.Default.Movie else Icons.Default.Tv,
+                                                contentDescription = null,
+                                                tint = if (ch.category == "أفلام") Color(0xFFFFB74D) else Color(0xFF00E5FF),
+                                                modifier = Modifier.size(18.dp)
+                                            )
                                             Spacer(modifier = Modifier.width(8.dp))
                                             Column(modifier = Modifier.weight(1f)) {
                                                 Text(ch.name, color = Color.White, fontSize = 11.sp, fontWeight = FontWeight.Bold, maxLines = 1)

@@ -10,7 +10,7 @@ object IntentClassifier {
         TOGGLE_BLUETOOTH, GREETING, SMALL_TALK, PRAYER_TIMES,
         FIND_MY_PHONE, MOSQUE_MODE, MACRO_SLEEP, MACRO_CINEMA, MACRO_WORK,
         OPEN_PHOTOS, OPEN_VIDEOS, OPEN_MUSIC, OPEN_NOTIFICATIONS, OPEN_MULTI_SHELVES,
-        OPEN_LIVE_TV, WATCH_MATCH,
+        OPEN_LIVE_TV, WATCH_MATCH, WATCH_MOVIE,
         CORRECTION, UNKNOWN
     }
 
@@ -19,6 +19,11 @@ object IntentClassifier {
 
         if (isCorrection(text)) return IntentType.CORRECTION
         if (isSetAlarm(text)) return IntentType.SET_ALARM
+
+        // أوامر الأفلام والسينما
+        if (lower.contains("فيلم") || lower.contains("أفلام") || lower.contains("افلام") || lower.contains("سينما") || lower.contains("cinema")) {
+            return IntentType.WATCH_MOVIE
+        }
 
         // أوامر مباريات البث المباشر
         if (lower.contains("ماتش") || lower.contains("مباراة") || lower.contains("مقابلة")) {
