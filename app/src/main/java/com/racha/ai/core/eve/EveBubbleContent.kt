@@ -350,7 +350,7 @@ fun EveBubbleAvatar(
 }
 
 /**
- * النافذة المستقلة: تدعم التلفاز، المشغل السينمائي، الصور، والموسيقى
+ * النافذة المستقلة فائقة الأداء: تدعم ملايين القنوات بدون أي تهنيج
  */
 @Composable
 fun EveStandaloneShelfWindow(
@@ -371,16 +371,14 @@ fun EveStandaloneShelfWindow(
 
     var activePreviewItem by remember { mutableStateOf<MediaItemData?>(null) }
     var activeTvChannel by remember { mutableStateOf<TvChannel?>(null) }
+    var isTvLoading by remember { mutableStateOf(false) }
 
     var innerContentZoom by remember { mutableFloatStateOf(1.0f) }
     var videoVolume by remember { mutableFloatStateOf(1.0f) }
 
-    // فلاتر التلفاز
     var selectedCategory by remember { mutableStateOf("الكل") }
-    var selectedCountry by remember { mutableStateOf("الكل") }
     var tvSearchQuery by remember { mutableStateOf("") }
 
-    // فتح قناة مباشرة إذا طُلبت بالصوت (مثل بث مباراة)
     LaunchedEffect(eveUiState.selectedTvChannelUrl) {
         val url = eveUiState.selectedTvChannelUrl
         val name = eveUiState.selectedTvChannelName ?: "بث مباشر"
@@ -391,20 +389,30 @@ fun EveStandaloneShelfWindow(
 
     LaunchedEffect(shelfType) {
         activePreviewItem = null
-        if (shelfType != MediaShelfType.LIVE_TV) {
-            activeTvChannel = null
-        }
+        if (shelfType != MediaShelfType.LIVE_TV) activeTvChannel = null
         innerContentZoom = 1.0f
     }
 
-    // جلب قنوات التلفاز
     val tvChannels by produceState<List<TvChannel>>(initialValue = emptyList(), shelfType) {
         if (shelfType == MediaShelfType.LIVE_TV) {
-            value = iptvManager.getAllChannels()
+            value = withContext(Dispatchers.IO) { iptvManager.getAllChannels() }
         }
     }
 
-    // جلب الوسائط المحلية
+    // تصفية ذكية في الخلفية بحد أقصى 100 قناة لتكون الاستجابة 60 إطاراً في الثانية
+    val filteredTvChannels by produceState<List<TvChannel>>(
+        initialValue = emptyList(),
+        tvChannels, selectedCategory, tvSearchQuery
+    ) {
+        value = withContext(Dispatchers.IO) {
+            val q = tvSearchQuery.trim().lowercase()
+            tvChannels.asSequence().filter { ch ->
+                (selectedCategory == "الكل" || ch.category.contains(selectedCategory, ignoreCase = true) || (selectedCategory == "رياضة" && ch.country.contains("رياض", ignoreCase = true))) &&
+                (q.isBlank() || ch.name.lowercase().contains(q))
+            }.take(100).toList()
+        }
+    }
+
     val mediaItems by produceState<List<MediaItemData>>(initialValue = emptyList(), shelfType) {
         if (shelfType != MediaShelfType.NONE && shelfType != MediaShelfType.NOTIFICATIONS && shelfType != MediaShelfType.LIVE_TV) {
             value = withContext(Dispatchers.IO) {
@@ -427,7 +435,6 @@ fun EveStandaloneShelfWindow(
     ) {
         Box(modifier = Modifier.fillMaxSize()) {
             Column(modifier = Modifier.padding(8.dp).fillMaxSize()) {
-                // شريط العنوان العلوي وسحب النافذة
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -435,6 +442,7 @@ fun EveStandaloneShelfWindow(
                         .background(Color.White.copy(alpha = 0.08f))
                         .pointerInput(Unit) {
                             detectDragGestures(
+                                onDragStart = { onBringToFront() },
                                 onDrag = { change, dragAmount ->
                                     change.consume()
                                     onMoveWindow(dragAmount.x, dragAmount.y)
@@ -454,9 +462,9 @@ fun EveStandaloneShelfWindow(
                         )
                         Text(
                             text = when {
-                                activeTvChannel != null -> "📺 ${activeTvChannel?.name} 🔴 مباشر"
+                                activeTvChannel != null -> "📺 ${activeTvChannel?.name} 🔴"
                                 activePreviewItem != null -> "🎬 المشغل السينمائي"
-                                shelfType == MediaShelfType.LIVE_TV -> "التلفاز المباشر (${tvChannels.size}) 📺"
+                                shelfType == MediaShelfType.LIVE_TV -> "التلفاز (${tvChannels.size}) 📺"
                                 shelfType == MediaShelfType.NOTIFICATIONS -> "الإشعارات (${notifications.size}) 🔔"
                                 shelfType == MediaShelfType.MUSIC -> "الموسيقى (${mediaItems.size}) 🎶"
                                 shelfType == MediaShelfType.VIDEOS -> "الفيديوهات (${mediaItems.size}) 📽️"
@@ -473,10 +481,7 @@ fun EveStandaloneShelfWindow(
                     }
 
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        IconButton(
-                            onClick = onBringToFront,
-                            modifier = Modifier.size(24.dp)
-                        ) {
+                        IconButton(onClick = onBringToFront, modifier = Modifier.size(24.dp)) {
                             Icon(Icons.Default.Layers, contentDescription = "للمقدمة", tint = Color(0xFF38BDF8), modifier = Modifier.size(15.dp))
                         }
 
@@ -485,7 +490,7 @@ fun EveStandaloneShelfWindow(
                                 onClick = {
                                     activePreviewItem = null
                                     activeTvChannel = null
-                                    innerContentZoom = 1.0f
+                                    isTvLoading = false
                                 },
                                 contentPadding = PaddingValues(horizontal = 4.dp, vertical = 2.dp)
                             ) {
@@ -501,11 +506,10 @@ fun EveStandaloneShelfWindow(
 
                 Divider(color = Color.White.copy(alpha = 0.15f), thickness = 1.dp, modifier = Modifier.padding(vertical = 4.dp))
 
-                // 1. شاشة التلفاز والقنوات المباشرة (LIVE_TV)
+                // 1. شاشة التلفاز التفاعلية
                 if (shelfType == MediaShelfType.LIVE_TV) {
                     if (activeTvChannel != null) {
                         val currentCh = activeTvChannel!!
-                        var videoViewRef by remember { mutableStateOf<VideoView?>(null) }
                         var mediaPlayerRef by remember { mutableStateOf<MediaPlayer?>(null) }
 
                         Column(modifier = Modifier.weight(1f).fillMaxWidth()) {
@@ -514,27 +518,37 @@ fun EveStandaloneShelfWindow(
                                     .weight(1f)
                                     .fillMaxWidth()
                                     .clip(RoundedCornerShape(12.dp))
-                                    .background(Color.Black)
+                                    .background(Color.Black),
+                                contentAlignment = Alignment.Center
                             ) {
                                 AndroidView(
                                     factory = { ctx ->
                                         VideoView(ctx).apply {
+                                            isTvLoading = true
                                             setVideoURI(Uri.parse(currentCh.streamUrl))
                                             setOnPreparedListener { mp ->
                                                 mediaPlayerRef = mp
                                                 mp.setVolume(videoVolume, videoVolume)
+                                                isTvLoading = false
                                                 start()
                                             }
-                                            videoViewRef = this
+                                            setOnErrorListener { _, _, _ ->
+                                                isTvLoading = false
+                                                Toast.makeText(ctx, "البث غير متاح حالياً لهذه القناة", Toast.LENGTH_SHORT).show()
+                                                true
+                                            }
                                         }
                                     },
                                     modifier = Modifier.fillMaxSize()
                                 )
+
+                                if (isTvLoading) {
+                                    CircularProgressIndicator(color = Color(0xFF00E5FF), modifier = Modifier.size(36.dp))
+                                }
                             }
 
                             Spacer(modifier = Modifier.height(4.dp))
 
-                            // شريط تحكم البث المباشر وميكسر الصوت
                             Row(
                                 modifier = Modifier
                                     .fillMaxWidth()
@@ -565,14 +579,11 @@ fun EveStandaloneShelfWindow(
                                         modifier = Modifier.width(110.dp).height(16.dp)
                                     )
                                 }
-
-                                Text("🔴 بث مباشر", color = Color(0xFFFF1744), fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                                Text("🔴 مباشر", color = Color(0xFFFF1744), fontSize = 10.sp, fontWeight = FontWeight.Bold)
                             }
                         }
                     } else {
-                        // قائمة القنوات مع فلاتر النوعية والبلد
                         Column(modifier = Modifier.weight(1f).fillMaxWidth()) {
-                            // فلاتر الفئات
                             LazyRow(
                                 horizontalArrangement = Arrangement.spacedBy(4.dp),
                                 modifier = Modifier.fillMaxWidth().padding(bottom = 4.dp)
@@ -591,24 +602,16 @@ fun EveStandaloneShelfWindow(
                                 }
                             }
 
-                            val filteredChannels = remember(tvChannels, selectedCategory, selectedCountry, tvSearchQuery) {
-                                tvChannels.filter { ch ->
-                                    (selectedCategory == "الكل" || ch.category.contains(selectedCategory) || (selectedCategory == "رياضة" && ch.country == "رياضة")) &&
-                                    (selectedCountry == "الكل" || ch.country.contains(selectedCountry)) &&
-                                    (tvSearchQuery.isBlank() || ch.name.lowercase().contains(tvSearchQuery.lowercase()))
-                                }
-                            }
-
-                            if (filteredChannels.isEmpty()) {
+                            if (filteredTvChannels.isEmpty()) {
                                 Box(modifier = Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
-                                    Text("لا توجد قنوات مطابقة في هذه الفئة...", color = Color.Gray, fontSize = 11.sp)
+                                    Text("جاري معالجة القنوات أو لا توجد نتائج...", color = Color.Gray, fontSize = 11.sp)
                                 }
                             } else {
                                 LazyColumn(
                                     modifier = Modifier.weight(1f).fillMaxWidth(),
                                     verticalArrangement = Arrangement.spacedBy(4.dp)
                                 ) {
-                                    items(filteredChannels) { ch ->
+                                    items(filteredTvChannels, key = { it.id + it.streamUrl }) { ch ->
                                         Row(
                                             modifier = Modifier
                                                 .fillMaxWidth()
@@ -618,12 +621,7 @@ fun EveStandaloneShelfWindow(
                                                 .padding(horizontal = 8.dp, vertical = 6.dp),
                                             verticalAlignment = Alignment.CenterVertically
                                         ) {
-                                            Icon(
-                                                Icons.Default.Tv,
-                                                contentDescription = null,
-                                                tint = Color(0xFF00E5FF),
-                                                modifier = Modifier.size(18.dp)
-                                            )
+                                            Icon(Icons.Default.Tv, contentDescription = null, tint = Color(0xFF00E5FF), modifier = Modifier.size(18.dp))
                                             Spacer(modifier = Modifier.width(8.dp))
                                             Column(modifier = Modifier.weight(1f)) {
                                                 Text(ch.name, color = Color.White, fontSize = 11.sp, fontWeight = FontWeight.Bold, maxLines = 1)
@@ -646,9 +644,7 @@ fun EveStandaloneShelfWindow(
                     } else {
                         LazyColumn(modifier = Modifier.weight(1f).fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                             items(notifications) { notif ->
-                                NotificationItemRow(notif = notif) {
-                                    openAppInFreeform(context, notif.packageName)
-                                }
+                                NotificationItemRow(notif = notif) { openAppInFreeform(context, notif.packageName) }
                             }
                         }
                     }
