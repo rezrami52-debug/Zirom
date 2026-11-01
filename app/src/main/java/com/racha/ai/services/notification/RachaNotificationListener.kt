@@ -56,7 +56,10 @@ class RachaNotificationListener : NotificationListenerService() {
         val speechText = buildSpeechText(appName, title, text)
         Log.d(TAG, "إرسال إشعار لـ EVE: $speechText")
 
-        // 3. إرسال أمر التنبيه الذكي لـ EVE
+        // 3. إرسال أمر التنبيه الذكي لـ EVE فقط إذا كانت مفعلة
+        val prefs = com.racha.ai.core.preferences.AppPreferences(this)
+        if (!prefs.isEveBubbleEnabled()) return
+
         val eveIntent = Intent(this, EveBubbleService::class.java).apply {
             action = EveBubbleService.ACTION_NEW_NOTIFICATION
             putExtra(EveBubbleService.EXTRA_SPEECH_TEXT, speechText)

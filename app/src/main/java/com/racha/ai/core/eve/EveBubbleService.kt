@@ -295,7 +295,6 @@ class EveBubbleService : Service() {
                     targetShelfType = type,
                     onClose = { EveState.closeShelf(type) },
                     onMoveWindow = { dx, dy -> 
-                        bringShelfToFront(type)
                         updateShelfPosition(type, dx, dy) 
                     },
                     onResizeWindow = { dw, dh -> resizeShelfWindow(type, dw, dh) },
@@ -380,6 +379,7 @@ class EveBubbleService : Service() {
     }
 
     private fun closeAndDismiss() {
+        appPreferences.setEveBubbleEnabled(false)
         for (holder in activeShelfWindows.values) {
             try { windowManager.removeView(holder.view) } catch (_: Exception) {}
         }
@@ -390,6 +390,7 @@ class EveBubbleService : Service() {
             bubbleView?.let { windowManager.removeView(it) }
             bubbleView = null
         } catch (_: Exception) {}
+        stopForeground(true)
         stopSelf()
     }
 
