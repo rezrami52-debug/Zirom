@@ -6,6 +6,7 @@ import android.app.NotificationManager
 import android.app.Service
 import android.content.Context
 import android.content.Intent
+import android.content.pm.ServiceInfo
 import android.graphics.PixelFormat
 import android.os.Build
 import android.os.IBinder
@@ -19,7 +20,7 @@ class FloatingTvService : Service() {
 
     private lateinit var windowManager: WindowManager
     private var composeView: ComposeView? = null
-    private lateinit var lifecycleOwner: OverlayLifecycleOwner
+    private val lifecycleOwner = OverlayLifecycleOwner()
     private lateinit var layoutParams: WindowManager.LayoutParams
 
     companion object {
@@ -36,96 +37,40 @@ class FloatingTvService : Service() {
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        val channelName = intent?.getStringExtra(EXTRA_CHANNEL_NAME) ?: "قناة"
-        val streamUrl = intent?.getStringExtra(EXTRA_STREAM_URL)
-
-        if (streamUrl != null && composeView == null) {
-            setupTvPlayer(channelName, streamUrl)
-        }
         return START_NOT_STICKY
     }
 
-    private fun setupTvPlayer(channelName: String, streamUrl: String) {
-        val layoutType = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY
-        } else {
-            @Suppress("DEPRECATION")
-            WindowManager.LayoutParams.TYPE_PHONE
-        }
-
-        layoutParams = WindowManager.LayoutParams(
-            dpToPx(320), dpToPx(220),
-            layoutType,
-            WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE,
-            PixelFormat.TRANSLUCENT
-        ).apply {
-            gravity = Gravity.TOP or Gravity.START
-            x = 100; y = 300
-        }
-
-        lifecycleOwner = OverlayLifecycleOwner()
-
-        composeView = ComposeView(this).apply {
-            lifecycleOwner.attachToComposeView(this)
-            setContent {
-                TvPlayerContent(
-                    channelName = channelName,
-                    streamUrl = streamUrl,
-                    onDrag = { dx, dy ->
-                        this@FloatingTvService.layoutParams.x += dx.toInt()
-                        this@FloatingTvService.layoutParams.y += dy.toInt()
-                        composeView?.let { view ->
-                            windowManager.updateViewLayout(view, this@FloatingTvService.layoutParams)
-                        }
-                    },
-                    onToggleResize = {
-                        if (this@FloatingTvService.layoutParams.width == dpToPx(320)) {
-                            this@FloatingTvService.layoutParams.width = dpToPx(480)
-                            this@FloatingTvService.layoutParams.height = dpToPx(300)
-                        } else {
-                            this@FloatingTvService.layoutParams.width = dpToPx(320)
-                            this@FloatingTvService.layoutParams.height = dpToPx(220)
-                        }
-                        composeView?.let { view ->
-                            windowManager.updateViewLayout(view, this@FloatingTvService.layoutParams)
-                        }
-                    },
-                    onClose = { stopSelf() }
-                )
-            }
-        }
-
+    private fun startForegroundServiceNotification() {
         try {
-            windowManager.addView(composeView, layoutParams)
-            lifecycleOwner.handleResume()
+            val channelId = "floating_tv_channel"
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                val channel = NotificationChannel(channelId, "Racha TV Player", NotificationManager.IMPORTANCE_LOW)
+                val manager = getSystemService(NotificationManager::class.java)
+                manager.createNotificationChannel(channel)
+            }
+            val notification: Notification = NotificationCompat.Builder(this, channelId)
+                .setContentTitle("مشغل القنوات العائم")
+                .setContentText("التلفزيون يعمل في الخلفية")
+                .setSmallIcon(android.R.drawable.ic_media_play)
+                .setPriority(NotificationCompat.PRIORITY_LOW)
+                .build()
+
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                startForeground(3003, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PLAYBACK)
+            } else {
+                startForeground(3003, notification)
+            }
         } catch (e: Exception) {
             e.printStackTrace()
-            stopSelf()
         }
-    }
-
-    private fun startForegroundServiceNotification() {
-        val channelId = "floating_tv_channel"
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            val channel = NotificationChannel(channelId, "Racha TV Player", NotificationManager.IMPORTANCE_LOW)
-            val manager = getSystemService(NotificationManager::class.java)
-            manager.createNotificationChannel(channel)
-        }
-        val notification: Notification = NotificationCompat.Builder(this, channelId)
-            .setContentTitle("مشغل القنوات العائم")
-            .setContentText("التلفزيون يعمل في الخلفية")
-            .setSmallIcon(android.R.drawable.ic_media_play)
-            .build()
-        startForeground(3003, notification)
     }
 
     override fun onDestroy() {
         super.onDestroy()
         composeView?.let {
             try { windowManager.removeView(it) } catch (e: Exception) { e.printStackTrace() }
+            composeView = null
         }
         lifecycleOwner.handleDestroy()
     }
-
-    private fun dpToPx(dp: Int): Int = (dp * resources.displayMetrics.density).toInt()
 }
