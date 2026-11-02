@@ -1,4 +1,9 @@
 package com.racha.ai.core.eve
+import androidx.media3.common.MediaItem
+import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.ui.PlayerView
+import androidx.media3.datasource.DefaultHttpDataSource
+import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import androidx.compose.foundation.gestures.detectTransformGestures
 
 import android.app.WallpaperManager
@@ -499,11 +504,51 @@ fun EveStandaloneShelfWindow(
 
                 Divider(color = Color.White.copy(alpha = 0.15f), thickness = 1.dp, modifier = Modifier.padding(vertical = 4.dp))
 
-                // 1. شاشة التلفاز والأفلام المباشرة
+                // 1. شاشة التلفاز والأفلام المباشرة (ExoPlayer المحترف)
                 if (shelfType == MediaShelfType.LIVE_TV) {
                     if (activeTvChannel != null) {
                         val currentCh = activeTvChannel
-                        var mediaPlayerRef by remember { mutableStateOf<MediaPlayer?>(null) }
+                        var isTvPlaying by remember { mutableStateOf(true) }
+
+                        val exoPlayer = remember(currentCh.streamUrl) {
+                            val httpSourceFactory = DefaultHttpDataSource.Factory()
+                                .setUserAgent("Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Mobile Safari/537.36")
+                                .setAllowCrossProtocolRedirects(true)
+                                .setConnectTimeoutMs(15000)
+                                .setReadTimeoutMs(15000)
+
+                            val mediaSourceFactory = DefaultMediaSourceFactory(context)
+                                .setDataSourceFactory(httpSourceFactory)
+
+                            ExoPlayer.Builder(context)
+                                .setMediaSourceFactory(mediaSourceFactory)
+                                .build().apply {
+                                    setMediaItem(MediaItem.fromUri(currentCh.streamUrl))
+                                    prepare()
+                                    playWhenReady = true
+                                    volume = videoVolume
+                                }
+                        }
+
+                        DisposableEffect(exoPlayer) {
+                            val listener = object : androidx.media3.common.Player.Listener {
+                                override fun onPlaybackStateChanged(state: Int) {
+                                    isTvLoading = (state == androidx.media3.common.Player.STATE_BUFFERING)
+                                }
+                                override fun onIsPlayingChanged(playing: Boolean) {
+                                    isTvPlaying = playing
+                                }
+                                override fun onPlayerError(error: androidx.media3.common.PlaybackException) {
+                                    isTvLoading = false
+                                    Toast.makeText(context, "تعذر تشغيل هذا البث حالياً، جرب قناة أخرى", Toast.LENGTH_SHORT).show()
+                                }
+                            }
+                            exoPlayer.addListener(listener)
+                            onDispose {
+                                exoPlayer.removeListener(listener)
+                                exoPlayer.release()
+                            }
+                        }
 
                         Column(modifier = Modifier.weight(1f).fillMaxWidth()) {
                             Box(
@@ -516,22 +561,16 @@ fun EveStandaloneShelfWindow(
                             ) {
                                 AndroidView(
                                     factory = { ctx ->
-                                        VideoView(ctx).apply {
-                                            isTvLoading = true
-                                            setVideoURI(Uri.parse(currentCh.streamUrl))
-                                            setOnPreparedListener { mp ->
-                                                mediaPlayerRef = mp
-                                                mp.setVolume(videoVolume, videoVolume)
-                                                isTvLoading = false
-                                                start()
-                                            }
-                                            setOnErrorListener { _, _, _ ->
-                                                isTvLoading = false
-                                                Toast.makeText(ctx, "البث غير متاح حالياً لهذه القناة", Toast.LENGTH_SHORT).show()
-                                                true
-                                            }
+                                        PlayerView(ctx).apply {
+                                            this.player = exoPlayer
+                                            useController = false
+                                            layoutParams = ViewGroup.LayoutParams(
+                                                ViewGroup.LayoutParams.MATCH_PARENT,
+                                                ViewGroup.LayoutParams.MATCH_PARENT
+                                            )
                                         }
                                     },
+                                    update = { pv -> pv.player = exoPlayer },
                                     modifier = Modifier.fillMaxSize()
                                 )
 
@@ -542,42 +581,85 @@ fun EveStandaloneShelfWindow(
 
                             Spacer(modifier = Modifier.height(4.dp))
 
+                            // شريط التحكم بالتشغيل والصوت
                             Row(
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .clip(RoundedCornerShape(10.dp))
                                     .background(Color(0xFF0F172A))
-                                    .padding(horizontal = 8.dp, vertical = 6.dp),
+                                    .padding(horizontal = 8.dp, vertical = 4.dp),
                                 verticalAlignment = Alignment.CenterVertically,
                                 horizontalArrangement = Arrangement.SpaceBetween
                             ) {
                                 Row(verticalAlignment = Alignment.CenterVertically) {
-                                    Icon(
-                                        imageVector = if (videoVolume == 0f) Icons.Default.VolumeOff else Icons.Default.VolumeUp,
-                                        contentDescription = null,
-                                        tint = Color(0xFF00E5FF),
-                                        modifier = Modifier.size(18.dp).clickable {
+                                    // زر التشغيل والإيقاف المؤقت
+                                    IconButton(
+                                        onClick = {
+                                            if (exoPlayer.isPlaying) {
+                                                exoPlayer.pause()
+                                            } else {
+                                                exoPlayer.play()
+                                            }
+                                        },
+                                        modifier = Modifier.size(30.dp)
+                                    ) {
+                                        Icon(
+                                            imageVector = if (isTvPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
+                                            contentDescription = "تشغيل / إيقاف",
+                                            tint = Color(0xFF00E5FF),
+                                            modifier = Modifier.size(20.dp)
+                                        )
+                                    }
+
+                                    Spacer(modifier = Modifier.width(4.dp))
+
+                                    // زر كتم الصوت
+                                    IconButton(
+                                        onClick = {
                                             videoVolume = if (videoVolume > 0f) 0f else 1f
-                                            mediaPlayerRef?.setVolume(videoVolume, videoVolume)
-                                        }
-                                    )
-                                    Spacer(modifier = Modifier.width(6.dp))
+                                            exoPlayer.volume = videoVolume
+                                        },
+                                        modifier = Modifier.size(26.dp)
+                                    ) {
+                                        Icon(
+                                            imageVector = if (videoVolume == 0f) Icons.Default.VolumeOff else Icons.Default.VolumeUp,
+                                            contentDescription = "الصوت",
+                                            tint = Color(0xFF00E5FF),
+                                            modifier = Modifier.size(18.dp)
+                                        )
+                                    }
+
+                                    // مؤشر الصوت المستجيب للمس
                                     Slider(
                                         value = videoVolume,
                                         onValueChange = {
                                             videoVolume = it
-                                            mediaPlayerRef?.setVolume(it, it)
+                                            exoPlayer.volume = it
                                         },
                                         valueRange = 0f..1f,
-                                        modifier = Modifier.width(110.dp).height(16.dp)
+                                        modifier = Modifier
+                                            .width(90.dp)
+                                            .padding(horizontal = 2.dp)
                                     )
                                 }
-                                Text("🔴 مباشر", color = Color(0xFFFF1744), fontSize = 10.sp, fontWeight = FontWeight.Bold)
+
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    IconButton(
+                                        onClick = {
+                                            exoPlayer.seekToDefaultPosition()
+                                            exoPlayer.prepare()
+                                            exoPlayer.play()
+                                        },
+                                        modifier = Modifier.size(24.dp)
+                                    ) {
+                                        Icon(Icons.Default.Refresh, contentDescription = "تحديث", tint = Color.Gray, modifier = Modifier.size(15.dp))
+                                    }
+                                    Spacer(modifier = Modifier.width(4.dp))
+                                    Text("🔴 مباشر", color = Color(0xFFFF1744), fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                                }
                             }
                         }
-                    } else {
-                        Column(modifier = Modifier.weight(1f).fillMaxWidth()) {
-                            // فلاتر الفئات (مع تبويب 🎬 أفلام الجديد)
+                    } else {                            // فلاتر الفئات (مع تبويب 🎬 أفلام الجديد)
                             LazyRow(
                                 horizontalArrangement = Arrangement.spacedBy(4.dp),
                                 modifier = Modifier.fillMaxWidth().padding(bottom = 4.dp)
