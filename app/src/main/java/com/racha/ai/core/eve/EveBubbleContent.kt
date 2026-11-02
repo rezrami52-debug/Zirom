@@ -659,7 +659,9 @@ fun EveStandaloneShelfWindow(
                                 }
                             }
                         }
-                    } else {                            // فلاتر الفئات (مع تبويب 🎬 أفلام الجديد)
+                    } else {
+                        Column(modifier = Modifier.weight(1f).fillMaxWidth()) {
+                            // فلاتر الفئات (مع تبويب 🎬 أفلام الجديد)
                             LazyRow(
                                 horizontalArrangement = Arrangement.spacedBy(4.dp),
                                 modifier = Modifier.fillMaxWidth().padding(bottom = 4.dp)
