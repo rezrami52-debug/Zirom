@@ -50,7 +50,8 @@ class EveBubbleService : Service() {
     private data class ShelfWindowHolder(
         val type: MediaShelfType,
         val view: ComposeView,
-        val layoutParams: WindowManager.LayoutParams
+        val layoutParams: WindowManager.LayoutParams,
+        val lifecycleOwner: OverlayLifecycleOwner
     )
     private val activeShelfWindows = mutableMapOf<MediaShelfType, ShelfWindowHolder>()
 
@@ -236,6 +237,7 @@ class EveBubbleService : Service() {
                 for (type in toRemove) {
                     activeShelfWindows[type]?.let { holder ->
                         try {
+                            holder.lifecycleOwner.handleDestroy()
                             windowManager.removeView(holder.view)
                         } catch (_: Exception) {}
                     }
@@ -272,31 +274,30 @@ class EveBubbleService : Service() {
         }
 
         val density = resources.displayMetrics.density
-        val defaultWidth = (280 * density).toInt()
-        val defaultHeight = (380 * density).toInt()
+        val defaultWidth = (290 * density).toInt()
+        val defaultHeight = (390 * density).toInt()
 
         val lp = WindowManager.LayoutParams(
             defaultWidth,
             defaultHeight,
             layoutType,
             WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
-            WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS,
+            WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL,
             PixelFormat.TRANSLUCENT
         ).apply {
             gravity = Gravity.TOP or Gravity.START
-            x = (70 * density).toInt() + offset
-            y = (180 * density).toInt() + offset
+            x = (40 * density).toInt() + offset
+            y = (140 * density).toInt() + offset
         }
 
+        val shelfLifecycle = OverlayLifecycleOwner()
         val view = ComposeView(this).apply {
-            overlayLifecycleOwner.attachToComposeView(this)
+            shelfLifecycle.attachToComposeView(this)
             setContent {
                 EveStandaloneShelfWindow(
                     targetShelfType = type,
                     onClose = { EveState.closeShelf(type) },
-                    onMoveWindow = { dx, dy -> 
-                        updateShelfPosition(type, dx, dy) 
-                    },
+                    onMoveWindow = { dx, dy -> updateShelfPosition(type, dx, dy) },
                     onResizeWindow = { dw, dh -> resizeShelfWindow(type, dw, dh) },
                     onToggleFullscreen = { toggleShelfFullscreen(type) },
                     onPlayAudio = { item -> playSelectedAudio(item) },
@@ -307,7 +308,8 @@ class EveBubbleService : Service() {
 
         try {
             windowManager.addView(view, lp)
-            activeShelfWindows[type] = ShelfWindowHolder(type, view, lp)
+            shelfLifecycle.handleResume()
+            activeShelfWindows[type] = ShelfWindowHolder(type, view, lp, shelfLifecycle)
         } catch (e: Exception) {
             e.printStackTrace()
         }
