@@ -199,16 +199,90 @@ fun EveBubbleAvatar(
             }
         ) {
             Box(
-                modifier = Modifier.size(width = 75.dp, height = 95.dp),
+                modifier = Modifier.size(width = 80.dp, height = 105.dp),
                 contentAlignment = Alignment.Center
             ) {
-                // صورة EVE السينمائية المفرغة الحقيقية
-                androidx.compose.foundation.Image(
-                    painter = androidx.compose.ui.res.painterResource(id = com.racha.ai.R.drawable.eve_robot),
-                    contentDescription = "EVE Assistant",
-                    modifier = Modifier.fillMaxSize(),
-                    contentScale = androidx.compose.ui.layout.ContentScale.Fit
-                )
+                Canvas(modifier = Modifier.fillMaxSize()) {
+                    val w = size.width
+                    val h = size.height
+
+                    val bodyBrush = Brush.verticalGradient(
+                        colors = listOf(Color(0xFFFFFFFF), Color(0xFFF3F6FA), Color(0xFFDCE4ED))
+                    )
+
+                    // ظل ناعم تحت الفقاعة
+                    drawRoundRect(
+                        color = Color(0x33000000),
+                        topLeft = Offset(w * 0.08f, h * 0.05f),
+                        size = GeometrySize(w * 0.84f, h * 0.90f),
+                        cornerRadius = CornerRadius(w * 0.42f, h * 0.45f)
+                    )
+
+                    // جسم الكبسولة الأنيق المتناسق
+                    drawRoundRect(
+                        brush = bodyBrush,
+                        topLeft = Offset(w * 0.07f, h * 0.03f),
+                        size = GeometrySize(w * 0.86f, h * 0.92f),
+                        cornerRadius = CornerRadius(w * 0.43f, h * 0.46f)
+                    )
+
+                    // إطار التنبيه واللمعان
+                    drawRoundRect(
+                        color = if (isNotifying) Color(0xFFFF1744) else Color(0xFFC7D3E0),
+                        topLeft = Offset(w * 0.07f, h * 0.03f),
+                        size = GeometrySize(w * 0.86f, h * 0.92f),
+                        cornerRadius = CornerRadius(w * 0.43f, h * 0.46f),
+                        style = Stroke(width = if (isNotifying) 2.5f else 1.5f)
+                    )
+
+                    // قناع الوجه الأسود المتناسق
+                    val visorWidth = w * 0.64f
+                    val visorHeight = h * 0.32f
+                    val visorTop = h * 0.13f
+                    val visorLeft = (w - visorWidth) / 2f
+
+                    drawRoundRect(
+                        brush = Brush.verticalGradient(
+                            listOf(Color(0xFF151922), Color(0xFF090B0E), Color(0xFF020305))
+                        ),
+                        topLeft = Offset(visorLeft, visorTop),
+                        size = GeometrySize(visorWidth, visorHeight),
+                        cornerRadius = CornerRadius(visorWidth * 0.42f, visorHeight * 0.50f)
+                    )
+
+                    val eyeGlowColor = if (isNotifying) Color(0xFFFF1744) else Color(0xFF00E5FF)
+                    val eyeCenterY = visorTop + visorHeight * 0.52f
+                    val eyeWidth = visorWidth * 0.28f
+                    val eyeHeight = (visorHeight * 0.30f) * eyeHeightScale
+                    val leftEyeX = visorLeft + visorWidth * 0.22f
+                    val rightEyeX = visorLeft + visorWidth * 0.78f
+
+                    if (isSleeping) {
+                        val sleepLeft = Path().apply {
+                            moveTo(leftEyeX - eyeWidth * 0.45f, eyeCenterY - 1f)
+                            quadraticBezierTo(leftEyeX, eyeCenterY + 4f, leftEyeX + eyeWidth * 0.45f, eyeCenterY - 1f)
+                        }
+                        val sleepRight = Path().apply {
+                            moveTo(rightEyeX - eyeWidth * 0.45f, eyeCenterY - 1f)
+                            quadraticBezierTo(rightEyeX, eyeCenterY + 4f, rightEyeX + eyeWidth * 0.45f, eyeCenterY - 1f)
+                        }
+                        drawPath(sleepLeft, color = eyeGlowColor.copy(alpha = 0.55f), style = Stroke(width = 3.5f, cap = StrokeCap.Round))
+                        drawPath(sleepRight, color = eyeGlowColor.copy(alpha = 0.55f), style = Stroke(width = 3.5f, cap = StrokeCap.Round))
+                    } else {
+                        drawRoundRect(
+                            brush = Brush.radialGradient(listOf(Color(0xFFE0FFFF), eyeGlowColor, Color(0xFF0091EA)), center = Offset(leftEyeX, eyeCenterY), radius = eyeWidth * eyeGlow),
+                            topLeft = Offset(leftEyeX - eyeWidth / 2f, eyeCenterY - eyeHeight / 2f),
+                            size = GeometrySize(eyeWidth, eyeHeight),
+                            cornerRadius = CornerRadius(eyeWidth * 0.45f, eyeHeight * 0.45f)
+                        )
+                        drawRoundRect(
+                            brush = Brush.radialGradient(listOf(Color(0xFFE0FFFF), eyeGlowColor, Color(0xFF0091EA)), center = Offset(rightEyeX, eyeCenterY), radius = eyeWidth * eyeGlow),
+                            topLeft = Offset(rightEyeX - eyeWidth / 2f, eyeCenterY - eyeHeight / 2f),
+                            size = GeometrySize(eyeWidth, eyeHeight),
+                            cornerRadius = CornerRadius(eyeWidth * 0.45f, eyeHeight * 0.45f)
+                        )
+                    }
+                }
 
                 if (hasActiveMedia) {
                     Box(
