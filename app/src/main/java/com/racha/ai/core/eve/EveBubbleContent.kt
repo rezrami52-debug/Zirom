@@ -378,7 +378,7 @@ fun EveStandaloneShelfWindow(
     val eveUiState by EveState.uiState.collectAsState()
 
     var activePreviewItem by remember { mutableStateOf<MediaItemData?>(null) }
-    val activeTvChannel = eveUiState.activeTvChannel
+    val activeTvChannel = if (shelfType == MediaShelfType.LIVE_TV) eveUiState.activeTvChannel else null
     var isTvLoading by remember { mutableStateOf(false) }
 
     var innerContentZoom by remember { mutableFloatStateOf(1.0f) }

@@ -78,8 +78,8 @@ object EveState {
 
     fun openShelf(type: MediaShelfType) {
         if (type != MediaShelfType.NONE) {
-            val current = _uiState.value.openShelves
-            _uiState.value = _uiState.value.copy(openShelves = current + type)
+            // فتح النافذة المطلوبة فقط حصرياً لتجنب تراكم النوافذ وانهيار الذاكرة
+            _uiState.value = _uiState.value.copy(openShelves = setOf(type))
         }
     }
 
