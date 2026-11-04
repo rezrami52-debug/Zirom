@@ -209,10 +209,10 @@ fun EveBubbleAvatar(
 
                     val eyeGlowColor = if (isNotifying) Color(0xFFFF1744) else Color(0xFF00E5FF)
 
-                    // 1. التدرجات الخزفية ثلاثية الأبعاد الناعمة
+                    // 1. التدرجات الخزفية ثلاثية الأبعاد
                     val headBrush = Brush.radialGradient(
                         colors = listOf(Color(0xFFFFFFFF), Color(0xFFF8FAFC), Color(0xFFD4DFEB)),
-                        center = Offset(cx - 3f, h * 0.16f),
+                        center = Offset(cx - 3f, h * 0.17f),
                         radius = w * 0.32f
                     )
 
@@ -226,42 +226,23 @@ fun EveBubbleAvatar(
                         colors = listOf(Color(0xFF141A24), Color(0xFF080C12), Color(0xFF000000))
                     )
 
-                    // 2. الرأس المتناسق بقبة كروية ناعمة (بدون أي نتوء أو تحديب مدبب)
-                    val headW = w * 0.58f
-                    val headH = h * 0.32f
+                    // 2. الرأس الكروي الأملس تماماً (بدون أي حواف أو زوايا سفلية)
+                    val headW = w * 0.56f
+                    val headH = h * 0.33f
                     val headTop = h * 0.08f
                     val headBottom = headTop + headH
 
-                    val headPath = Path().apply {
-                        // منحنى أسفل الرأس الهابط بلطف
-                        moveTo(cx - headW * 0.45f, headBottom - 1.5f)
-                        quadraticBezierTo(cx, headBottom + 3.5f, cx + headW * 0.45f, headBottom - 1.5f)
-                        // الجانب الأيمن المنحني نحو القمة الكروية المستديرة
-                        cubicTo(
-                            cx + headW * 0.52f, headBottom - 6f,
-                            cx + headW * 0.42f, headTop,
-                            cx, headTop
-                        )
-                        // الجانب الأيسر المنحني هبوطاً من القمة الكروية
-                        cubicTo(
-                            cx - headW * 0.42f, headTop,
-                            cx - headW * 0.52f, headBottom - 6f,
-                            cx - headW * 0.45f, headBottom - 1.5f
-                        )
-                        close()
-                    }
-
-                    // 3. الجسد الكبسولي النقي الأملس (بدون أي أيدي أو أذرع)
+                    // 3. الجسد الكبسولي (نفس الحجم والأبعاد الثابتة)
                     val bodyW = w * 0.56f
                     val bodyH = h * 0.50f
                     val bodyTop = headBottom + 4.5f
                     val bodyBottom = bodyTop + bodyH
 
                     val bodyPath = Path().apply {
-                        // منحنى أعلى الجسم المطابق تماماً وبشكل موازٍ لمنحنى أسفل الرأس
-                        moveTo(cx - bodyW * 0.45f, bodyTop - 1.5f)
-                        quadraticBezierTo(cx, bodyTop + 3.5f, cx + bodyW * 0.45f, bodyTop - 1.5f)
-                        // الجانب الأيمن النازل بنعومة تامة نحو القاعدة البيضاوية
+                        // انحناء أعلى الجسم المتناغم مع دوران قاع الرأس الكروي
+                        moveTo(cx - bodyW * 0.44f, bodyTop)
+                        quadraticBezierTo(cx, bodyTop + 5.5f, cx + bodyW * 0.44f, bodyTop)
+                        // الجانب الأيمن النازل بنعومة نحو القاعدة البيضاوية
                         cubicTo(
                             cx + bodyW * 0.52f, bodyTop + bodyH * 0.40f,
                             cx + bodyW * 0.34f, bodyBottom,
@@ -271,21 +252,21 @@ fun EveBubbleAvatar(
                         cubicTo(
                             cx - bodyW * 0.34f, bodyBottom,
                             cx - bodyW * 0.52f, bodyTop + bodyH * 0.40f,
-                            cx - bodyW * 0.45f, bodyTop - 1.5f
+                            cx - bodyW * 0.44f, bodyTop
                         )
                         close()
                     }
 
-                    // رسم الجسد الكبسولي المفرغ النقي
+                    // رسم الجسد
                     drawPath(bodyPath, color = Color(0x15000000))
                     drawPath(bodyPath, brush = bodyBrush)
 
-                    // ظل تجويف الياقة الموازي لأسفل الرأس
+                    // ظل تجويف الياقة الناعم
                     val collarShadow = Path().apply {
-                        moveTo(cx - bodyW * 0.36f, bodyTop)
-                        quadraticBezierTo(cx, bodyTop + 4.5f, cx + bodyW * 0.36f, bodyTop)
+                        moveTo(cx - bodyW * 0.36f, bodyTop + 1f)
+                        quadraticBezierTo(cx, bodyTop + 6f, cx + bodyW * 0.36f, bodyTop + 1f)
                     }
-                    drawPath(collarShadow, color = Color(0xFF94A3B8).copy(alpha = 0.30f), style = Stroke(width = 2.0f, cap = StrokeCap.Round))
+                    drawPath(collarShadow, color = Color(0xFF94A3B8).copy(alpha = 0.28f), style = Stroke(width = 1.8f, cap = StrokeCap.Round))
 
                     // مؤشر الصدر الأيقوني الصغير
                     val chestY = bodyTop + bodyH * 0.22f
@@ -299,19 +280,22 @@ fun EveBubbleAvatar(
                         style = Stroke(width = 0.9f)
                     )
 
-                    // 4. رسم الرأس الكروي الناعم
-                    drawPath(headPath, brush = headBrush)
+                    // 4. رسم الرأس الكروي البيضاوي الأملس الخالي من أي زوايا
+                    drawOval(
+                        brush = headBrush,
+                        topLeft = Offset(cx - headW / 2f, headTop),
+                        size = GeometrySize(headW, headH)
+                    )
 
-                    // 5. قناع الوجه البيضاوي المستقل (أصغر من الرأس ومحاط بحواف بيضاء واضحة للجبهة والخدود)
-                    val visorW = headW * 0.68f
-                    val visorH = headH * 0.56f
-                    val visorTop = headTop + headH * 0.22f
+                    // 5. قناع الوجه البيضاوي بنفس الحجم الثابت
+                    val visorW = headW * 0.70f
+                    val visorH = headH * 0.58f
+                    val visorTop = headTop + headH * 0.21f
 
-                    drawRoundRect(
+                    drawOval(
                         brush = visorBrush,
                         topLeft = Offset(cx - visorW / 2f, visorTop),
-                        size = GeometrySize(visorW, visorH),
-                        cornerRadius = CornerRadius(visorW * 0.45f, visorH * 0.50f)
+                        size = GeometrySize(visorW, visorH)
                     )
 
                     // انعكاس زجاجي قوسي خفيف أعلى القناع
@@ -321,15 +305,15 @@ fun EveBubbleAvatar(
                     }
                     drawPath(glassHighlight, color = Color.White.copy(alpha = 0.28f), style = Stroke(width = 1.2f, cap = StrokeCap.Round))
 
-                    // 6. العيون النيون الرقمية المتناسقة (مع ابتسامة نوم لطيفة وليست ناعسة)
-                    val eyeW = visorW * 0.25f
+                    // 6. العيون النيون الرقمية الحية
+                    val eyeW = visorW * 0.24f
                     val eyeH = (visorH * 0.30f) * eyeHeightScale
                     val eyeCenterY = visorTop + visorH * 0.50f
                     val leftEyeX = cx - visorW * 0.24f
                     val rightEyeX = cx + visorW * 0.24f
 
                     if (isSleeping) {
-                        // وضع النوم: قوس هادئ مبتسم بلطف (Smiling sleeping arcs)
+                        // وضع النوم: قوس هادئ ومبتسم
                         val sleepL = Path().apply {
                             moveTo(leftEyeX - eyeW * 0.44f, eyeCenterY - 0.5f)
                             quadraticBezierTo(leftEyeX, eyeCenterY + 3.5f, leftEyeX + eyeW * 0.44f, eyeCenterY - 0.5f)
@@ -341,7 +325,7 @@ fun EveBubbleAvatar(
                         drawPath(sleepL, color = eyeGlowColor.copy(alpha = 0.75f), style = Stroke(width = 2.0f, cap = StrokeCap.Round))
                         drawPath(sleepR, color = eyeGlowColor.copy(alpha = 0.75f), style = Stroke(width = 2.0f, cap = StrokeCap.Round))
                     } else {
-                        // وضع الاستيقاظ: عيون نيون رقمية مضيئة مع توهج ناعم
+                        // وضع الاستيقاظ: عيون نيون رقمية متوهجة
                         drawCircle(color = eyeGlowColor.copy(alpha = 0.22f * eyeGlow), radius = eyeW * 0.70f, center = Offset(leftEyeX, eyeCenterY))
                         drawCircle(color = eyeGlowColor.copy(alpha = 0.22f * eyeGlow), radius = eyeW * 0.70f, center = Offset(rightEyeX, eyeCenterY))
 
