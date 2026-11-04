@@ -209,137 +209,127 @@ fun EveBubbleAvatar(
 
                     val eyeGlowColor = if (isNotifying) Color(0xFFFF1744) else Color(0xFF00E5FF)
 
-                    // 1. التدرجات الخزفية ثلاثية الأبعاد
+                    // ===== نسبك المعدّلة الموزونة =====
+                    val headW = w * 0.58f
+                    val headH = h * 0.36f
+                    val headTop = h * 0.035f
+                    val headBottom = headTop + headH
+
+                    val bodyW = w * 0.64f
+                    val bodyH = h * 0.55f
+                    val bodyTop = headBottom + 6.8f
+                    val bodyBottom = bodyTop + bodyH
+
+                    // ===== التدرجات اللامعة الخزفية =====
                     val headBrush = Brush.radialGradient(
-                        colors = listOf(Color(0xFFFFFFFF), Color(0xFFF8FAFC), Color(0xFFD4DFEB)),
-                        center = Offset(cx - 3f, h * 0.17f),
-                        radius = w * 0.32f
+                        colors = listOf(Color(0xFFFFFFFF), Color(0xFFF1F5F9), Color(0xFFCBD5E1)),
+                        center = Offset(cx - 4f, headTop + headH * 0.28f),
+                        radius = headW * 0.55f
                     )
 
                     val bodyBrush = Brush.linearGradient(
-                        colors = listOf(Color(0xFFFFFFFF), Color(0xFFF8FAFC), Color(0xFFE2E8F0), Color(0xFFCBD5E1)),
-                        start = Offset(cx - w * 0.22f, h * 0.42f),
-                        end = Offset(cx + w * 0.26f, h * 0.94f)
+                        colors = listOf(Color(0xFFFFFFFF), Color(0xFFF8FAFC), Color(0xFFE2E8F0), Color(0xFF94A3B8)),
+                        start = Offset(cx - bodyW * 0.3f, bodyTop),
+                        end = Offset(cx + bodyW * 0.35f, bodyBottom)
                     )
 
                     val visorBrush = Brush.verticalGradient(
-                        colors = listOf(Color(0xFF141A24), Color(0xFF080C12), Color(0xFF000000))
+                        colors = listOf(Color(0xFF1E293B), Color(0xFF0F172A), Color(0xFF020617))
                     )
 
-                    // 2. الرأس الكروي الأملس تماماً (بدون أي حواف أو زوايا سفلية)
-                    val headW = w * 0.56f
-                    val headH = h * 0.33f
-                    val headTop = h * 0.08f
-                    val headBottom = headTop + headH
-
-                    // 3. الجسد الكبسولي (نفس الحجم والأبعاد الثابتة)
-                    val bodyW = w * 0.56f
-                    val bodyH = h * 0.50f
-                    val bodyTop = headBottom + 4.5f
-                    val bodyBottom = bodyTop + bodyH
-
+                    // ===== الجسد الممتلئ المتناسق =====
                     val bodyPath = Path().apply {
-                        // انحناء أعلى الجسم المتناغم مع دوران قاع الرأس الكروي
-                        moveTo(cx - bodyW * 0.44f, bodyTop)
-                        quadraticBezierTo(cx, bodyTop + 5.5f, cx + bodyW * 0.44f, bodyTop)
-                        // الجانب الأيمن النازل بنعومة نحو القاعدة البيضاوية
+                        moveTo(cx - bodyW * 0.42f, bodyTop)
+                        quadraticBezierTo(cx, bodyTop + 4.5f, cx + bodyW * 0.42f, bodyTop)
+
                         cubicTo(
-                            cx + bodyW * 0.52f, bodyTop + bodyH * 0.40f,
-                            cx + bodyW * 0.34f, bodyBottom,
+                            cx + bodyW * 0.52f, bodyTop + bodyH * 0.35f,
+                            cx + bodyW * 0.38f, bodyBottom,
                             cx, bodyBottom
                         )
-                        // الجانب الأيسر الصاعد
+
                         cubicTo(
-                            cx - bodyW * 0.34f, bodyBottom,
-                            cx - bodyW * 0.52f, bodyTop + bodyH * 0.40f,
-                            cx - bodyW * 0.44f, bodyTop
+                            cx - bodyW * 0.38f, bodyBottom,
+                            cx - bodyW * 0.52f, bodyTop + bodyH * 0.35f,
+                            cx - bodyW * 0.42f, bodyTop
                         )
                         close()
                     }
 
-                    // رسم الجسد
-                    drawPath(bodyPath, color = Color(0x15000000))
+                    drawPath(bodyPath, color = Color.Black.copy(alpha = 0.15f), style = Stroke(width = 2.5f))
                     drawPath(bodyPath, brush = bodyBrush)
 
-                    // ظل تجويف الياقة الناعم
-                    val collarShadow = Path().apply {
-                        moveTo(cx - bodyW * 0.36f, bodyTop + 1f)
-                        quadraticBezierTo(cx, bodyTop + 6f, cx + bodyW * 0.36f, bodyTop + 1f)
+                    // خط الياقة الناعم
+                    val collar = Path().apply {
+                        moveTo(cx - bodyW * 0.32f, bodyTop + 4f)
+                        quadraticBezierTo(cx, bodyTop + 8.5f, cx + bodyW * 0.32f, bodyTop + 4f)
                     }
-                    drawPath(collarShadow, color = Color(0xFF94A3B8).copy(alpha = 0.28f), style = Stroke(width = 1.8f, cap = StrokeCap.Round))
+                    drawPath(collar, color = Color(0xFF64748B).copy(alpha = 0.35f), style = Stroke(width = 1.6f, cap = StrokeCap.Round))
 
-                    // مؤشر الصدر الأيقوني الصغير
-                    val chestY = bodyTop + bodyH * 0.22f
-                    drawCircle(color = Color(0xFF00E5FF), radius = 1.2f, center = Offset(cx - 6.5f, chestY))
-                    drawCircle(color = Color(0xFF00E5FF), radius = 1.2f, center = Offset(cx - 2.5f, chestY))
-                    drawCircle(color = Color(0xFF00E5FF), radius = 1.2f, center = Offset(cx + 1.5f, chestY))
-                    drawCircle(
-                        color = Color(0xFFFF5252).copy(alpha = 0.85f),
-                        radius = 2.2f,
-                        center = Offset(cx + 7.5f, chestY),
-                        style = Stroke(width = 0.9f)
+                    // ===== الرأس الكروي مع الظل =====
+                    drawOval(
+                        color = Color.Black.copy(alpha = 0.12f),
+                        topLeft = Offset(cx - headW / 2f + 1.5f, headTop + 2.5f),
+                        size = Size(headW, headH)
                     )
 
-                    // 4. رسم الرأس الكروي البيضاوي الأملس الخالي من أي زوايا
                     drawOval(
                         brush = headBrush,
                         topLeft = Offset(cx - headW / 2f, headTop),
-                        size = GeometrySize(headW, headH)
+                        size = Size(headW, headH)
                     )
 
-                    // 5. قناع الوجه البيضاوي بنفس الحجم الثابت
-                    val visorW = headW * 0.70f
+                    // ===== القناع الأسود اللامع =====
+                    val visorW = headW * 0.72f
                     val visorH = headH * 0.58f
-                    val visorTop = headTop + headH * 0.21f
+                    val visorTop = headTop + headH * 0.22f
 
                     drawOval(
                         brush = visorBrush,
                         topLeft = Offset(cx - visorW / 2f, visorTop),
-                        size = GeometrySize(visorW, visorH)
+                        size = Size(visorW, visorH)
                     )
 
-                    // انعكاس زجاجي قوسي خفيف أعلى القناع
-                    val glassHighlight = Path().apply {
-                        moveTo(cx - visorW * 0.28f, visorTop + visorH * 0.18f)
-                        quadraticBezierTo(cx, visorTop + visorH * 0.08f, cx + visorW * 0.28f, visorTop + visorH * 0.18f)
+                    // انعكاس زجاجي
+                    val glassArc = Path().apply {
+                        moveTo(cx - visorW * 0.30f, visorTop + visorH * 0.16f)
+                        quadraticBezierTo(cx, visorTop + visorH * 0.06f, cx + visorW * 0.30f, visorTop + visorH * 0.16f)
                     }
-                    drawPath(glassHighlight, color = Color.White.copy(alpha = 0.28f), style = Stroke(width = 1.2f, cap = StrokeCap.Round))
+                    drawPath(glassArc, color = Color.White.copy(alpha = 0.32f), style = Stroke(width = 1.4f, cap = StrokeCap.Round))
 
-                    // 6. العيون النيون الرقمية الحية
-                    val eyeW = visorW * 0.24f
-                    val eyeH = (visorH * 0.30f) * eyeHeightScale
-                    val eyeCenterY = visorTop + visorH * 0.50f
-                    val leftEyeX = cx - visorW * 0.24f
-                    val rightEyeX = cx + visorW * 0.24f
+                    // ===== العيون النيون الرقمية الحية =====
+                    val eyeW = visorW * 0.22f
+                    val eyeH = (visorH * 0.28f) * eyeHeightScale
+                    val eyeCenterY = visorTop + visorH * 0.52f
+                    val leftEyeX = cx - visorW * 0.22f
+                    val rightEyeX = cx + visorW * 0.22f
 
                     if (isSleeping) {
-                        // وضع النوم: قوس هادئ ومبتسم
-                        val sleepL = Path().apply {
-                            moveTo(leftEyeX - eyeW * 0.44f, eyeCenterY - 0.5f)
-                            quadraticBezierTo(leftEyeX, eyeCenterY + 3.5f, leftEyeX + eyeW * 0.44f, eyeCenterY - 0.5f)
+                        val sleepPathL = Path().apply {
+                            moveTo(leftEyeX - eyeW * 0.45f, eyeCenterY)
+                            quadraticBezierTo(leftEyeX, eyeCenterY + 3.8f, leftEyeX + eyeW * 0.45f, eyeCenterY)
                         }
-                        val sleepR = Path().apply {
-                            moveTo(rightEyeX - eyeW * 0.44f, eyeCenterY - 0.5f)
-                            quadraticBezierTo(rightEyeX, eyeCenterY + 3.5f, rightEyeX + eyeW * 0.44f, eyeCenterY - 0.5f)
+                        val sleepPathR = Path().apply {
+                            moveTo(rightEyeX - eyeW * 0.45f, eyeCenterY)
+                            quadraticBezierTo(rightEyeX, eyeCenterY + 3.8f, rightEyeX + eyeW * 0.45f, eyeCenterY)
                         }
-                        drawPath(sleepL, color = eyeGlowColor.copy(alpha = 0.75f), style = Stroke(width = 2.0f, cap = StrokeCap.Round))
-                        drawPath(sleepR, color = eyeGlowColor.copy(alpha = 0.75f), style = Stroke(width = 2.0f, cap = StrokeCap.Round))
+                        drawPath(sleepPathL, color = eyeGlowColor.copy(alpha = 0.8f), style = Stroke(width = 2.1f, cap = StrokeCap.Round))
+                        drawPath(sleepPathR, color = eyeGlowColor.copy(alpha = 0.8f), style = Stroke(width = 2.1f, cap = StrokeCap.Round))
                     } else {
-                        // وضع الاستيقاظ: عيون نيون رقمية متوهجة
-                        drawCircle(color = eyeGlowColor.copy(alpha = 0.22f * eyeGlow), radius = eyeW * 0.70f, center = Offset(leftEyeX, eyeCenterY))
-                        drawCircle(color = eyeGlowColor.copy(alpha = 0.22f * eyeGlow), radius = eyeW * 0.70f, center = Offset(rightEyeX, eyeCenterY))
+                        drawCircle(color = eyeGlowColor.copy(alpha = 0.25f * eyeGlow), radius = eyeW * 0.75f, center = Offset(leftEyeX, eyeCenterY))
+                        drawCircle(color = eyeGlowColor.copy(alpha = 0.25f * eyeGlow), radius = eyeW * 0.75f, center = Offset(rightEyeX, eyeCenterY))
 
                         drawRoundRect(
-                            brush = Brush.verticalGradient(listOf(Color(0xFFE0FFFF), eyeGlowColor, Color(0xFF0091EA))),
+                            brush = Brush.verticalGradient(listOf(Color(0xFFE0F7FA), eyeGlowColor, Color(0xFF0277BD))),
                             topLeft = Offset(leftEyeX - eyeW / 2f, eyeCenterY - eyeH / 2f),
-                            size = GeometrySize(eyeW, eyeH),
-                            cornerRadius = CornerRadius(eyeW * 0.45f, eyeH * 0.45f)
+                            size = Size(eyeW, eyeH),
+                            cornerRadius = CornerRadius(eyeW * 0.48f, eyeH * 0.48f)
                         )
                         drawRoundRect(
-                            brush = Brush.verticalGradient(listOf(Color(0xFFE0FFFF), eyeGlowColor, Color(0xFF0091EA))),
+                            brush = Brush.verticalGradient(listOf(Color(0xFFE0F7FA), eyeGlowColor, Color(0xFF0277BD))),
                             topLeft = Offset(rightEyeX - eyeW / 2f, eyeCenterY - eyeH / 2f),
-                            size = GeometrySize(eyeW, eyeH),
-                            cornerRadius = CornerRadius(eyeW * 0.45f, eyeH * 0.45f)
+                            size = Size(eyeW, eyeH),
+                            cornerRadius = CornerRadius(eyeW * 0.48f, eyeH * 0.48f)
                         )
                     }
                 }
