@@ -1,4 +1,7 @@
 package com.racha.ai.core.eve
+import androidx.compose.ui.graphics.drawscope.withTransform
+import androidx.compose.ui.graphics.drawscope.DrawScope
+import kotlin.math.min
 import android.view.ViewGroup
 import androidx.media3.common.MediaItem
 import androidx.media3.exoplayer.ExoPlayer
@@ -199,139 +202,17 @@ fun EveBubbleAvatar(
             }
         ) {
             Box(
-                modifier = Modifier.size(width = 72.dp, height = 98.dp),
+                modifier = Modifier.size(width = 78.dp, height = 108.dp),
                 contentAlignment = Alignment.Center
             ) {
                 Canvas(modifier = Modifier.fillMaxSize()) {
-                    val w = size.width
-                    val h = size.height
-                    val cx = w / 2f
-
-                    val eyeGlowColor = if (isNotifying) Color(0xFFFF1744) else Color(0xFF00E5FF)
-
-                    // ===== نسبك المعدّلة الموزونة =====
-                    val headW = w * 0.58f
-                    val headH = h * 0.36f
-                    val headTop = h * 0.035f
-                    val headBottom = headTop + headH
-
-                    val bodyW = w * 0.64f
-                    val bodyH = h * 0.55f
-                    val bodyTop = headBottom + 6.8f
-                    val bodyBottom = bodyTop + bodyH
-
-                    // ===== التدرجات اللامعة الخزفية =====
-                    val headBrush = Brush.radialGradient(
-                        colors = listOf(Color(0xFFFFFFFF), Color(0xFFF1F5F9), Color(0xFFCBD5E1)),
-                        center = Offset(cx - 4f, headTop + headH * 0.28f),
-                        radius = headW * 0.55f
+                    drawEveOriginalStyle(
+                        glow = eyeGlow,
+                        isSleeping = isSleeping,
+                        eyeHeightScale = eyeHeightScale,
+                        isNotifying = isNotifying,
+                        speaking = (eveUiState.mood == EveMood.OBSERVING_SCREEN || eveUiState.mood == EveMood.AWAKE_SMILING)
                     )
-
-                    val bodyBrush = Brush.linearGradient(
-                        colors = listOf(Color(0xFFFFFFFF), Color(0xFFF8FAFC), Color(0xFFE2E8F0), Color(0xFF94A3B8)),
-                        start = Offset(cx - bodyW * 0.3f, bodyTop),
-                        end = Offset(cx + bodyW * 0.35f, bodyBottom)
-                    )
-
-                    val visorBrush = Brush.verticalGradient(
-                        colors = listOf(Color(0xFF1E293B), Color(0xFF0F172A), Color(0xFF020617))
-                    )
-
-                    // ===== الجسد الممتلئ المتناسق =====
-                    val bodyPath = Path().apply {
-                        moveTo(cx - bodyW * 0.42f, bodyTop)
-                        quadraticBezierTo(cx, bodyTop + 4.5f, cx + bodyW * 0.42f, bodyTop)
-
-                        cubicTo(
-                            cx + bodyW * 0.52f, bodyTop + bodyH * 0.35f,
-                            cx + bodyW * 0.38f, bodyBottom,
-                            cx, bodyBottom
-                        )
-
-                        cubicTo(
-                            cx - bodyW * 0.38f, bodyBottom,
-                            cx - bodyW * 0.52f, bodyTop + bodyH * 0.35f,
-                            cx - bodyW * 0.42f, bodyTop
-                        )
-                        close()
-                    }
-
-                    drawPath(bodyPath, color = Color.Black.copy(alpha = 0.15f), style = Stroke(width = 2.5f))
-                    drawPath(bodyPath, brush = bodyBrush)
-
-                    // خط الياقة الناعم
-                    val collar = Path().apply {
-                        moveTo(cx - bodyW * 0.32f, bodyTop + 4f)
-                        quadraticBezierTo(cx, bodyTop + 8.5f, cx + bodyW * 0.32f, bodyTop + 4f)
-                    }
-                    drawPath(collar, color = Color(0xFF64748B).copy(alpha = 0.35f), style = Stroke(width = 1.6f, cap = StrokeCap.Round))
-
-                    // ===== الرأس الكروي مع الظل =====
-                    drawOval(
-                        color = Color.Black.copy(alpha = 0.12f),
-                        topLeft = Offset(cx - headW / 2f + 1.5f, headTop + 2.5f),
-                        size = androidx.compose.ui.geometry.Size(headW, headH)
-                    )
-
-                    drawOval(
-                        brush = headBrush,
-                        topLeft = Offset(cx - headW / 2f, headTop),
-                        size = androidx.compose.ui.geometry.Size(headW, headH)
-                    )
-
-                    // ===== القناع الأسود اللامع =====
-                    val visorW = headW * 0.72f
-                    val visorH = headH * 0.58f
-                    val visorTop = headTop + headH * 0.22f
-
-                    drawOval(
-                        brush = visorBrush,
-                        topLeft = Offset(cx - visorW / 2f, visorTop),
-                        size = androidx.compose.ui.geometry.Size(visorW, visorH)
-                    )
-
-                    // انعكاس زجاجي
-                    val glassArc = Path().apply {
-                        moveTo(cx - visorW * 0.30f, visorTop + visorH * 0.16f)
-                        quadraticBezierTo(cx, visorTop + visorH * 0.06f, cx + visorW * 0.30f, visorTop + visorH * 0.16f)
-                    }
-                    drawPath(glassArc, color = Color.White.copy(alpha = 0.32f), style = Stroke(width = 1.4f, cap = StrokeCap.Round))
-
-                    // ===== العيون النيون الرقمية الحية =====
-                    val eyeW = visorW * 0.22f
-                    val eyeH = (visorH * 0.28f) * eyeHeightScale
-                    val eyeCenterY = visorTop + visorH * 0.52f
-                    val leftEyeX = cx - visorW * 0.22f
-                    val rightEyeX = cx + visorW * 0.22f
-
-                    if (isSleeping) {
-                        val sleepPathL = Path().apply {
-                            moveTo(leftEyeX - eyeW * 0.45f, eyeCenterY)
-                            quadraticBezierTo(leftEyeX, eyeCenterY + 3.8f, leftEyeX + eyeW * 0.45f, eyeCenterY)
-                        }
-                        val sleepPathR = Path().apply {
-                            moveTo(rightEyeX - eyeW * 0.45f, eyeCenterY)
-                            quadraticBezierTo(rightEyeX, eyeCenterY + 3.8f, rightEyeX + eyeW * 0.45f, eyeCenterY)
-                        }
-                        drawPath(sleepPathL, color = eyeGlowColor.copy(alpha = 0.8f), style = Stroke(width = 2.1f, cap = StrokeCap.Round))
-                        drawPath(sleepPathR, color = eyeGlowColor.copy(alpha = 0.8f), style = Stroke(width = 2.1f, cap = StrokeCap.Round))
-                    } else {
-                        drawCircle(color = eyeGlowColor.copy(alpha = 0.25f * eyeGlow), radius = eyeW * 0.75f, center = Offset(leftEyeX, eyeCenterY))
-                        drawCircle(color = eyeGlowColor.copy(alpha = 0.25f * eyeGlow), radius = eyeW * 0.75f, center = Offset(rightEyeX, eyeCenterY))
-
-                        drawRoundRect(
-                            brush = Brush.verticalGradient(listOf(Color(0xFFE0F7FA), eyeGlowColor, Color(0xFF0277BD))),
-                            topLeft = Offset(leftEyeX - eyeW / 2f, eyeCenterY - eyeH / 2f),
-                            size = androidx.compose.ui.geometry.Size(eyeW, eyeH),
-                            cornerRadius = CornerRadius(eyeW * 0.48f, eyeH * 0.48f)
-                        )
-                        drawRoundRect(
-                            brush = Brush.verticalGradient(listOf(Color(0xFFE0F7FA), eyeGlowColor, Color(0xFF0277BD))),
-                            topLeft = Offset(rightEyeX - eyeW / 2f, eyeCenterY - eyeH / 2f),
-                            size = androidx.compose.ui.geometry.Size(eyeW, eyeH),
-                            cornerRadius = CornerRadius(eyeW * 0.48f, eyeH * 0.48f)
-                        )
-                    }
                 }
 
                 if (hasActiveMedia) {
@@ -1172,4 +1053,266 @@ private fun formatMillis(ms: Int): String {
     val minutes = totalSeconds / 60
     val seconds = totalSeconds % 60
     return String.format(Locale.US, "%02d:%02d", minutes, seconds)
+}
+
+
+private fun DrawScope.drawEveOriginalStyle(
+    glow: Float,
+    isSleeping: Boolean = false,
+    eyeHeightScale: Float = 1f,
+    isNotifying: Boolean = false,
+    speaking: Boolean = false
+) {
+    // نظام إحداثيات نسبي موحد: العرض 100 والطول 140
+    val unit = min(size.width / 100f, size.height / 140f)
+    val offsetX = (size.width - unit * 100f) / 2f
+    val offsetY = (size.height - unit * 140f) / 2f
+
+    withTransform({
+        translate(offsetX, offsetY)
+        scale(unit, unit)
+    }) {
+        // ظل التحويم أسفل إيف
+        drawOval(
+            color = Color.Black.copy(alpha = 0.16f),
+            topLeft = Offset(32f, 128f),
+            size = androidx.compose.ui.geometry.Size(36f, 4f)
+        )
+        drawOval(
+            color = Color.White.copy(alpha = 0.18f),
+            topLeft = Offset(37f, 128.4f),
+            size = androidx.compose.ui.geometry.Size(26f, 1.8f)
+        )
+
+        // الذراع الأيسر: منفصل وطويل وناعم ومدبب من الأسفل
+        val leftArm = Path().apply {
+            moveTo(22f, 62f)
+            cubicTo(17.5f, 63f, 14.8f, 68f, 14.2f, 76f)
+            cubicTo(13.5f, 87f, 14.5f, 103f, 17.2f, 113f)
+            cubicTo(18f, 116f, 20.5f, 116f, 21.3f, 112.5f)
+            cubicTo(23.7f, 101f, 25f, 84f, 25.2f, 72f)
+            cubicTo(25.3f, 66f, 24.4f, 63f, 22f, 62f)
+            close()
+        }
+        drawPath(
+            path = leftArm,
+            brush = Brush.linearGradient(
+                colors = listOf(Color(0xFFFFFFFF), Color(0xFFE6EEF2), Color(0xFFB9CBD5)),
+                start = Offset(14f, 65f),
+                end = Offset(25f, 112f)
+            )
+        )
+        drawPath(
+            path = leftArm,
+            color = Color(0xFFAFC2CD).copy(alpha = 0.7f),
+            style = Stroke(width = 0.65f)
+        )
+
+        // الذراع الأيمن
+        val rightArm = Path().apply {
+            moveTo(78f, 62f)
+            cubicTo(82.5f, 63f, 85.2f, 68f, 85.8f, 76f)
+            cubicTo(86.5f, 87f, 85.5f, 103f, 82.8f, 113f)
+            cubicTo(82f, 116f, 79.5f, 116f, 78.7f, 112.5f)
+            cubicTo(76.3f, 101f, 75f, 84f, 74.8f, 72f)
+            cubicTo(74.7f, 66f, 75.6f, 63f, 78f, 62f)
+            close()
+        }
+        drawPath(
+            path = rightArm,
+            brush = Brush.linearGradient(
+                colors = listOf(Color(0xFFFFFFFF), Color(0xFFE6EEF2), Color(0xFFB9CBD5)),
+                start = Offset(86f, 65f),
+                end = Offset(75f, 112f)
+            )
+        )
+        drawPath(
+            path = rightArm,
+            color = Color(0xFFAFC2CD).copy(alpha = 0.7f),
+            style = Stroke(width = 0.65f)
+        )
+
+        // الجسم الرئيسي: كتفان عريضان وقاع مستدير ناعم
+        val body = Path().apply {
+            moveTo(25f, 57f)
+            cubicTo(35f, 56f, 65f, 56f, 75f, 57f)
+            cubicTo(78f, 57.5f, 78.5f, 60f, 77.8f, 65f)
+            cubicTo(76.8f, 78f, 73.5f, 99f, 66.5f, 113f)
+            cubicTo(62f, 122f, 56f, 127f, 50f, 127.5f)
+            cubicTo(44f, 127f, 38f, 122f, 33.5f, 113f)
+            cubicTo(26.5f, 99f, 23.2f, 78f, 22.2f, 65f)
+            cubicTo(21.5f, 60f, 22f, 57.5f, 25f, 57f)
+            close()
+        }
+        drawPath(
+            path = body,
+            brush = Brush.linearGradient(
+                colors = listOf(Color(0xFFFFFFFF), Color(0xFFF0F5F7), Color(0xFFC5D5DD)),
+                start = Offset(23f, 58f),
+                end = Offset(76f, 125f)
+            )
+        )
+        drawPath(
+            path = body,
+            color = Color(0xFFA9BDC8).copy(alpha = 0.72f),
+            style = Stroke(width = 0.75f)
+        )
+
+        // ظل ناعم تحت الرأس وفوق الكتفين
+        drawOval(
+            color = Color(0xFF8EA5B1).copy(alpha = 0.22f),
+            topLeft = Offset(31f, 55.5f),
+            size = androidx.compose.ui.geometry.Size(38f, 5f)
+        )
+
+        // مؤشر الصدر الأيقوني الصغير
+        drawCircle(color = Color(0xFF00E5FF), radius = 1.3f, center = Offset(45f, 78f))
+        drawCircle(color = Color(0xFF00E5FF), radius = 1.3f, center = Offset(48f, 78f))
+        drawCircle(color = Color(0xFF00E5FF), radius = 1.3f, center = Offset(51f, 78f))
+        drawCircle(color = Color(0xFFFF5252).copy(alpha = 0.85f), radius = 2.0f, center = Offset(56f, 78f), style = Stroke(width = 0.8f))
+
+        // الرأس: شكل عضوي مصقول بانسيابية عالية
+        val head = Path().apply {
+            moveTo(22f, 13f)
+            cubicTo(27f, 7f, 38f, 4.5f, 50f, 4.5f)
+            cubicTo(62f, 4.5f, 73f, 7f, 78f, 13f)
+            cubicTo(83f, 19f, 84.5f, 32f, 82f, 42f)
+            cubicTo(79.5f, 52f, 68f, 57f, 50f, 57.5f)
+            cubicTo(32f, 57f, 20.5f, 52f, 18f, 42f)
+            cubicTo(15.5f, 32f, 17f, 19f, 22f, 13f)
+            close()
+        }
+        drawPath(
+            path = head,
+            brush = Brush.linearGradient(
+                colors = listOf(Color(0xFFFFFFFF), Color(0xFFF3F7F9), Color(0xFFC6D6DF)),
+                start = Offset(20f, 8f),
+                end = Offset(78f, 55f)
+            )
+        )
+        drawPath(
+            path = head,
+            color = Color(0xFFB4C7D1).copy(alpha = 0.8f),
+            style = Stroke(width = 0.75f)
+        )
+
+        // لمعة الحافة الانعكاسية أعلى الرأس (Specular Rim Arc)
+        drawArc(
+            color = Color.White.copy(alpha = 0.84f),
+            startAngle = 205f,
+            sweepAngle = 92f,
+            useCenter = false,
+            topLeft = Offset(20f, 7f),
+            size = androidx.compose.ui.geometry.Size(57f, 43f),
+            style = Stroke(width = 1.4f, cap = StrokeCap.Round)
+        )
+
+        // القناع الأسود اللامع
+        val visor = Path().apply {
+            moveTo(29f, 21f)
+            cubicTo(35f, 17f, 43f, 15.5f, 50f, 15.5f)
+            cubicTo(57f, 15.5f, 65f, 17f, 71f, 21f)
+            cubicTo(77f, 25f, 78.8f, 34f, 76f, 41f)
+            cubicTo(73f, 48f, 63f, 51f, 50f, 51f)
+            cubicTo(37f, 51f, 27f, 48f, 24f, 41f)
+            cubicTo(21.2f, 34f, 23f, 25f, 29f, 21f)
+            close()
+        }
+        drawPath(
+            path = visor,
+            brush = Brush.radialGradient(
+                colors = listOf(Color(0xFF173B51), Color(0xFF07131D), Color(0xFF020509)),
+                center = Offset(50f, 31f),
+                radius = 32f
+            )
+        )
+        drawPath(
+            path = visor,
+            color = Color(0xFFBFEAF4).copy(alpha = 0.85f),
+            style = Stroke(width = 0.75f)
+        )
+
+        // لون التوهج التفاعلي
+        val eyeColor = if (isNotifying) Color(0xFFFF1744) else Color(0xFF00E5FF)
+
+        if (isSleeping) {
+            // وضع النوم: قوس أزرق هادئ ومبتسم
+            val sleepL = Path().apply {
+                moveTo(31f, 34f)
+                quadraticBezierTo(38f, 39f, 45f, 34f)
+            }
+            val sleepR = Path().apply {
+                moveTo(55f, 34f)
+                quadraticBezierTo(62f, 39f, 69f, 34f)
+            }
+            drawPath(sleepL, color = eyeColor.copy(alpha = 0.85f), style = Stroke(width = 2.4f, cap = StrokeCap.Round))
+            drawPath(sleepR, color = eyeColor.copy(alpha = 0.85f), style = Stroke(width = 2.4f, cap = StrokeCap.Round))
+        } else {
+            // توهج العينين الهولوغرافي
+            drawOval(
+                color = eyeColor.copy(alpha = 0.17f * glow),
+                topLeft = Offset(29f, 26f),
+                size = androidx.compose.ui.geometry.Size(18f, 17f)
+            )
+            drawOval(
+                color = eyeColor.copy(alpha = 0.17f * glow),
+                topLeft = Offset(53f, 26f),
+                size = androidx.compose.ui.geometry.Size(18f, 17f)
+            )
+
+            // العينان النيون الرقميتان
+            val eyeHeight = 10f * eyeHeightScale
+            val eyeTop = 29f + (10f - eyeHeight) / 2f
+            val eyeBrushL = Brush.radialGradient(
+                colors = listOf(Color(0xFFB8FFFF), eyeColor, Color(0xFF0089C4)),
+                center = Offset(38f, 34f),
+                radius = 12f
+            )
+            val eyeBrushR = Brush.radialGradient(
+                colors = listOf(Color(0xFFB8FFFF), eyeColor, Color(0xFF0089C4)),
+                center = Offset(62f, 34f),
+                radius = 12f
+            )
+            drawOval(eyeBrushL, Offset(31f, eyeTop), androidx.compose.ui.geometry.Size(14f, eyeHeight))
+            drawOval(eyeBrushR, Offset(55f, eyeTop), androidx.compose.ui.geometry.Size(14f, eyeHeight))
+
+            // خطوط المسح الرقمية الأفقية
+            if (eyeHeightScale > 0.4f) {
+                drawLine(
+                    color = Color.White.copy(alpha = 0.25f * glow),
+                    start = Offset(33f, 34f),
+                    end = Offset(43f, 34f),
+                    strokeWidth = 0.75f,
+                    cap = StrokeCap.Round
+                )
+                drawLine(
+                    color = Color.White.copy(alpha = 0.25f * glow),
+                    start = Offset(57f, 34f),
+                    end = Offset(67f, 34f),
+                    strokeWidth = 0.75f,
+                    cap = StrokeCap.Round
+                )
+            }
+        }
+
+        // انعكاس زجاجي ناعم على القناع
+        drawArc(
+            color = Color.White.copy(alpha = 0.15f),
+            startAngle = 205f,
+            sweepAngle = 65f,
+            useCenter = false,
+            topLeft = Offset(27f, 19f),
+            size = androidx.compose.ui.geometry.Size(46f, 25f),
+            style = Stroke(width = 0.8f, cap = StrokeCap.Round)
+        )
+
+        // مؤشر التحدث
+        if (speaking) {
+            drawOval(
+                color = Color(0xFF26E9FF).copy(alpha = 0.25f),
+                topLeft = Offset(42f, 47.5f),
+                size = androidx.compose.ui.geometry.Size(16f, 1.3f)
+            )
+        }
+    }
 }
