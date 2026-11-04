@@ -1063,16 +1063,16 @@ private fun DrawScope.drawEveOriginalStyle(
     isNotifying: Boolean = false,
     speaking: Boolean = false
 ) {
-    // نظام إحداثيات نسبي موحد: العرض 100 والطول 140
+    // نظام إحداثيات ثابت: العرض 100 والطول 140
     val unit = min(size.width / 100f, size.height / 140f)
     val offsetX = (size.width - unit * 100f) / 2f
     val offsetY = (size.height - unit * 140f) / 2f
 
     withTransform({
         translate(offsetX, offsetY)
-        scale(unit, unit, pivot = Offset.Zero)
+        scale(unit, unit, pivot = Offset.Zero) // الارتكاز الصحيح لمنع اختفاء الرأس
     }) {
-        // ظل التحويم أسفل إيف
+        // ظل التحويم ثلاثي الأبعاد أسفل إيف
         drawOval(
             color = Color.Black.copy(alpha = 0.16f),
             topLeft = Offset(32f, 128f),
@@ -1084,7 +1084,7 @@ private fun DrawScope.drawEveOriginalStyle(
             size = androidx.compose.ui.geometry.Size(26f, 1.8f)
         )
 
-        // الذراع الأيسر: منفصل وطويل وناعم ومدبب من الأسفل
+        // الذراع الأيسر ثلاثي الأبعاد بدون أي خطوط كرتونية
         val leftArm = Path().apply {
             moveTo(22f, 62f)
             cubicTo(17.5f, 63f, 14.8f, 68f, 14.2f, 76f)
@@ -1097,18 +1097,13 @@ private fun DrawScope.drawEveOriginalStyle(
         drawPath(
             path = leftArm,
             brush = Brush.linearGradient(
-                colors = listOf(Color(0xFFFFFFFF), Color(0xFFE6EEF2), Color(0xFFB9CBD5)),
+                colors = listOf(Color(0xFFFFFFFF), Color(0xFFF8FBFC), Color(0xFFD7E3E8), Color(0xFFAFC4CE)),
                 start = Offset(14f, 65f),
                 end = Offset(25f, 112f)
             )
         )
-        drawPath(
-            path = leftArm,
-            color = Color(0xFFAFC2CD).copy(alpha = 0.7f),
-            style = Stroke(width = 0.65f)
-        )
 
-        // الذراع الأيمن
+        // الذراع الأيمن ثلاثي الأبعاد
         val rightArm = Path().apply {
             moveTo(78f, 62f)
             cubicTo(82.5f, 63f, 85.2f, 68f, 85.8f, 76f)
@@ -1121,18 +1116,13 @@ private fun DrawScope.drawEveOriginalStyle(
         drawPath(
             path = rightArm,
             brush = Brush.linearGradient(
-                colors = listOf(Color(0xFFFFFFFF), Color(0xFFE6EEF2), Color(0xFFB9CBD5)),
+                colors = listOf(Color(0xFFFFFFFF), Color(0xFFF8FBFC), Color(0xFFD7E3E8), Color(0xFFAFC4CE)),
                 start = Offset(86f, 65f),
                 end = Offset(75f, 112f)
             )
         )
-        drawPath(
-            path = rightArm,
-            color = Color(0xFFAFC2CD).copy(alpha = 0.7f),
-            style = Stroke(width = 0.65f)
-        )
 
-        // الجسم الرئيسي: كتفان عريضان وقاع مستدير ناعم
+        // الجسم الرئيسي بتظليل ناعم واقعي بدون حواف قلم
         val body = Path().apply {
             moveTo(25f, 57f)
             cubicTo(35f, 56f, 65f, 56f, 75f, 57f)
@@ -1147,15 +1137,16 @@ private fun DrawScope.drawEveOriginalStyle(
         drawPath(
             path = body,
             brush = Brush.linearGradient(
-                colors = listOf(Color(0xFFFFFFFF), Color(0xFFF0F5F7), Color(0xFFC5D5DD)),
+                colors = listOf(Color(0xFFFFFFFF), Color(0xFFFAFCFD), Color(0xFFE3EDF1), Color(0xFFB2C7D1)),
                 start = Offset(23f, 58f),
                 end = Offset(76f, 125f)
             )
         )
-        drawPath(
-            path = body,
-            color = Color(0xFFA9BDC8).copy(alpha = 0.72f),
-            style = Stroke(width = 0.75f)
+        // بؤرة لمعان السيراميك البراقة على الكتف
+        drawOval(
+            color = Color.White.copy(alpha = 0.26f),
+            topLeft = Offset(28f, 61f),
+            size = androidx.compose.ui.geometry.Size(18f, 38f)
         )
 
         // ظل ناعم تحت الرأس وفوق الكتفين
@@ -1171,7 +1162,7 @@ private fun DrawScope.drawEveOriginalStyle(
         drawCircle(color = Color(0xFF00E5FF), radius = 1.3f, center = Offset(51f, 78f))
         drawCircle(color = Color(0xFFFF5252).copy(alpha = 0.85f), radius = 2.0f, center = Offset(56f, 78f), style = Stroke(width = 0.8f))
 
-        // الرأس: شكل عضوي مصقول بانسيابية عالية
+        // الرأس المصقول كروياً بدون خطوط كرتونية
         val head = Path().apply {
             moveTo(22f, 13f)
             cubicTo(27f, 7f, 38f, 4.5f, 50f, 4.5f)
@@ -1185,18 +1176,19 @@ private fun DrawScope.drawEveOriginalStyle(
         drawPath(
             path = head,
             brush = Brush.linearGradient(
-                colors = listOf(Color(0xFFFFFFFF), Color(0xFFF3F7F9), Color(0xFFC6D6DF)),
+                colors = listOf(Color(0xFFFFFFFF), Color(0xFFFAFCFD), Color(0xFFE5EEF2), Color(0xFFB8CBD5)),
                 start = Offset(20f, 8f),
                 end = Offset(78f, 55f)
             )
         )
-        drawPath(
-            path = head,
-            color = Color(0xFFB4C7D1).copy(alpha = 0.8f),
-            style = Stroke(width = 0.75f)
+        // بؤرة لمعان السيراميك الحقيقية على قمة الرأس
+        drawOval(
+            color = Color.White.copy(alpha = 0.35f),
+            topLeft = Offset(25f, 9f),
+            size = androidx.compose.ui.geometry.Size(20f, 15f)
         )
 
-        // لمعة الحافة الانعكاسية أعلى الرأس (Specular Rim Arc)
+        // لمعة الحافة الانعكاسية (Rim Highlight)
         drawArc(
             color = Color.White.copy(alpha = 0.84f),
             startAngle = 205f,
@@ -1207,7 +1199,7 @@ private fun DrawScope.drawEveOriginalStyle(
             style = Stroke(width = 1.4f, cap = StrokeCap.Round)
         )
 
-        // القناع الأسود اللامع
+        // القناع الزجاجي الأسود الداكن (Smoked Curved Glass)
         val visor = Path().apply {
             moveTo(29f, 21f)
             cubicTo(35f, 17f, 43f, 15.5f, 50f, 15.5f)
@@ -1226,17 +1218,17 @@ private fun DrawScope.drawEveOriginalStyle(
                 radius = 32f
             )
         )
+        // حافة زجاجية خفيفة جداً بدلاً من الخط الكرتوني
         drawPath(
             path = visor,
-            color = Color(0xFFBFEAF4).copy(alpha = 0.85f),
-            style = Stroke(width = 0.75f)
+            color = Color(0xFFBFEAF4).copy(alpha = 0.40f),
+            style = Stroke(width = 0.35f)
         )
 
-        // لون التوهج التفاعلي
         val eyeColor = if (isNotifying) Color(0xFFFF1744) else Color(0xFF00E5FF)
 
         if (isSleeping) {
-            // وضع النوم: قوس أزرق هادئ ومبتسم
+            // وضع النوم: قوس هادئ ومبتسم بلطف
             val sleepL = Path().apply {
                 moveTo(31f, 34f)
                 quadraticBezierTo(38f, 39f, 45f, 34f)
@@ -1248,7 +1240,7 @@ private fun DrawScope.drawEveOriginalStyle(
             drawPath(sleepL, color = eyeColor.copy(alpha = 0.85f), style = Stroke(width = 2.4f, cap = StrokeCap.Round))
             drawPath(sleepR, color = eyeColor.copy(alpha = 0.85f), style = Stroke(width = 2.4f, cap = StrokeCap.Round))
         } else {
-            // توهج العينين الهولوغرافي
+            // توهج العيون النيون الطبيعي من خلف الزجاج
             drawOval(
                 color = eyeColor.copy(alpha = 0.17f * glow),
                 topLeft = Offset(29f, 26f),
@@ -1295,9 +1287,9 @@ private fun DrawScope.drawEveOriginalStyle(
             }
         }
 
-        // انعكاس زجاجي ناعم على القناع
+        // انعكاس زجاجي بانحناء الشاشة يظهر العيون وكأنها خلف الزجاج
         drawArc(
-            color = Color.White.copy(alpha = 0.15f),
+            color = Color.White.copy(alpha = 0.20f),
             startAngle = 205f,
             sweepAngle = 65f,
             useCenter = false,
@@ -1306,7 +1298,7 @@ private fun DrawScope.drawEveOriginalStyle(
             style = Stroke(width = 0.8f, cap = StrokeCap.Round)
         )
 
-        // مؤشر التحدث
+        // وميض التحدث عند التفاعل
         if (speaking) {
             drawOval(
                 color = Color(0xFF26E9FF).copy(alpha = 0.25f),
