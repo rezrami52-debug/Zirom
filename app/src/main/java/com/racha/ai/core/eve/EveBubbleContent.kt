@@ -1070,7 +1070,7 @@ private fun DrawScope.drawEveOriginalStyle(
 
     withTransform({
         translate(offsetX, offsetY)
-        scale(unit, unit)
+        scale(unit, unit, pivot = Offset.Zero)
     }) {
         // ظل التحويم أسفل إيف
         drawOval(
