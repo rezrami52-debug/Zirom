@@ -270,13 +270,13 @@ fun EveBubbleAvatar(
                     drawOval(
                         color = Color.Black.copy(alpha = 0.12f),
                         topLeft = Offset(cx - headW / 2f + 1.5f, headTop + 2.5f),
-                        size = Size(headW, headH)
+                        size = androidx.compose.ui.geometry.Size(headW, headH)
                     )
 
                     drawOval(
                         brush = headBrush,
                         topLeft = Offset(cx - headW / 2f, headTop),
-                        size = Size(headW, headH)
+                        size = androidx.compose.ui.geometry.Size(headW, headH)
                     )
 
                     // ===== القناع الأسود اللامع =====
@@ -287,7 +287,7 @@ fun EveBubbleAvatar(
                     drawOval(
                         brush = visorBrush,
                         topLeft = Offset(cx - visorW / 2f, visorTop),
-                        size = Size(visorW, visorH)
+                        size = androidx.compose.ui.geometry.Size(visorW, visorH)
                     )
 
                     // انعكاس زجاجي
@@ -322,13 +322,13 @@ fun EveBubbleAvatar(
                         drawRoundRect(
                             brush = Brush.verticalGradient(listOf(Color(0xFFE0F7FA), eyeGlowColor, Color(0xFF0277BD))),
                             topLeft = Offset(leftEyeX - eyeW / 2f, eyeCenterY - eyeH / 2f),
-                            size = Size(eyeW, eyeH),
+                            size = androidx.compose.ui.geometry.Size(eyeW, eyeH),
                             cornerRadius = CornerRadius(eyeW * 0.48f, eyeH * 0.48f)
                         )
                         drawRoundRect(
                             brush = Brush.verticalGradient(listOf(Color(0xFFE0F7FA), eyeGlowColor, Color(0xFF0277BD))),
                             topLeft = Offset(rightEyeX - eyeW / 2f, eyeCenterY - eyeH / 2f),
-                            size = Size(eyeW, eyeH),
+                            size = androidx.compose.ui.geometry.Size(eyeW, eyeH),
                             cornerRadius = CornerRadius(eyeW * 0.48f, eyeH * 0.48f)
                         )
                     }
