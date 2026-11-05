@@ -39,8 +39,12 @@ class FloatingTvService : Service() {
 
     override fun onCreate() {
         super.onCreate()
-        windowManager = getSystemService(Context.WINDOW_SERVICE) as WindowManager
-        startForegroundServiceNotification()
+        try {
+            windowManager = getSystemService(Context.WINDOW_SERVICE) as WindowManager
+            startForegroundServiceNotification()
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -151,10 +155,17 @@ class FloatingTvService : Service() {
                 .setPriority(NotificationCompat.PRIORITY_LOW)
                 .build()
 
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                startForeground(3003, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PLAYBACK)
-            } else {
-                startForeground(3003, notification)
+            try {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                    startForeground(3003, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PLAYBACK)
+                } else {
+                    startForeground(3003, notification)
+                }
+            } catch (e: SecurityException) {
+                // درع حماية أندرويد 14: التراجع التلقائي للوضع الآمن إذا اعترض النظام
+                try {
+                    startForeground(3003, notification)
+                } catch (_: Exception) {}
             }
         } catch (e: Exception) {
             e.printStackTrace()
