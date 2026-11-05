@@ -467,13 +467,13 @@ fun WeatherCardRacha(
             Divider(color = Color.White.copy(alpha = 0.12f), thickness = 1.dp)
             Spacer(modifier = Modifier.height(6.dp))
 
-            // مواقيت الصلاة الحقيقية المتغيرة يومياً
+            // مواقيت الصلاة مرتبة بالاتجاه العربي (الفجر في اليمين -> العشاء في اليسار)
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                PrayerTimeItem("الفجر", timeFormat.format(prayerTimes.fajr), glow)
-                PrayerTimeItem("الظهر", timeFormat.format(prayerTimes.dhuhr), glow)
-                PrayerTimeItem("العصر", timeFormat.format(prayerTimes.asr), glow)
-                PrayerTimeItem("المغرب", timeFormat.format(prayerTimes.maghrib), glow)
                 PrayerTimeItem("العشاء", timeFormat.format(prayerTimes.isha), glow)
+                PrayerTimeItem("المغرب", timeFormat.format(prayerTimes.maghrib), glow)
+                PrayerTimeItem("العصر", timeFormat.format(prayerTimes.asr), glow)
+                PrayerTimeItem("الظهر", timeFormat.format(prayerTimes.dhuhr), glow)
+                PrayerTimeItem("الفجر", timeFormat.format(prayerTimes.fajr), glow)
             }
         }
     }
