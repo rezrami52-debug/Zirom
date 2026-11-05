@@ -1,4 +1,6 @@
 package com.racha.ai.ui.screens.chat
+import androidx.compose.foundation.Canvas
+import androidx.compose.animation.core.tween
 import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Settings
@@ -134,21 +136,34 @@ fun ChatScreen(
         }
     }
 
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .imePadding()
-            .navigationBarsPadding()
-    ) {
-        // 1. أزرار EVE العلوية
-        QuickActionBarRacha(primaryGlow)
+    var isDrawerOpen by remember { mutableStateOf(false) }
 
-        // 2. الهيدر العلوي مع زري المحادثات السابقة والجديدة
-        TopBarRacha(
-            glow = primaryGlow,
-            onOpenHistory = onOpenHistory,
-            onNewChat = { viewModel.startNewChat() }
-        )
+    fun launchEveBubble() {
+        val prefs = AppPreferences(context)
+        prefs.setEveBubbleEnabled(true)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M && !Settings.canDrawOverlays(context)) {
+            val intent = Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:${context.packageName}"))
+            context.startActivity(intent)
+        } else {
+            context.startService(Intent(context, com.racha.ai.core.eve.EveBubbleService::class.java))
+        }
+    }
+
+    Box(modifier = Modifier.fillMaxSize()) {
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .imePadding()
+                .navigationBarsPadding()
+        ) {
+            // الهيدر العلوي مع أيقونة إيف التفاعلية وزر القائمة الجانبية
+            TopBarRacha(
+                glow = primaryGlow,
+                unreadCount = unreadCount,
+                onAvatarClick = { launchEveBubble() },
+                onOpenMenu = { isDrawerOpen = true },
+                onNewChat = { viewModel.startNewChat() }
+            )
 
         // 3. بطاقة الطقس ومواقيت الصلاة
         val currentWeather = weatherState.weather
