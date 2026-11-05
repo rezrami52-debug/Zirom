@@ -275,6 +275,7 @@ fun ChatScreen(
             }
         }
     }
+}
 
 @Composable
 fun TopBarRacha(
