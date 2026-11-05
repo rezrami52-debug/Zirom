@@ -1,4 +1,8 @@
 package com.racha.ai.ui.screens.chat
+import com.racha.ai.services.prayer.PrayerTimesCalculator
+import java.text.SimpleDateFormat
+import java.util.Calendar
+import java.util.Date
 import androidx.compose.foundation.Canvas
 import androidx.compose.animation.core.tween
 import androidx.compose.material.icons.filled.Menu
@@ -404,18 +408,40 @@ fun QuickActionButton(text: String, glow: Color, onClick: () -> Unit) {
 @Composable
 fun WeatherCardRacha(
     weather: com.racha.ai.domain.model.WeatherInfo,
-    cardBg: Color,
+    cardBackground: Color,
     cardBorder: Brush,
     glow: Color
 ) {
+    // 1. حساب التحية التلقائية بناءً على ساعة اليوم الحقيقية
+    val currentHour = remember { Calendar.getInstance().get(Calendar.HOUR_OF_DAY) }
+    val greeting = remember(currentHour) {
+        when (currentHour) {
+            in 4..11 -> "صباح الخير ☀️"
+            in 12..16 -> "طاب يومك 🌤️"
+            in 17..22 -> "مساء الخير 🌆"
+            else -> "ليلة سعيدة 🌙"
+        }
+    }
+
+    // 2. حساب مواقيت الصلاة الحقيقية لسوسة بدقة متناهية
+    val prayerTimes = remember {
+        PrayerTimesCalculator.calculate(
+            latitude = 35.8256,
+            longitude = 10.6369,
+            date = Date(),
+            locationName = "سوسة"
+        )
+    }
+
+    val timeFormat = remember { SimpleDateFormat("HH:mm", Locale.getDefault()) }
+
     Surface(
         modifier = Modifier
             .fillMaxWidth()
             .padding(horizontal = 16.dp, vertical = 4.dp),
         shape = RoundedCornerShape(20.dp),
-        color = cardBg,
-        border = BorderStroke(1.dp, cardBorder),
-        shadowElevation = 8.dp
+        color = cardBackground,
+        border = BorderStroke(1.dp, cardBorder)
     ) {
         Column(modifier = Modifier.padding(12.dp)) {
             Row(
@@ -424,15 +450,15 @@ fun WeatherCardRacha(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Column {
-                    Text("مساء الخير 🌤️", color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.Bold)
-                    Text(weather.cityName ?: "موقعك الحالي", color = Color(0xFF94A3B8), fontSize = 11.sp)
+                    Text(greeting, color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.Bold)
+                    Text(weather.cityName.ifBlank { "سوسة" }, color = Color(0xFF94A3B8), fontSize = 11.sp)
                 }
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text("${weather.temperature}°C", color = Color.White, fontSize = 26.sp, fontWeight = FontWeight.Bold)
+                    Text("${weather.temperature.toInt()}°C", color = Color.White, fontSize = 26.sp, fontWeight = FontWeight.Bold)
                     Spacer(modifier = Modifier.width(10.dp))
                     Column(horizontalAlignment = Alignment.End) {
                         Text("💧 ${weather.humidity}%", color = Color(0xFF38BDF8), fontSize = 10.sp, fontWeight = FontWeight.Medium)
-                        Text("💨 ${weather.windSpeed} كم/س", color = Color(0xFFE2E8F0), fontSize = 10.sp, fontWeight = FontWeight.Medium)
+                        Text("💨 ${weather.windSpeed.toInt()} كم/س", color = Color(0xFFE2E8F0), fontSize = 10.sp, fontWeight = FontWeight.Medium)
                     }
                 }
             }
@@ -441,12 +467,13 @@ fun WeatherCardRacha(
             Divider(color = Color.White.copy(alpha = 0.12f), thickness = 1.dp)
             Spacer(modifier = Modifier.height(6.dp))
 
+            // مواقيت الصلاة الحقيقية المتغيرة يومياً
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                PrayerTimeItem("الفجر", "05:12", glow)
-                PrayerTimeItem("الظهر", "12:30", glow)
-                PrayerTimeItem("العصر", "15:45", glow)
-                PrayerTimeItem("المغرب", "18:20", glow)
-                PrayerTimeItem("العشاء", "19:50", glow)
+                PrayerTimeItem("الفجر", timeFormat.format(prayerTimes.fajr), glow)
+                PrayerTimeItem("الظهر", timeFormat.format(prayerTimes.dhuhr), glow)
+                PrayerTimeItem("العصر", timeFormat.format(prayerTimes.asr), glow)
+                PrayerTimeItem("المغرب", timeFormat.format(prayerTimes.maghrib), glow)
+                PrayerTimeItem("العشاء", timeFormat.format(prayerTimes.isha), glow)
             }
         }
     }
