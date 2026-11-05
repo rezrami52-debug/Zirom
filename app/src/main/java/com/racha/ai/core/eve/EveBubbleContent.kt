@@ -154,8 +154,16 @@ fun EveBubbleAvatar(
         label = "eyeScale"
     )
 
+    val ghostAlpha by animateFloatAsState(
+        targetValue = if (isSleeping) 0.35f else 1.0f,
+        animationSpec = tween(durationMillis = 450),
+        label = "ghostAlpha"
+    )
+
     Box(
-        modifier = modifier.offset { IntOffset(0, hoverY.roundToInt()) }
+        modifier = modifier
+            .offset { IntOffset(0, hoverY.roundToInt()) }
+            .graphicsLayer { alpha = ghostAlpha }
     ) {
         Column(
             horizontalAlignment = Alignment.CenterHorizontally,
@@ -1056,7 +1064,7 @@ private fun formatMillis(ms: Int): String {
 }
 
 
-private fun DrawScope.drawEveOriginalStyle(
+fun DrawScope.drawEveOriginalStyle(
     glow: Float,
     isSleeping: Boolean = false,
     eyeHeightScale: Float = 1f,

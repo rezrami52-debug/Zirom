@@ -1,4 +1,18 @@
 package com.racha.ai.ui.screens.chat
+import androidx.compose.material.icons.filled.Menu
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.Notifications
+import androidx.compose.material.icons.filled.Mosque
+import androidx.compose.material.icons.filled.History
+import androidx.compose.material.icons.filled.Schedule
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import com.racha.ai.core.eve.drawEveOriginalStyle
+import com.racha.ai.core.preferences.AppPreferences
 
 import android.Manifest
 import android.content.ClipData
@@ -208,21 +222,52 @@ fun ChatScreen(
             glow = primaryGlow
         )
 
-        // 6. الشريط السفلي العائم
-        BottomNavRacha(
-            glow = primaryGlow,
-            unreadCount = unreadCount,
-            onOpenPrayer = onOpenPrayer,
-            onOpenNotifications = onOpenNotifications,
-            onOpenSettings = onOpenSettings
-        )
+        }
+
+        // القائمة الجانبية المنزلقة (Side Navigation Drawer)
+        AnimatedVisibility(
+            visible = isDrawerOpen,
+            enter = fadeIn(tween(200)),
+            exit = fadeOut(tween(200))
+        ) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(Color.Black.copy(alpha = 0.65f))
+                    .clickable { isDrawerOpen = false }
+            )
+        }
+
+        AnimatedVisibility(
+            visible = isDrawerOpen,
+            enter = slideInHorizontally(initialOffsetX = { it }, animationSpec = tween(300)) + fadeIn(),
+            exit = slideOutHorizontally(targetOffsetX = { it }, animationSpec = tween(300)) + fadeOut()
+        ) {
+            Box(
+                modifier = Modifier.fillMaxSize(),
+                contentAlignment = Alignment.CenterEnd
+            ) {
+                SideDrawerRacha(
+                    glow = primaryGlow,
+                    unreadCount = unreadCount,
+                    onClose = { isDrawerOpen = false },
+                    onOpenSettings = { isDrawerOpen = false; onOpenSettings() },
+                    onOpenNotifications = { isDrawerOpen = false; onOpenNotifications() },
+                    onOpenPrayer = { isDrawerOpen = false; onOpenPrayer() },
+                    onOpenHistory = { isDrawerOpen = false; onOpenHistory() },
+                    onOpenRoutine = { isDrawerOpen = false; onOpenRoutine() }
+                )
+            }
+        }
     }
 }
 
 @Composable
 fun TopBarRacha(
     glow: Color,
-    onOpenHistory: () -> Unit,
+    unreadCount: Int,
+    onAvatarClick: () -> Unit,
+    onOpenMenu: () -> Unit,
     onNewChat: () -> Unit
 ) {
     Surface(
@@ -243,18 +288,23 @@ fun TopBarRacha(
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Box(
                     modifier = Modifier
-                        .size(36.dp)
+                        .size(40.dp)
                         .clip(CircleShape)
-                        .background(Brush.radialGradient(listOf(glow.copy(alpha = 0.35f), Color.Transparent)))
-                        .border(2.dp, glow, CircleShape),
+                        .background(Color(0xFF0F172A))
+                        .border(1.5.dp, glow, CircleShape)
+                        .clickable { onAvatarClick() }
+                        .padding(3.dp),
                     contentAlignment = Alignment.Center
                 ) {
-                    Image(
-                        painter = painterResource(id = R.drawable.ic_racha_avatar),
-                        contentDescription = "Avatar",
-                        modifier = Modifier.fillMaxSize().padding(3.dp),
-                        contentScale = ContentScale.Crop
-                    )
+                    Canvas(modifier = Modifier.size(24.dp, 32.dp)) {
+                        drawEveOriginalStyle(
+                            glow = 1.0f,
+                            isSleeping = false,
+                            eyeHeightScale = 1.0f,
+                            isNotifying = false,
+                            speaking = false
+                        )
+                    }
                 }
                 Spacer(modifier = Modifier.width(10.dp))
                 Column {
@@ -267,9 +317,21 @@ fun TopBarRacha(
                 IconButton(onClick = onNewChat, modifier = Modifier.size(36.dp)) {
                     Icon(Icons.Default.Add, contentDescription = "محادثة جديدة", tint = glow)
                 }
-                Spacer(modifier = Modifier.width(4.dp))
-                IconButton(onClick = onOpenHistory, modifier = Modifier.size(36.dp)) {
-                    Icon(Icons.Default.History, contentDescription = "المحادثات السابقة", tint = Color.White)
+                Spacer(modifier = Modifier.width(2.dp))
+                // زر القائمة الجانبية (ثلاثة خطوط)
+                IconButton(onClick = onOpenMenu, modifier = Modifier.size(36.dp)) {
+                    Box(contentAlignment = Alignment.Center) {
+                        Icon(Icons.Default.Menu, contentDescription = "القائمة", tint = Color.White)
+                        if (unreadCount > 0) {
+                            Box(
+                                modifier = Modifier
+                                    .align(Alignment.TopEnd)
+                                    .size(8.dp)
+                                    .clip(CircleShape)
+                                    .background(Color(0xFFFF1744))
+                            )
+                        }
+                    }
                 }
             }
         }
@@ -575,5 +637,125 @@ fun NavItem(icon: androidx.compose.ui.graphics.vector.ImageVector, label: String
         Icon(icon, contentDescription = label, tint = glow, modifier = Modifier.size(22.dp))
         Spacer(modifier = Modifier.height(2.dp))
         Text(label, fontSize = 11.sp, color = Color.White.copy(alpha = 0.85f))
+    }
+}
+
+
+@Composable
+fun SideDrawerRacha(
+    glow: Color,
+    unreadCount: Int,
+    onClose: () -> Unit,
+    onOpenSettings: () -> Unit,
+    onOpenNotifications: () -> Unit,
+    onOpenPrayer: () -> Unit,
+    onOpenHistory: () -> Unit,
+    onOpenRoutine: () -> Unit
+) {
+    Surface(
+        modifier = Modifier
+            .fillMaxHeight()
+            .width(290.dp),
+        shape = RoundedCornerShape(topStart = 28.dp, bottomStart = 28.dp),
+        color = Color(0xFF0A0F1D).copy(alpha = 0.98f),
+        border = BorderStroke(1.dp, Brush.horizontalGradient(listOf(glow.copy(alpha = 0.6f), Color.White.copy(alpha = 0.1f)))),
+        shadowElevation = 24.dp
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(20.dp)
+        ) {
+            // هيدر القائمة مع زر الإغلاق
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Box(
+                        modifier = Modifier
+                            .size(36.dp)
+                            .clip(CircleShape)
+                            .background(Color(0xFF0F172A))
+                            .border(1.5.dp, glow, CircleShape)
+                            .padding(2.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Canvas(modifier = Modifier.size(20.dp, 28.dp)) {
+                            drawEveOriginalStyle(1.0f, false, 1.0f, false, false)
+                        }
+                    }
+                    Spacer(modifier = Modifier.width(10.dp))
+                    Column {
+                        Text("Racha AI", color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.Bold)
+                        Text("القائمة التكتيكية", color = glow, fontSize = 10.sp)
+                    }
+                }
+                IconButton(onClick = onClose, modifier = Modifier.size(30.dp)) {
+                    Icon(Icons.Default.Close, contentDescription = "إغلاق", tint = Color.Gray, modifier = Modifier.size(20.dp))
+                }
+            }
+
+            Spacer(modifier = Modifier.height(20.dp))
+            Divider(color = Color.White.copy(alpha = 0.12f), thickness = 1.dp)
+            Spacer(modifier = Modifier.height(16.dp))
+
+            // عناصر القائمة الفاخرة
+            DrawerMenuRow(icon = Icons.Default.Settings, title = "الإعدادات", glow = glow, onClick = onOpenSettings)
+            Spacer(modifier = Modifier.height(10.dp))
+
+            DrawerMenuRow(icon = Icons.Default.Notifications, title = "الإشعارات", badge = unreadCount, glow = glow, onClick = onOpenNotifications)
+            Spacer(modifier = Modifier.height(10.dp))
+
+            DrawerMenuRow(icon = Icons.Default.Mosque, title = "القبلة ومواقيت الصلاة", glow = glow, onClick = onOpenPrayer)
+            Spacer(modifier = Modifier.height(10.dp))
+
+            DrawerMenuRow(icon = Icons.Default.History, title = "سجل المحادثات", glow = glow, onClick = onOpenHistory)
+            Spacer(modifier = Modifier.height(10.dp))
+
+            DrawerMenuRow(icon = Icons.Default.Schedule, title = "الروتين اليومي", glow = glow, onClick = onOpenRoutine)
+        }
+    }
+}
+
+@Composable
+fun DrawerMenuRow(
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    title: String,
+    badge: Int = 0,
+    glow: Color,
+    onClick: () -> Unit
+) {
+    Surface(
+        onClick = onClick,
+        shape = RoundedCornerShape(14.dp),
+        color = Color(0xFF1E293B).copy(alpha = 0.45f),
+        border = BorderStroke(1.dp, Color.White.copy(alpha = 0.08f)),
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 14.dp, vertical = 12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(icon, contentDescription = title, tint = glow, modifier = Modifier.size(20.dp))
+                Spacer(modifier = Modifier.width(14.dp))
+                Text(title, color = Color.White, fontSize = 13.sp, fontWeight = FontWeight.Medium)
+            }
+            if (badge > 0) {
+                Box(
+                    modifier = Modifier
+                        .clip(CircleShape)
+                        .background(Color(0xFFEF4444))
+                        .padding(horizontal = 7.dp, vertical = 2.dp)
+                ) {
+                    Text(if (badge > 99) "99+" else badge.toString(), color = Color.White, fontSize = 9.sp, fontWeight = FontWeight.Bold)
+                }
+            }
+        }
     }
 }
