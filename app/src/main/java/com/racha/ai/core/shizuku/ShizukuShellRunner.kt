@@ -77,7 +77,7 @@ object ShizukuShellRunner {
     }
 
     fun lockScreen(): Boolean {
-        val res = execCommand("input keyevent 26")
+        val res = execCommand("input keyevent 223")
         return !res.contains("فشل")
     }
 

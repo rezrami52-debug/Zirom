@@ -30,13 +30,14 @@ class BootReceiver : BroadcastReceiver() {
             try {
                 // 1. إعادة جدولة إشعارات الصلاة
                 val location = LocationHelper.getCurrentLocation(context)
-                if (location != null) {
-                    val times = PrayerTimesCalculator.calculate(
-                        latitude = location.latitude,
-                        longitude = location.longitude
-                    )
-                    PrayerAlarmScheduler.scheduleAll(context, times)
-                }
+                val lat = location?.latitude ?: 35.8256
+                val lon = location?.longitude ?: 10.6369
+                val times = PrayerTimesCalculator.calculate(
+                    latitude = lat,
+                    longitude = lon,
+                    locationName = "سوسة"
+                )
+                PrayerAlarmScheduler.scheduleAll(context, times)
 
                 // 2. إعادة جدولة الروتين
                 val routineRepo = RoutineRepository(context)

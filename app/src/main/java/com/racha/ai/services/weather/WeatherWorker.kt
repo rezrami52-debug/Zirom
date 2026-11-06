@@ -110,16 +110,19 @@ class WeatherWorker(
 
         if (!hasLocation) return Result.failure()
 
-        val location = LocationHelper.getCurrentLocation(context) ?: return Result.retry()
+        val location = LocationHelper.getCurrentLocation(context)
+        val lat = location?.latitude ?: 35.8256
+        val lon = location?.longitude ?: 10.6369
+        val city = location?.cityName ?: "سوسة"
 
         val weather = WeatherService.fetchWeather(
-            latitude = location.latitude,
-            longitude = location.longitude,
-            cityName = location.cityName ?: ""
+            latitude = lat,
+            longitude = lon,
+            cityName = city
         ) ?: return Result.retry()
 
         sendNotification(context, weather.fullArabicDescription())
-        TextToSpeechHelper.speak(weather.fullArabicDescription())
+        // تم إلغاء النطق الصوتي المفاجئ بالخلفية لحماية خصوصية وهدوء المستخدم
 
         return Result.success()
     }

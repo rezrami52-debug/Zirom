@@ -1,4 +1,8 @@
 package com.racha.ai.core.faceauth
+import com.racha.ai.data.repository.LockAttemptRepository
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 
 import androidx.biometric.BiometricPrompt
 import androidx.core.content.ContextCompat
@@ -41,6 +45,10 @@ fun BiometricLockScreen(
             object : BiometricPrompt.AuthenticationCallback() {
                 override fun onAuthenticationSucceeded(result: BiometricPrompt.AuthenticationResult) {
                     super.onAuthenticationSucceeded(result)
+                    val repo = LockAttemptRepository(context)
+                    CoroutineScope(Dispatchers.IO).launch {
+                        repo.recordAttempt(success = true, photoPath = null)
+                    }
                     onSuccess()
                 }
                 override fun onAuthenticationError(errorCode: Int, errString: CharSequence) {
@@ -49,6 +57,18 @@ fun BiometricLockScreen(
                 }
                 override fun onAuthenticationFailed() {
                     super.onAuthenticationFailed()
+                    // التقاط صورة المتطفل وحفظ المحاولة الفاشلة في قاعدة البيانات
+                    if (activity != null) {
+                        IntruderPhotoCapture.capture(context, activity) { photoFile ->
+                            val repo = LockAttemptRepository(context)
+                            CoroutineScope(Dispatchers.IO).launch {
+                                repo.recordAttempt(
+                                    success = false,
+                                    photoPath = photoFile?.absolutePath
+                                )
+                            }
+                        }
+                    }
                 }
             }
         )
@@ -130,20 +150,7 @@ fun BiometricLockScreen(
 
             Spacer(modifier = Modifier.height(16.dp))
 
-            OutlinedButton(
-                onClick = onBypass,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(50.dp),
-                shape = RoundedCornerShape(25.dp),
-                border = androidx.compose.foundation.BorderStroke(1.dp, Color.White.copy(alpha = 0.5f))
-            ) {
-                Text(
-                    text = "الدخول المباشر",
-                    fontSize = 14.sp,
-                    color = Color.White.copy(alpha = 0.8f)
-                )
-            }
+            // تم إلغاء زر التجاوز غير الآمن لضمان الحماية
         }
     }
 }

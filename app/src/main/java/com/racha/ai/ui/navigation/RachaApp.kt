@@ -42,7 +42,12 @@ fun RachaApp(
 ) {
     val context = LocalContext.current
     val themeManager = remember { AppThemeManager(context) }
-    var currentScreen by remember { mutableStateOf<Screen>(Screen.Chat) }
+    val faceRepo = remember { com.racha.ai.core.faceauth.FaceAuthRepository(context) }
+    var currentScreen by remember {
+        mutableStateOf<Screen>(
+            if (enableBiometricLock && faceRepo.isFaceAuthEnabled()) Screen.BiometricLock else Screen.Chat
+        )
+    }
 
     // معالجة زر الرجوع الفيزيائي للهاتف
     BackHandler(enabled = currentScreen != Screen.Chat) {

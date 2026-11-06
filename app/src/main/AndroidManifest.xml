@@ -1,5 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+        <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+    <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />
+    <uses-permission android:name="android.permission.USE_EXACT_ALARM" />
     <uses-permission android:name="android.permission.READ_CONTACTS" />
     <uses-permission android:name="android.permission.WRITE_CONTACTS" />
     <uses-permission android:name="android.permission.READ_CALL_LOG" />
@@ -62,12 +65,6 @@
             </intent-filter>
         </service>
 
-        <service
-            android:name=".core.bubble.RachaBubbleService"
-            android:enabled="true"
-            android:exported="false"
-            android:foregroundServiceType="specialUse" />
-
         <service 
             android:name=".core.eve.EveBubbleService" 
             android:enabled="true" 
@@ -94,5 +91,27 @@
             </intent-filter>
             <meta-data android:name="android.accessibilityservice" android:resource="@xml/eve_accessibility_service_config" />
         </service>
+
+        <!-- مستقبل إقلاع الهاتف لإعادة جدولة الصلوات والروتين -->
+        <receiver
+            android:name=".services.prayer.BootReceiver"
+            android:enabled="true"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+                <action android:name="android.intent.action.QUICKBOOT_POWERON" />
+                <action android:name="com.htc.intent.action.QUICKBOOT_POWERON" />
+            </intent-filter>
+        </receiver>
+
+        <!-- مستقبل تنبيهات الأذان والصلوات -->
+        <receiver
+            android:name=".services.prayer.PrayerAlarmReceiver"
+            android:enabled="true"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="com.racha.ai.ACTION_PRAYER_ALARM" />
+            </intent-filter>
+        </receiver>
     </application>
 </manifest>
