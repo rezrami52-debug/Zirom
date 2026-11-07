@@ -20,7 +20,6 @@ import java.net.URL
 
 class GeminiService(rawApiKey: String) {
 
-    // تنظيف المفتاح تماماً من أي شوائب أو فراغات أو أسطر جديدة
     val apiKey: String = sanitizeApiKey(rawApiKey)
     private val isGroq = apiKey.startsWith("gsk_")
 
@@ -54,6 +53,28 @@ class GeminiService(rawApiKey: String) {
         }
     }
 
+    suspend fun summarizeNewsAsJarvis(headlines: List<String>): String = withContext(Dispatchers.IO) {
+        val prompt = """
+            لخص هذه العناوين الإخبارية لرمزي في جملتين أنيقتين تبدأ بـ "أهلاً رمزي، إليك أهم مستجدات الساعة:":
+            ${headlines.joinToString("\n• ") { it }}
+        """.trimIndent()
+
+        return@withContext try {
+            generateResponse(prompt)
+        } catch (_: Exception) {
+            "تم رصد مستجدات إخبارية جديدة يا رمزي."
+        }
+    }
+
+    suspend fun analyzeScreenContext(appName: String, screenContent: String): String = withContext(Dispatchers.IO) {
+        val prompt = "أنت EVE. المستخدم رمزي يتصفح تطبيق '$appName'. النص: '$screenContent'. لخص أو اقترح فكرة في جملة واحدة."
+        return@withContext try {
+            generateResponse(prompt)
+        } catch (_: Exception) {
+            "أرى تطبيق $appName يا رمزي، كيف أساعدك بشأنه؟"
+        }
+    }
+
     private fun callGroqApi(userPrompt: String, systemPrompt: String): String {
         var conn: HttpURLConnection? = null
         return try {
@@ -62,7 +83,7 @@ class GeminiService(rawApiKey: String) {
             conn.requestMethod = "POST"
             conn.setRequestProperty("Authorization", "Bearer $apiKey")
             conn.setRequestProperty("Content-Type", "application/json; charset=UTF-8")
-            conn.connectTimeout = 3500 // مهلة سريعة جداً لمنع أي تأخير في الشات
+            conn.connectTimeout = 3500
             conn.readTimeout = 6000
             conn.doOutput = true
 
@@ -110,12 +131,17 @@ class GeminiService(rawApiKey: String) {
         }
     }
 
-    suspend fun analyzeScreenContext(appName: String, screenContent: String): String = withContext(Dispatchers.IO) {
-        val prompt = "أنت EVE. المستخدم رمزي يتصفح تطبيق '$appName'. النص: '$screenContent'. لخص أو اقترح فكرة في جملة واحدة."
+    suspend fun testConnection(): Boolean = withContext(Dispatchers.IO) {
         return@withContext try {
-            generateResponse(prompt)
+            if (isGroq) {
+                val reply = callGroqApi("ping", "Reply with pong only.")
+                reply.isNotBlank()
+            } else {
+                val res = generativeModel.generateContent("ping")
+                !res.text.isNullOrBlank()
+            }
         } catch (_: Exception) {
-            "أرى تطبيق $appName يا رمزي، كيف أساعدك بشأنه؟"
+            false
         }
     }
 
