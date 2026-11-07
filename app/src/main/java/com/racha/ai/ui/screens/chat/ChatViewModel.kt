@@ -19,6 +19,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
 
 data class ChatMessage(
     val text: String,
@@ -156,12 +157,21 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
 
         if (selectedProvider == "qwen" && qwenService.isModelPresent()) {
             try {
-                val localReply = qwenService.generateResponse(query)
-                // تنفيذ الأوامر المرفقة من كوين وحذف الوسم من الشاشة
-                val cleanText = executeActionsIfPresent(localReply)
-                appendMessage(ChatMessage(text = "$cleanText \n\n📱 [Qwen محلي أوفلاين]", isFromUser = false))
-                _uiState.update { it.copy(isLoading = false) }
-                return@withContext
+                // مهلة 15 ثانية كحد أقصى لمنع استنزاف المعالج وانهيار ANR
+                val localReply = withTimeoutOrNull(15000L) {
+                    qwenService.generateResponse(query)
+                }
+
+                if (localReply != null && localReply.isNotBlank()) {
+                    val cleanText = executeActionsIfPresent(localReply)
+                    appendMessage(ChatMessage(text = "$cleanText \n\n📱 [Qwen محلي أوفلاين]", isFromUser = false))
+                    _uiState.update { it.copy(isLoading = false) }
+                    return@withContext
+                } else {
+                    appendMessage(ChatMessage(text = "⚠️ يا رمزي، استغرق المعالج وقتاً طويلاً للإجابة محلياً. يُفضل استخدام محرك Groq السحابي لسرعة فائقة (0.3 ثانية).", isFromUser = false))
+                    _uiState.update { it.copy(isLoading = false) }
+                    return@withContext
+                }
             } catch (_: Exception) {}
         }
 
