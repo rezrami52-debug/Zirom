@@ -12,6 +12,7 @@ import com.racha.ai.core.preferences.AppPreferences
 import com.racha.ai.core.security.SecurePreferences
 import com.racha.ai.data.api.GeminiService
 import com.racha.ai.data.llm.QwenService
+import com.racha.ai.data.repository.KnowledgeRepository
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -19,7 +20,6 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import kotlinx.coroutines.withTimeoutOrNull
 
 data class ChatMessage(
     val text: String,
@@ -47,6 +47,11 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
     private val intentHandler = IntentHandler(application, appResolver, contactResolver)
     private val qwenService = QwenService(application)
     private val selfEvolutionAgent = SelfEvolutionAgent(application)
+    private val knowledgeRepo = KnowledgeRepository(application)
+
+    // حالة انتظار شرح كلمة مبهمة
+    private var pendingLearningTerm: String? = null
+    private var originalPendingQuestion: String? = null
 
     init {
         _uiState.update {
@@ -59,6 +64,8 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
 
     fun startNewChat() {
         _uiState.update { it.copy(messages = emptyList(), inputText = "") }
+        pendingLearningTerm = null
+        originalPendingQuestion = null
     }
 
     fun onInputChange(newText: String) {
@@ -87,6 +94,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
 
         appendMessage(ChatMessage(text = trimmed, isFromUser = true))
 
+        // 1. تفعيل مفاتيح GitHub أو API
         if (trimmed.startsWith("ghp_") || trimmed.startsWith("github:")) {
             val token = trimmed.replace(Regex("(?i)github:"), "").trim()
             securePrefs.saveGitHubToken(token)
@@ -95,7 +103,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         }
 
         if (trimmed.startsWith("gsk_") || trimmed.startsWith("AIza") || trimmed.startsWith("مفتاح:") || trimmed.startsWith("api:")) {
-            val extractedKey = trimmed.replace(Regex("(?i)مفتاح:|api:"), "").trim()
+            val extractedKey = GeminiService.sanitizeApiKey(trimmed.replace(Regex("(?i)مفتاح:|api:"), ""))
             securePrefs.saveApiKey(extractedKey)
             _uiState.update { it.copy(hasApiKey = true) }
             val provider = if (extractedKey.startsWith("gsk_")) "Groq (Llama 3.3 ⚡)" else "Gemini"
@@ -103,19 +111,48 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
             return
         }
 
-        val lower = trimmed.lowercase()
-        if ((lower.contains("افحصي كود") || lower.contains("راجعي كود") || lower.contains("طوري كود")) && (lower.contains("البوصلة") || lower.contains("الطقس") || lower.contains(".kt"))) {
-            viewModelScope.launch {
+        // 2. هل رمزي يجيب الآن على استفسار سابق لرشا حول معنى كلمة؟
+        val pendingTerm = pendingLearningTerm
+        if (pendingTerm != null) {
+            viewModelScope.launch(Dispatchers.IO) {
                 _uiState.update { it.copy(isLoading = true) }
-                val targetFile = if (lower.contains("البوصلة") || lower.contains("الطقس")) {
-                    "app/src/main/java/com/racha/ai/ui/screens/chat/WeatherBannerWithPrayerTimes.kt"
-                } else {
-                    trimmed.substringAfter("كود").trim().split(" ").first()
-                }
+                val cleanMeaning = trimmed.replace(Regex("(?i)نعني|نقصد|أقصد|اقصد|يعني|تعني|هو|هي|بأن"), "").trim()
+                knowledgeRepo.quickSave(
+                    question = pendingTerm,
+                    answer = cleanMeaning,
+                    topic = "معجم رمزي",
+                    keywords = "$pendingTerm,$cleanMeaning",
+                    source = "user"
+                )
+                val origQ = originalPendingQuestion
+                pendingLearningTerm = null
+                originalPendingQuestion = null
 
-                val reply = selfEvolutionAgent.auditAndProposeFix(targetFile, trimmed)
-                appendMessage(ChatMessage(text = reply, isFromUser = false))
-                _uiState.update { it.copy(isLoading = false) }
+                appendMessage(ChatMessage(text = "✅ فهمتك يا رمزي! قيدت عندي في الذاكرة أن '$pendingTerm' تعني '$cleanMeaning'.", isFromUser = false))
+
+                // إذا كان هناك سؤال أصلي معلق، نجيب عليه فوراً بعد تعلم الكلمة
+                if (!origQ.isNullOrBlank()) {
+                    handleAiQuery(origQ)
+                } else {
+                    _uiState.update { it.copy(isLoading = false) }
+                }
+            }
+            return
+        }
+
+        // 3. التعليم المباشر للكلمات (مثال: الكرهبة تعني السيارة / البشكوطو هو البسكويت)
+        val directLearnMatch = matchDirectLearning(trimmed)
+        if (directLearnMatch != null) {
+            val (term, meaning) = directLearnMatch
+            viewModelScope.launch(Dispatchers.IO) {
+                knowledgeRepo.quickSave(
+                    question = term,
+                    answer = meaning,
+                    topic = "معجم رمزي",
+                    keywords = "$term,$meaning",
+                    source = "user"
+                )
+                appendMessage(ChatMessage(text = "✅ سجلتها عندي في الذاكرة يا رمزي! من اليوم فصاعداً حفظت أن '$term' تعني '$meaning'.", isFromUser = false))
             }
             return
         }
@@ -153,44 +190,49 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     private suspend fun handleAiQuery(query: String) = withContext(Dispatchers.IO) {
+        // 1. استخراج أي مصطلحات من معجم رمزي محفوظ في قاعدة البيانات
+        val learnedContext = knowledgeRepo.buildContextFor(query, limit = 2)
+        val enrichedQuery = if (learnedContext.isNotBlank()) "$learnedContext\nسؤال رمزي: $query" else query
+
         val selectedProvider = appPrefs.getLLMProvider()
 
+        // 2. استخدام Qwen المحلي
         if (selectedProvider == "qwen" && qwenService.isModelPresent()) {
             try {
-                // مهلة 15 ثانية كحد أقصى لمنع استنزاف المعالج وانهيار ANR
-                val localReply = withTimeoutOrNull(15000L) {
-                    qwenService.generateResponse(query)
-                }
+                val localReply = qwenService.generateResponse(enrichedQuery)
+                val cleanText = executeActionsIfPresent(localReply)
 
-                if (localReply != null && localReply.isNotBlank()) {
-                    val cleanText = executeActionsIfPresent(localReply)
-                    appendMessage(ChatMessage(text = "$cleanText \n\n📱 [Qwen محلي أوفلاين]", isFromUser = false))
-                    _uiState.update { it.copy(isLoading = false) }
-                    return@withContext
+                if (isUnclearResponse(cleanText)) {
+                    val ambiguousWord = extractUnclearWord(query)
+                    pendingLearningTerm = ambiguousWord
+                    originalPendingQuestion = query
+                    appendMessage(ChatMessage(text = "شنوة تقصد بـ '$ambiguousWord' يا رمزي؟ وضحلي معناها وسأحفظها عندي فوراً.", isFromUser = false))
                 } else {
-                    appendMessage(ChatMessage(text = "⚠️ يا رمزي، استغرق المعالج وقتاً طويلاً للإجابة محلياً. يُفضل استخدام محرك Groq السحابي لسرعة فائقة (0.3 ثانية).", isFromUser = false))
-                    _uiState.update { it.copy(isLoading = false) }
-                    return@withContext
+                    appendMessage(ChatMessage(text = "$cleanText \n\n📱 [Qwen محلي أوفلاين]", isFromUser = false))
                 }
+                _uiState.update { it.copy(isLoading = false) }
+                return@withContext
             } catch (_: Exception) {}
         }
 
+        // 3. استخدام المزود السحابي (Groq / Gemini)
         val apiKey = securePrefs.getApiKey()
         if (!apiKey.isNullOrBlank()) {
             try {
                 val geminiService = GeminiService(apiKey)
-                val response = geminiService.generateResponse(query)
+                val response = geminiService.generateResponse(enrichedQuery)
                 appendMessage(ChatMessage(text = response, isFromUser = false))
                 _uiState.update { it.copy(isLoading = false) }
                 return@withContext
             } catch (_: Exception) {}
         }
 
+        // 4. Fallback إلى Qwen
         if (qwenService.isModelPresent()) {
             try {
-                val fallbackReply = qwenService.generateResponse(query)
+                val fallbackReply = qwenService.generateResponse(enrichedQuery)
                 val cleanText = executeActionsIfPresent(fallbackReply)
-                appendMessage(ChatMessage(text = "$cleanText \n\n📱 [Qwen وضع أوفلاين التلقائي]", isFromUser = false))
+                appendMessage(ChatMessage(text = "$cleanText \n\n📱 [Qwen وضع أوفلاين]", isFromUser = false))
                 _uiState.update { it.copy(isLoading = false) }
                 return@withContext
             } catch (_: Exception) {}
@@ -203,9 +245,35 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         _uiState.update { it.copy(isLoading = false) }
     }
 
-    /**
-     * قراءة وسوم الأوامر الصادرة من Qwen وتنفيذها فوراً في الهاتف
-     */
+    private fun matchDirectLearning(text: String): Pair<String, String>? {
+        val patterns = listOf(
+            Regex("(?i)^(.+?)\\s+(?:تعني|يعني)\\s+(.+)$"),
+            Regex("(?i)^(.+?)\\s+(?:هو|هي)\\s+(?:عبارة عن|بمعنى|معناها)\\s+(.+)$"),
+            Regex("(?i)^احفظي\\s+(?:أن|ان|إن|إنو|انو)?\\s*(.+?)\\s+(?:تعني|يعني|هو|هي)\\s+(.+)$")
+        )
+        for (pattern in patterns) {
+            val match = pattern.find(text)
+            if (match != null && match.groupValues.size >= 3) {
+                val term = match.groupValues[1].trim()
+                val meaning = match.groupValues[2].trim()
+                if (term.length in 2..35 && meaning.isNotBlank()) {
+                    return Pair(term, meaning)
+                }
+            }
+        }
+        return null
+    }
+
+    private fun isUnclearResponse(reply: String): Boolean {
+        val triggers = listOf("لا أعلم", "لا أعرف", "لست متأكداً", "لم أفهم", "غير واضح")
+        return triggers.any { reply.contains(it) }
+    }
+
+    private fun extractUnclearWord(query: String): String {
+        val words = query.split(" ").filter { it.length > 2 && !it.contains("كيف") && !it.contains("وين") && !it.contains("شنوة") }
+        return words.lastOrNull() ?: query
+    }
+
     private suspend fun executeActionsIfPresent(rawText: String): String {
         val actionRegex = Regex("\\[ACTION:\\s*([^\\]]+)\\]")
         val match = actionRegex.find(rawText)
