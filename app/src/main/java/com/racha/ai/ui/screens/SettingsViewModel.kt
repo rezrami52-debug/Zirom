@@ -44,8 +44,9 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
     }
 
     fun onApiKeyChange(newValue: String) {
+        val cleanKey = GeminiService.sanitizeApiKey(newValue)
         _uiState.value = _uiState.value.copy(
-            apiKey = newValue,
+            apiKey = cleanKey,
             isSaved = false,
             saveMessage = null,
             testMessage = null,
@@ -53,21 +54,46 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
         )
     }
 
+    fun clearApiKey() {
+        _uiState.value = _uiState.value.copy(
+            apiKey = "",
+            isSaved = false,
+            saveMessage = null,
+            testMessage = null,
+            isTestSuccess = null
+        )
+        viewModelScope.launch {
+            try {
+                securePrefs.saveApiKey("")
+            } catch (_: Exception) {}
+        }
+    }
+
     fun getProviderName(): String {
-        val key = _uiState.value.apiKey.trim()
+        val key = _uiState.value.apiKey
         return when {
             key.startsWith("gsk_") -> "Groq (Llama 3.3 ⚡ فائق السرعة)"
             key.startsWith("AIza") -> "Google Gemini 2.0"
-            key.isNotBlank() -> "مفتاح ذكاء اصطناعي مخصص"
+            key.isNotBlank() -> "مفتاح مخصص (${key.length} حرف)"
             else -> "لم يتم إدخال مفتاح بعد"
         }
     }
 
     fun testApiKeyConnection() {
-        val key = _uiState.value.apiKey.trim()
-        if (key.isBlank()) {
+        val rawKey = _uiState.value.apiKey
+        val cleanKey = GeminiService.sanitizeApiKey(rawKey)
+
+        if (cleanKey.isBlank()) {
             _uiState.value = _uiState.value.copy(
-                testMessage = "⚠️ يرجى إدخال المفتاح أولاً لفحصه.",
+                testMessage = "⚠️ يرجى لصق المفتاح أولاً لفحصه.",
+                isTestSuccess = false
+            )
+            return
+        }
+
+        if (cleanKey.startsWith("gsk_") && cleanKey.length > 70) {
+            _uiState.value = _uiState.value.copy(
+                testMessage = "⚠️ المفتاح أطول من المعتاد (${cleanKey.length} حرف). تأكد من نسخ المفتاح فقط دون تكرار.",
                 isTestSuccess = false
             )
             return
@@ -77,28 +103,39 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
 
         viewModelScope.launch {
             try {
-                val response = withContext(Dispatchers.IO) {
-                    val service = GeminiService(key)
-                    service.generateResponse("قل: الاتصال سليم.")
+                withContext(Dispatchers.IO) {
+                    val service = GeminiService(cleanKey)
+                    service.generateResponse("ping")
+                }
+                // إذا نجح الاتصال نحفظه تلقائياً
+                securePrefs.saveApiKey(cleanKey)
+                _uiState.value = _uiState.value.copy(
+                    apiKey = cleanKey,
+                    isTestingKey = false,
+                    isTestSuccess = true,
+                    isSaved = true,
+                    testMessage = "✅ الاتصال ناجح ومستقر! تم تفعيل المفتاح بنجاح.",
+                    saveMessage = "تم حفظ المفتاح تلقائياً"
+                )
+            } catch (e: Exception) {
+                val errorMsg = e.localizedMessage ?: e.message ?: "خطأ غير معروف"
+                val hint = when {
+                    errorMsg.contains("401") -> "المفتاح غير صالح أو تم حذفه من حسابك في Groq."
+                    errorMsg.contains("400") -> "صيغة المفتاح غير مقبولة."
+                    else -> "تأكد من اتصال الإنترنت وصحة المفتاح."
                 }
                 _uiState.value = _uiState.value.copy(
                     isTestingKey = false,
-                    isTestSuccess = true,
-                    testMessage = "✅ الاتصال ناجح ومستقر!"
-                )
-            } catch (e: Exception) {
-                _uiState.value = _uiState.value.copy(
-                    isTestingKey = false,
                     isTestSuccess = false,
-                    testMessage = "❌ فشل الاتصال: تأكد من صحة المفتاح والإنترنت."
+                    testMessage = "❌ فشل الاتصال: $hint"
                 )
             }
         }
     }
 
     fun saveApiKey() {
-        val key = _uiState.value.apiKey.trim()
-        if (key.isBlank()) {
+        val cleanKey = GeminiService.sanitizeApiKey(_uiState.value.apiKey)
+        if (cleanKey.isBlank()) {
             _uiState.value = _uiState.value.copy(
                 saveMessage = "المفتاح فارغ",
                 isSaved = false
@@ -108,8 +145,9 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
 
         viewModelScope.launch {
             try {
-                securePrefs.saveApiKey(key)
+                securePrefs.saveApiKey(cleanKey)
                 _uiState.value = _uiState.value.copy(
+                    apiKey = cleanKey,
                     isSaved = true,
                     saveMessage = "تم حفظ المفتاح بنجاح"
                 )
