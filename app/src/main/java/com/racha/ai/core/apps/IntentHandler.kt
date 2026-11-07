@@ -17,6 +17,8 @@ import com.racha.ai.core.eve.EveAccessibilityService
 import com.racha.ai.core.eve.EveState
 import com.racha.ai.core.eve.MediaShelfType
 import com.racha.ai.core.media.IptvManager
+import com.racha.ai.core.security.NetworkUsageManager
+import com.racha.ai.core.security.SpywareDetector
 import com.racha.ai.core.shizuku.ShizukuShellRunner
 import com.racha.ai.services.location.LocationHelper
 import kotlinx.coroutines.CoroutineScope
@@ -38,6 +40,8 @@ class IntentHandler(
     private val setAlarmHandler = SetAlarmHandler(context)
     private val dynamicActionRunner = DynamicActionRunner(context)
     private val iptvManager = IptvManager(context)
+    private val spywareDetector = SpywareDetector(context)
+    private val networkUsageManager = NetworkUsageManager(context)
 
     private fun getFriendlyName(): String {
         return listOf("يا رمزي", "رمزي", "صديقي", "يا غالي", "").random()
@@ -54,7 +58,40 @@ class IntentHandler(
     suspend fun handle(text: String): HandlerResult = withContext(Dispatchers.IO) {
         val lower = text.lowercase().trim()
 
-        // 1. تشغيل فيلم أو فتح قنوات الأفلام
+        // 1. فحص التنصت والمراقبة والأمان
+        if (lower.contains("تنصت") || lower.contains("تجسس") || lower.contains("مراقب") || lower.contains("مراقبة") || lower.contains("فحص الامان") || lower.contains("فحص الأمان")) {
+            val report = spywareDetector.runFullSecurityAudit()
+            val suffix = getFriendlyName().let { if (it.isNotBlank()) " $it" else "" }
+
+            return@withContext if (report.isClean && report.activeMicApps.isEmpty()) {
+                HandlerResult.DirectReply("🛡️ قمت بفحص أمني كامل$suffix، هاتفك سليم 100% ولا توجد أي تطبيقات تتنصت على المايكروفون أو الكاميرا أو برمجيات خفية.")
+            } else {
+                val sb = StringBuilder("⚠️ تقرير فحص الأمان$suffix:\n")
+                if (report.activeMicApps.isNotEmpty()) {
+                    sb.append("• تطبيقات تستخدم المايكروفون حالياً: ${report.activeMicApps.joinToString(", ")}\n")
+                }
+                for (threat in report.threatsFound) {
+                    sb.append("• ${threat.appName}: ${threat.threatType} (${threat.description})\n")
+                }
+                HandlerResult.DirectReply(sb.toString().trim())
+            }
+        }
+
+        // 2. فحص استهلاك الإنترنت والبيانات
+        if ((lower.contains("استهلاك") || lower.contains("كونسوماسيون") || lower.contains("شكون يستهلك") || lower.contains("قداش كليت")) &&
+            (lower.contains("انترنت") || lower.contains("إنترنت") || lower.contains("نت") || lower.contains("بيانات") || lower.contains("data"))) {
+            val topApps = networkUsageManager.getTodayTopDataConsumers(5)
+            val suffix = getFriendlyName().let { if (it.isNotBlank()) " $it" else "" }
+
+            return@withContext if (topApps.isNotEmpty()) {
+                val listStr = topApps.joinToString("\n") { "• ${it.appName}: ${it.formattedUsage}" }
+                HandlerResult.DirectReply("📊 أكثر التطبيقات استهلاكاً للإنترنت اليوم$suffix:\n\n$listStr")
+            } else {
+                HandlerResult.DirectReply("📊 استهلاك الإنترنت اليوم خفيف جداً، ولم يتجاوز أي تطبيق 1 ميغابايت$suffix.")
+            }
+        }
+
+        // 3. تشغيل فيلم أو فتح قنوات الأفلام
         if (lower.contains("فيلم") || lower.contains("أفلام") || lower.contains("افلام") || lower.contains("سينما") || lower.contains("cinema")) {
             val movieQuery = text.replace(Regex("(?i)حطيلي|شوفيلي|اعرضي|افتحي|شغلي|فيلم|افلام|أفلام|سينما|cinema|يا رمزي|رمزي"), "").trim()
             val movieChannel = if (movieQuery.isNotBlank()) iptvManager.findMovieChannel(movieQuery) else null
@@ -68,7 +105,7 @@ class IntentHandler(
             }
         }
 
-        // 2. تشغيل البث المباشر لمباراة معينة
+        // 4. تشغيل البث المباشر لمباراة معينة
         if (lower.contains("ماتش") || lower.contains("مباراة") || lower.contains("مقابلة")) {
             val teamName = text.replace(Regex("(?i)حطيلي|شوفيلي|اعرضي|افتحي|بث مباشر|ماتش|مباراة|مقابلة|يا رمزي|رمزي"), "").trim()
             val matchChannel = iptvManager.findMatchStream(teamName)
@@ -82,7 +119,7 @@ class IntentHandler(
             }
         }
 
-        // 3. فتح التلفاز والقنوات
+        // 5. فتح التلفاز والقنوات
         if (lower.contains("تلفزة") || lower.contains("تلفاز") || lower.contains("تلفزيون") || lower.contains("قنوات") || lower.contains("iptv")) {
             EveState.openShelf(MediaShelfType.LIVE_TV)
             val suffix = getFriendlyName().let { if (it.isNotBlank()) " $it" else "" }
@@ -126,6 +163,25 @@ class IntentHandler(
 
         val intentType = IntentClassifier.classify(text)
         return@withContext when (intentType) {
+            IntentClassifier.IntentType.CHECK_SPYWARE -> {
+                val report = spywareDetector.runFullSecurityAudit()
+                val suffix = getFriendlyName().let { if (it.isNotBlank()) " $it" else "" }
+                if (report.isClean && report.activeMicApps.isEmpty()) {
+                    HandlerResult.DirectReply("🛡️ قمت بفحص أمني كامل$suffix، هاتفك سليم ولا توجد أي برمجيات تنصت.")
+                } else {
+                    HandlerResult.DirectReply("⚠️ رصدت بعض التطبيقات التي تمتلك أذونات حساسة$suffix، راجع تقرير الأمان.")
+                }
+            }
+            IntentClassifier.IntentType.CHECK_DATA_USAGE -> {
+                val topApps = networkUsageManager.getTodayTopDataConsumers(5)
+                val suffix = getFriendlyName().let { if (it.isNotBlank()) " $it" else "" }
+                if (topApps.isNotEmpty()) {
+                    val listStr = topApps.joinToString("\n") { "• ${it.appName}: ${it.formattedUsage}" }
+                    HandlerResult.DirectReply("📊 استهلاك الإنترنت اليوم$suffix:\n\n$listStr")
+                } else {
+                    HandlerResult.DirectReply("📊 استهلاك الإنترنت منخفض جداً اليوم$suffix.")
+                }
+            }
             IntentClassifier.IntentType.WATCH_MOVIE,
             IntentClassifier.IntentType.WATCH_MATCH,
             IntentClassifier.IntentType.OPEN_LIVE_TV -> {

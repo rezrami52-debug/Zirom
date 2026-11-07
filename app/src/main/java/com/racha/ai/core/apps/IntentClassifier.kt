@@ -11,6 +11,7 @@ object IntentClassifier {
         FIND_MY_PHONE, MOSQUE_MODE, MACRO_SLEEP, MACRO_CINEMA, MACRO_WORK,
         OPEN_PHOTOS, OPEN_VIDEOS, OPEN_MUSIC, OPEN_NOTIFICATIONS, OPEN_MULTI_SHELVES,
         OPEN_LIVE_TV, WATCH_MATCH, WATCH_MOVIE,
+        CHECK_SPYWARE, CHECK_DATA_USAGE,
         CORRECTION, UNKNOWN
     }
 
@@ -20,17 +21,27 @@ object IntentClassifier {
         if (isCorrection(text)) return IntentType.CORRECTION
         if (isSetAlarm(text)) return IntentType.SET_ALARM
 
-        // أوامر الأفلام والسينما
+        // أوامر كشف التجسس والتنصت
+        if (lower.contains("تنصت") || lower.contains("تجسس") || lower.contains("مراقب") ||
+            lower.contains("مراقبة") || lower.contains("فحص الامان") || lower.contains("فحص الأمان") ||
+            lower.contains("حماية الهاتف") || lower.contains("هل الهاتف آمن")) {
+            return IntentType.CHECK_SPYWARE
+        }
+
+        // أوامر استهلاك الإنترنت والبيانات
+        if ((lower.contains("استهلاك") || lower.contains("كونسوماسيون") || lower.contains("شكون يستهلك") || lower.contains("قداش كليت")) &&
+            (lower.contains("انترنت") || lower.contains("إنترنت") || lower.contains("نت") || lower.contains("بيانات") || lower.contains("data") || lower.contains("كونيكسيون"))) {
+            return IntentType.CHECK_DATA_USAGE
+        }
+
         if (lower.contains("فيلم") || lower.contains("أفلام") || lower.contains("افلام") || lower.contains("سينما") || lower.contains("cinema")) {
             return IntentType.WATCH_MOVIE
         }
 
-        // أوامر مباريات البث المباشر
         if (lower.contains("ماتش") || lower.contains("مباراة") || lower.contains("مقابلة")) {
             return IntentType.WATCH_MATCH
         }
 
-        // أوامر التلفاز والقنوات
         if (lower.contains("تلفزة") || lower.contains("تلفاز") || lower.contains("تلفزيون") || lower.contains("قنوات") || lower.contains("قناة") || lower.contains("iptv")) {
             return IntentType.OPEN_LIVE_TV
         }
