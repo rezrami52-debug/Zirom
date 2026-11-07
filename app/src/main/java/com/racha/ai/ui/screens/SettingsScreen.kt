@@ -1,4 +1,5 @@
 package com.racha.ai.ui.screens
+import com.racha.ai.core.faceauth.FaceAuthRepository
 
 import android.Manifest
 import android.content.Context
@@ -46,6 +47,8 @@ fun SettingsScreen(
 ) {
     val state by viewModel.uiState.collectAsState()
     val context = LocalContext.current
+    val faceRepo = remember { FaceAuthRepository(context) }
+    var isAppLockActive by remember { mutableStateOf(faceRepo.isFaceAuthEnabled()) }
     val appPrefs = remember { AppPreferences(context) }
     val qwenService = remember { QwenService(context) }
     val themeState by themeManager.themeState.collectAsState()
@@ -536,6 +539,33 @@ fun SettingsScreen(
                         Switch(
                             checked = appPrefs.isIntruderPhotoEnabled(),
                             onCheckedChange = { appPrefs.setIntruderPhotoEnabled(it) }
+                        )
+                    }
+
+                    Divider(modifier = Modifier.padding(vertical = 4.dp))
+
+                    // 🔒 مفتاح تفعيل قفل التطبيق بالبصمة أو الوجه
+                    Row(
+                        modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text("قفل التطبيق بالبصمة والوجه 🔒", fontWeight = FontWeight.Bold, fontSize = 15.sp)
+                            Text("طلب المصادقة البيومترية عند فتح التطبيق وتصوير المتطفل", fontSize = 11.sp, color = Color.Gray)
+                        }
+                        Switch(
+                            checked = isAppLockActive,
+                            onCheckedChange = { isChecked ->
+                                if (isChecked && !faceRepo.hasBiometricHardware(context)) {
+                                    android.widget.Toast.makeText(context, "⚠️ جهازك لا يدعم أو لم يسجل بصمة بعد", android.widget.Toast.LENGTH_LONG).show()
+                                } else {
+                                    isAppLockActive = isChecked
+                                    faceRepo.setFaceAuthEnabled(isChecked)
+                                    val msg = if (isChecked) "✅ تم تفعيل قفل التطبيق بالبصمة والوجه" else "🔓 تم إلغاء قفل التطبيق"
+                                    android.widget.Toast.makeText(context, msg, android.widget.Toast.LENGTH_SHORT).show()
+                                }
+                            }
                         )
                     }
 
