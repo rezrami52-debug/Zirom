@@ -8,6 +8,7 @@ import android.net.Uri
 import android.os.Build
 import android.os.Environment
 import android.provider.Settings
+import android.widget.Toast
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
@@ -117,7 +118,7 @@ fun SettingsScreen(
                 }
             }
 
-            // 🤖 محرك الذكاء الاصطناعي واختيار المزوّد
+            // 🤖 محرك الذكاء الاصطناعي ومفتاح API
             Card(
                 modifier = Modifier.fillMaxWidth(),
                 colors = CardDefaults.cardColors(containerColor = cardBgColor),
@@ -127,7 +128,6 @@ fun SettingsScreen(
                     Text("محرك الذكاء الاصطناعي 🤖", fontWeight = FontWeight.Bold, fontSize = 16.sp)
                     Spacer(modifier = Modifier.height(8.dp))
 
-                    // اختيار المزوّد
                     Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         FilterChip(
                             selected = selectedLLMProvider != "qwen",
@@ -145,7 +145,7 @@ fun SettingsScreen(
                                 selectedLLMProvider = "qwen"
                                 appPrefs.setLLMProvider("qwen")
                             },
-                            label = { Text("محلي (Qwen أوفلاين 📱)") },
+                            label = { Text("أوفلاين (Qwen محلي 📱)") },
                             modifier = Modifier.weight(1f)
                         )
                     }
@@ -162,7 +162,7 @@ fun SettingsScreen(
                                 Text(if (isQwenInstalled) "✅" else "⚠️", fontSize = 18.sp)
                                 Spacer(modifier = Modifier.width(8.dp))
                                 Text(
-                                    text = if (isQwenInstalled) "تم العثور على Qwen 2.5 (1.5GB) في /Racha/models ومستعد للعمل بدون إنترنت!" else "ملف Qwen غير موجود في مجلد Racha/models",
+                                    text = if (isQwenInstalled) "نموذج Qwen 2.5 (1.5GB) جاهز ويعمل بدون إنترنت!" else "ملف Qwen غير موجود في مجلد Racha/models",
                                     fontSize = 12.sp,
                                     fontWeight = FontWeight.Medium,
                                     color = if (isQwenInstalled) Color(0xFF00E676) else Color(0xFFFF5252)
@@ -174,11 +174,18 @@ fun SettingsScreen(
                             value = state.apiKey,
                             onValueChange = { viewModel.onApiKeyChange(it) },
                             modifier = Modifier.fillMaxWidth(),
-                            label = { Text("أدخل مفتاح الـ API (Groq أو Gemini)") },
+                            label = { Text("أدخل مفتاح الـ API (يبدأ بـ gsk_)") },
                             visualTransformation = if (showApiKey) androidx.compose.ui.text.input.VisualTransformation.None else androidx.compose.ui.text.input.PasswordVisualTransformation(),
                             trailingIcon = {
-                                IconButton(onClick = { showApiKey = !showApiKey }) {
-                                    Icon(if (showApiKey) Icons.Default.Visibility else Icons.Default.VisibilityOff, contentDescription = null)
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    if (state.apiKey.isNotBlank()) {
+                                        IconButton(onClick = { viewModel.clearApiKey() }) {
+                                            Icon(Icons.Default.Clear, contentDescription = "مسح المفتاح", tint = Color.Gray)
+                                        }
+                                    }
+                                    IconButton(onClick = { showApiKey = !showApiKey }) {
+                                        Icon(if (showApiKey) Icons.Default.Visibility else Icons.Default.VisibilityOff, contentDescription = null)
+                                    }
                                 }
                             }
                         )
@@ -200,7 +207,10 @@ fun SettingsScreen(
                             }
 
                             Button(
-                                onClick = { viewModel.saveApiKey() },
+                                onClick = {
+                                    viewModel.saveApiKey()
+                                    Toast.makeText(context, "✅ تم حفظ المفتاح بنجاح يا رمزي!", Toast.LENGTH_SHORT).show()
+                                },
                                 modifier = Modifier.weight(1f),
                                 enabled = state.apiKey.isNotBlank()
                             ) {
@@ -216,6 +226,23 @@ fun SettingsScreen(
                                 fontSize = 12.sp,
                                 fontWeight = FontWeight.Medium
                             )
+                        }
+
+                        if (state.saveMessage != null) {
+                            Spacer(modifier = Modifier.height(6.dp))
+                            Surface(
+                                shape = RoundedCornerShape(8.dp),
+                                color = if (state.isSaved) Color(0xFF00E676).copy(alpha = 0.2f) else Color(0xFFFF5252).copy(alpha = 0.2f),
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Text(
+                                    text = state.saveMessage!!,
+                                    color = if (state.isSaved) Color(0xFF00E676) else Color(0xFFFF5252),
+                                    fontSize = 12.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
+                                )
+                            }
                         }
                     }
                 }
@@ -626,8 +653,7 @@ fun SettingsScreen(
 
 private fun checkShizukuStatus(): Boolean {
     return try {
-        val res = ShizukuShellRunner.execCommand("echo ok")
-        res.contains("ok")
+        ShizukuShellRunner.isShizukuAvailable()
     } catch (_: Exception) { false }
 }
 
