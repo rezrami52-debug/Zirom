@@ -38,7 +38,8 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
             val savedKey = securePrefs.getApiKey() ?: ""
             _uiState.value = _uiState.value.copy(
                 apiKey = savedKey,
-                isKeyLoaded = true
+                isKeyLoaded = true,
+                isSaved = savedKey.isNotBlank()
             )
         }
     }
@@ -58,7 +59,7 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
         _uiState.value = _uiState.value.copy(
             apiKey = "",
             isSaved = false,
-            saveMessage = null,
+            saveMessage = "تم مسح المفتاح",
             testMessage = null,
             isTestSuccess = null
         )
@@ -93,7 +94,7 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
 
         if (cleanKey.startsWith("gsk_") && cleanKey.length > 70) {
             _uiState.value = _uiState.value.copy(
-                testMessage = "⚠️ المفتاح أطول من المعتاد (${cleanKey.length} حرف). تأكد من نسخ المفتاح فقط دون تكرار.",
+                testMessage = "⚠️ المفتاح أطول من المعتاد (${cleanKey.length} حرف). تأكد من نسخه فقط دون تكرار.",
                 isTestSuccess = false
             )
             return
@@ -107,7 +108,6 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
                     val service = GeminiService(cleanKey)
                     service.generateResponse("ping")
                 }
-                // إذا نجح الاتصال نحفظه تلقائياً
                 securePrefs.saveApiKey(cleanKey)
                 _uiState.value = _uiState.value.copy(
                     apiKey = cleanKey,
@@ -115,19 +115,14 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
                     isTestSuccess = true,
                     isSaved = true,
                     testMessage = "✅ الاتصال ناجح ومستقر! تم تفعيل المفتاح بنجاح.",
-                    saveMessage = "تم حفظ المفتاح تلقائياً"
+                    saveMessage = "✅ تم حفظ المفتاح بنجاح يا رمزي!"
                 )
             } catch (e: Exception) {
                 val errorMsg = e.localizedMessage ?: e.message ?: "خطأ غير معروف"
-                val hint = when {
-                    errorMsg.contains("401") -> "المفتاح غير صالح أو تم حذفه من حسابك في Groq."
-                    errorMsg.contains("400") -> "صيغة المفتاح غير مقبولة."
-                    else -> "تأكد من اتصال الإنترنت وصحة المفتاح."
-                }
                 _uiState.value = _uiState.value.copy(
                     isTestingKey = false,
                     isTestSuccess = false,
-                    testMessage = "❌ فشل الاتصال: $hint"
+                    testMessage = "❌ الرد من السيرفر: $errorMsg"
                 )
             }
         }
@@ -137,7 +132,7 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
         val cleanKey = GeminiService.sanitizeApiKey(_uiState.value.apiKey)
         if (cleanKey.isBlank()) {
             _uiState.value = _uiState.value.copy(
-                saveMessage = "المفتاح فارغ",
+                saveMessage = "⚠️ لا يمكن حفظ مفتاح فارغ",
                 isSaved = false
             )
             return
@@ -149,18 +144,14 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
                 _uiState.value = _uiState.value.copy(
                     apiKey = cleanKey,
                     isSaved = true,
-                    saveMessage = "تم حفظ المفتاح بنجاح"
+                    saveMessage = "✅ تم حفظ المفتاح بنجاح يا رمزي!"
                 )
             } catch (e: Exception) {
                 _uiState.value = _uiState.value.copy(
                     isSaved = false,
-                    saveMessage = "فشل الحفظ: ${e.message}"
+                    saveMessage = "❌ فشل الحفظ: ${e.message}"
                 )
             }
         }
-    }
-
-    fun clearMessage() {
-        _uiState.value = _uiState.value.copy(saveMessage = null)
     }
 }

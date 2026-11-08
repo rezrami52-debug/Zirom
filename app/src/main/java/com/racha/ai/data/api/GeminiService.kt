@@ -83,6 +83,7 @@ class GeminiService(rawApiKey: String) {
             conn.requestMethod = "POST"
             conn.setRequestProperty("Authorization", "Bearer $apiKey")
             conn.setRequestProperty("Content-Type", "application/json; charset=UTF-8")
+            conn.setRequestProperty("User-Agent", "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36")
             conn.connectTimeout = 3500
             conn.readTimeout = 6000
             conn.doOutput = true
@@ -121,7 +122,7 @@ class GeminiService(rawApiKey: String) {
             } else {
                 val errorStream = conn.errorStream?.let { BufferedReader(InputStreamReader(it)).readText() }
                 Log.e("GroqApi", "Error $responseCode: $errorStream")
-                throw Exception("كود الخطأ: $responseCode")
+                throw Exception("كود الخطأ $responseCode: ${errorStream ?: ""}")
             }
             "استجابة المعالج غير متوفرة حالياً."
         } catch (e: Exception) {
