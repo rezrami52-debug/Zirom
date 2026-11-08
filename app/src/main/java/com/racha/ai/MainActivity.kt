@@ -1,4 +1,6 @@
 package com.racha.ai
+import rikka.shizuku.Shizuku
+import android.content.pm.PackageManager
 
 import android.Manifest
 import android.content.Intent
@@ -32,6 +34,16 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+
+        // تفعيل مستمع Shizuku التلقائي
+        try {
+            Shizuku.addBinderReceivedListenerSticky {
+                if (Shizuku.checkSelfPermission() != PackageManager.PERMISSION_GRANTED) {
+                    Shizuku.requestPermission(1001)
+                }
+            }
+        } catch (_: Throwable) {}
+
 
         // طلب إذن الإشعارات (Android 13+)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {

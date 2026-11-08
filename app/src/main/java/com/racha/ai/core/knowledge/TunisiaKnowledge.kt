@@ -86,7 +86,9 @@ object TunisiaKnowledge {
         }
 
         // 2. فحص أسئلة الملاحة والسفر العادية
-        val isTransport = lower.contains("كيفاش") || lower.contains("كفاش") || lower.contains("كيف") ||
+        val isTransport = lower.contains("أصل") || lower.contains("اصل") || lower.contains("نوصل") ||
+                          lower.contains("الوصول") || lower.contains("الذهاب") ||
+                          lower.contains("كيفاش") || lower.contains("كفاش") || lower.contains("كيف") ||
                           lower.contains("نمشي") || lower.contains("نروح") || lower.contains("نسافر") ||
                           lower.contains("ثنية") || lower.contains("طريق") || lower.contains("لواج") ||
                           lower.contains("تران") || lower.contains("قطار") || lower.contains("قداش تبعد") ||
