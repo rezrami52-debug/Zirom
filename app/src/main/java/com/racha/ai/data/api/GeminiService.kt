@@ -89,7 +89,7 @@ class GeminiService(rawApiKey: String) {
             conn.doOutput = true
 
             val requestJson = JSONObject().apply {
-                put("model", "llama-3.1-8b-instant")
+                put("model", "openai/gpt-oss-20b")
                 val messages = JSONArray().apply {
                     put(JSONObject().apply {
                         put("role", "system")
@@ -135,8 +135,14 @@ class GeminiService(rawApiKey: String) {
     suspend fun testConnection(): Boolean = withContext(Dispatchers.IO) {
         return@withContext try {
             if (isGroq) {
-                val reply = callGroqApi("ping", "Reply with pong only.")
-                reply.isNotBlank()
+                val url = URL("https://api.groq.com/openai/v1/models")
+                val conn = url.openConnection() as HttpURLConnection
+                conn.requestMethod = "GET"
+                conn.setRequestProperty("Authorization", "Bearer $apiKey")
+                conn.setRequestProperty("User-Agent", "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36")
+                conn.connectTimeout = 4000
+                conn.readTimeout = 4000
+                conn.responseCode == HttpURLConnection.HTTP_OK
             } else {
                 val res = generativeModel.generateContent("ping")
                 !res.text.isNullOrBlank()
