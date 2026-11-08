@@ -89,7 +89,7 @@ class GeminiService(rawApiKey: String) {
             conn.doOutput = true
 
             val requestJson = JSONObject().apply {
-                put("model", "llama-3.3-70b-versatile")
+                put("model", "llama-3.1-8b-instant")
                 val messages = JSONArray().apply {
                     put(JSONObject().apply {
                         put("role", "system")
