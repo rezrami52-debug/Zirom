@@ -274,7 +274,12 @@ fun ChatScreen(
                     onOpenNotifications = { isDrawerOpen = false; onOpenNotifications() },
                     onOpenPrayer = { isDrawerOpen = false; onOpenPrayer() },
                     onOpenHistory = { isDrawerOpen = false; onOpenHistory() },
-                    onOpenRoutine = { isDrawerOpen = false; onOpenRoutine() }
+                    onOpenRoutine = { isDrawerOpen = false; onOpenRoutine() },
+                    onSecurityScan = {
+                        isDrawerOpen = false
+                        viewModel.onInputChange("فحص التجسس والأمان")
+                        viewModel.sendMessage()
+                    }
                 )
             }
         }
@@ -692,7 +697,8 @@ fun SideDrawerRacha(
     onOpenNotifications: () -> Unit,
     onOpenPrayer: () -> Unit,
     onOpenHistory: () -> Unit,
-    onOpenRoutine: () -> Unit
+    onOpenRoutine: () -> Unit,
+    onSecurityScan: () -> Unit
 ) {
     Surface(
         modifier = Modifier
@@ -743,7 +749,15 @@ fun SideDrawerRacha(
             Divider(color = Color.White.copy(alpha = 0.12f), thickness = 1.dp)
             Spacer(modifier = Modifier.height(16.dp))
 
-            // عناصر القائمة الفاخرة
+            // عناصر القائمة
+            DrawerMenuRow(
+                icon = Icons.Default.Shield,
+                title = "فحص التجسس والأمان",
+                glow = Color(0xFF00E5FF),
+                onClick = onSecurityScan
+            )
+            Spacer(modifier = Modifier.height(10.dp))
+
             DrawerMenuRow(icon = Icons.Default.Settings, title = "الإعدادات", glow = glow, onClick = onOpenSettings)
             Spacer(modifier = Modifier.height(10.dp))
 
