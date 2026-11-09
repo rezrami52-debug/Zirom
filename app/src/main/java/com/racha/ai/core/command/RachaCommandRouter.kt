@@ -24,6 +24,10 @@ object RachaCommandRouter {
             }
         }
 
+        if (isLocationRequest(lower)) {
+            return RachaCommand.GetLocation
+        }
+
         if (isBatteryRequest(lower)) {
             return RachaCommand.GetBattery
         }
@@ -109,6 +113,24 @@ object RachaCommandRouter {
             "طريق إلى",
             "افتحي الخريطة",
             "افتح الخريطة"
+        )
+    }
+
+    private fun isLocationRequest(text: String): Boolean {
+        return containsAny(
+            text,
+            "أين أنا",
+            "اين انا",
+            "أين أنا الآن",
+            "اين انا الان",
+            "وين أنا",
+            "وين انا",
+            "موقعي الحالي",
+            "مكاني الحالي",
+            "أين أقف",
+            "اين اقف",
+            "where am i",
+            "my location"
         )
     }
 

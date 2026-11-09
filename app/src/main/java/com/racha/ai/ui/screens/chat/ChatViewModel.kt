@@ -8,6 +8,7 @@ import com.racha.ai.core.command.RachaCommand
 import com.racha.ai.core.command.RachaCommandRouter
 import com.racha.ai.core.apps.AppResolver
 import com.racha.ai.core.apps.IntentHandler
+import com.racha.ai.core.context.LocationIntentHandler
 import com.racha.ai.core.apps.PendingAction
 import com.racha.ai.core.contacts.ContactResolver
 import com.racha.ai.core.preferences.AppPreferences
@@ -164,6 +165,35 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         // وتذهب مباشرة إلى Qwen أو Gemini.
         // الأوامر المعروفة تستمر عبر IntentHandler الموجود.
         val centralCommand = RachaCommandRouter.classify(trimmed)
+
+        if (centralCommand is RachaCommand.GetLocation) {
+            viewModelScope.launch(Dispatchers.IO) {
+                try {
+                    val reply = LocationIntentHandler.answer(getApplication())
+                    appendMessage(
+                        ChatMessage(
+                            text = reply,
+                            isFromUser = false
+                        )
+                    )
+                } catch (e: Exception) {
+                    android.util.Log.e(
+                        "ChatViewModel",
+                        "فشل الحصول على الموقع",
+                        e
+                    )
+                    appendMessage(
+                        ChatMessage(
+                            text = "عذرًا يا رمزي، تعذر قراءة موقعك الآن. تأكد من تفعيل GPS ومنح Racha صلاحية الموقع.",
+                            isFromUser = false
+                        )
+                    )
+                } finally {
+                    _uiState.update { it.copy(isLoading = false) }
+                }
+            }
+            return
+        }
 
         if (centralCommand is RachaCommand.AskAI) {
             viewModelScope.launch {
