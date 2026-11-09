@@ -33,3 +33,16 @@ google-services.json
 
 # Android Profiling
 *.hprof
+
+# Local backups
+*.bak
+*.bak.navigation
+
+# Exported source dumps
+racha_all_sources.txt
+
+# Secrets and local configuration
+local.properties
+*.jks
+*.keystore
+.env
