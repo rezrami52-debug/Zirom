@@ -21,6 +21,7 @@ import com.racha.ai.core.security.NetworkUsageManager
 import com.racha.ai.core.security.SpywareDetector
 import com.racha.ai.core.shizuku.ShizukuShellRunner
 import com.racha.ai.services.location.LocationHelper
+import com.racha.ai.services.navigation.NavigationManager
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
@@ -42,6 +43,7 @@ class IntentHandler(
     private val iptvManager = IptvManager(context)
     private val spywareDetector = SpywareDetector(context)
     private val networkUsageManager = NetworkUsageManager(context)
+    private val navigationManager = NavigationManager
 
     private fun getFriendlyName(): String {
         return listOf("يا رمزي", "رمزي", "صديقي", "يا غالي", "").random()
@@ -57,6 +59,12 @@ class IntentHandler(
 
     suspend fun handle(text: String): HandlerResult = withContext(Dispatchers.IO) {
         val lower = text.lowercase().trim()
+
+        // الملاحة: تُفحص مبكراً حتى تعمل مع الصوت والكتابة.
+        val navigationReply = navigationManager.handleRequest(context, text)
+        if (navigationReply != null) {
+            return@withContext HandlerResult.DirectReply(navigationReply)
+        }
 
         // 1. فحص التنصت والمراقبة والأمان
         if (lower.contains("تنصت") || lower.contains("تجسس") || lower.contains("مراقب") || lower.contains("مراقبة") || lower.contains("فحص الامان") || lower.contains("فحص الأمان")) {

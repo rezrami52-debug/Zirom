@@ -309,6 +309,21 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                 actionBody.contains("FLASHLIGHT(on)") -> "شغلي الفلاش"
                 actionBody.contains("FLASHLIGHT(off)") -> "طفي الفلاش"
                 actionBody == "LOCK_SCREEN" -> "اقفلي الشاشة"
+                actionBody == "FIND_PAVED_ROAD" -> "أخرجيني إلى أقرب طريق معبد"
+                actionBody.startsWith("NAVIGATE") -> {
+                    val destination = Regex(
+                        """destination\\s*=\\s*["']?([^)"']+)["']?"""
+                    ).find(actionBody)?.groupValues?.getOrNull(1)?.trim()
+                        ?: actionBody.substringAfter("(")
+                            .substringBefore(")")
+                            .trim()
+
+                    if (destination.isNotBlank()) {
+                        "خذيني إلى $destination"
+                    } else {
+                        null
+                    }
+                }
                 else -> null
             }
 

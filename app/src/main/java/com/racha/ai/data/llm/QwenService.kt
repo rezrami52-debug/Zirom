@@ -171,6 +171,9 @@ class QwenService(private val context: Context) : LLMProvider {
         sb.append("   - لفتح الصور: [ACTION: OPEN_PHOTOS]\n")
         sb.append("   - لتشغيل الفلاش: [ACTION: FLASHLIGHT(on)] ولإطفائه: [ACTION: FLASHLIGHT(off)]\n")
         sb.append("   - لقفل الشاشة: [ACTION: LOCK_SCREEN]\n")
+        sb.append("5. إذا طلب رمزي الذهاب إلى مكان، أضف في نهاية الرد: [ACTION: NAVIGATE(destination=اسم المكان)]\n")
+        sb.append("6. إذا طلب أقرب طريق معبد أو طريق رئيسي، أضف: [ACTION: FIND_PAVED_ROAD]\n")
+        sb.append("7. لا تخترع إحداثيات ولا أسماء طرق. دع التطبيق يتولى فتح الخرائط.\n")
         sb.append("<|im_end|>\n")
 
         for (msg in history.takeLast(4)) {
