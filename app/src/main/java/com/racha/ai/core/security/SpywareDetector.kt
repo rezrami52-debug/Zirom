@@ -62,7 +62,7 @@ class SpywareDetector(private val context: Context) {
                 )
             }
 
-        // 3. فحص مدراء الجهاز (Device Administrators التي قد تمنع الحذف)
+        }\n\n        // 3. فحص مدراء الجهاز (Device Administrators التي قد تمنع الحذف)
         val dpm = context.getSystemService(Context.DEVICE_POLICY_SERVICE) as? DevicePolicyManager
         val activeAdmins = dpm?.activeAdmins ?: emptyList()
         for (admin in activeAdmins) {
