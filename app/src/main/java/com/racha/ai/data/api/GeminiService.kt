@@ -10,6 +10,7 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeout
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.BufferedReader
@@ -44,7 +45,7 @@ class GeminiService(rawApiKey: String) {
             callGroqApi(prompt, jarvisSystemInstruction)
         } else {
             try {
-                val response = generativeModel.generateContent(prompt)
+                val response = withTimeout(30_000L) { generativeModel.generateContent(prompt) }
                 response.text ?: "لم أتلقَ استجابة صالحة."
             } catch (e: Exception) {
                 Log.e("GeminiService", "API Error", e)
@@ -84,8 +85,8 @@ class GeminiService(rawApiKey: String) {
             conn.setRequestProperty("Authorization", "Bearer $apiKey")
             conn.setRequestProperty("Content-Type", "application/json; charset=UTF-8")
             conn.setRequestProperty("User-Agent", "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36")
-            conn.connectTimeout = 3500
-            conn.readTimeout = 6000
+            conn.connectTimeout = 10_000
+            conn.readTimeout = 30_000
             conn.doOutput = true
 
             val requestJson = JSONObject().apply {

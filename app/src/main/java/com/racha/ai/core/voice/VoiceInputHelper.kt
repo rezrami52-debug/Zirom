@@ -108,6 +108,7 @@ class VoiceInputHelper(private val context: Context) {
                         SpeechRecognizer.ERROR_RECOGNIZER_BUSY -> "المستمع مشغول"
                         else -> "خطأ ($error)"
                     }
+                    releaseRecognizer()
                     onError(msg)
                 }
 
@@ -116,7 +117,12 @@ class VoiceInputHelper(private val context: Context) {
                     muteSystemAudio(false)
                     val matches = results?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
                     val bestText = matches?.firstOrNull { it.isNotBlank() } ?: ""
-                    if (bestText.isNotBlank()) onResult(bestText) else onError("فارغ")
+                    releaseRecognizer()
+                    if (bestText.isNotBlank()) {
+                        onResult(bestText)
+                    } else {
+                        onError("فارغ")
+                    }
                 }
 
                 override fun onPartialResults(partialResults: Bundle?) {
@@ -129,15 +135,23 @@ class VoiceInputHelper(private val context: Context) {
             })
 
             try {
-                muteSystemAudio(true)
                 recognizer?.startListening(intent)
-                // إعادة الصوت بعد 200ms كحماية في حال لم يطلق النظام onReadyForSpeech
-                mainHandler.postDelayed({ muteSystemAudio(false) }, 250)
             } catch (e: Exception) {
                 isCurrentlyListening = false
                 muteSystemAudio(false)
                 onError(e.message ?: "فشل البدء")
             }
+        }
+    }
+
+    private fun releaseRecognizer() {
+        try {
+            recognizer?.cancel()
+            recognizer?.destroy()
+        } catch (_: Exception) {
+        } finally {
+            recognizer = null
+            isCurrentlyListening = false
         }
     }
 

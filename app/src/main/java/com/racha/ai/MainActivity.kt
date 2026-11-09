@@ -12,6 +12,7 @@ import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.lifecycle.lifecycleScope
 import androidx.core.content.ContextCompat
 import com.racha.ai.core.proactive.ProactiveScheduler
 import com.racha.ai.core.media.IptvManager
@@ -59,7 +60,7 @@ class MainActivity : ComponentActivity() {
         
         // ✅ تحميل قوائم الأفلام والقنوات العربية تلقائياً
         val iptvManager = IptvManager(this)
-        kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.IO).launch {
+        lifecycleScope.launch(kotlinx.coroutines.Dispatchers.IO) {
             iptvManager.loadCustomM3uFromUrl("https://iptv-org.github.io/iptv/categories/movies.m3u", "movies.m3u")
             iptvManager.loadCustomM3uFromUrl("https://iptv-org.github.io/iptv/languages/ara.m3u", "arabic.m3u")
         }

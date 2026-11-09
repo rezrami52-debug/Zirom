@@ -20,6 +20,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeout
 
 data class ChatMessage(
     val text: String,
@@ -199,7 +200,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         // 2. استخدام Qwen المحلي
         if (selectedProvider == "qwen" && qwenService.isModelPresent()) {
             try {
-                val localReply = qwenService.generateResponse(enrichedQuery)
+                val localReply = withTimeout(60_000L) { qwenService.generateResponse(enrichedQuery) }
                 val cleanText = executeActionsIfPresent(localReply)
 
                 if (isUnclearResponse(cleanText)) {
@@ -212,7 +213,13 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                 }
                 _uiState.update { it.copy(isLoading = false) }
                 return@withContext
-            } catch (_: Exception) {}
+            } catch (e: Exception) {
+                android.util.Log.e(
+                    "ChatViewModel",
+                    "فشل تنفيذ طلب الذكاء الاصطناعي",
+                    e
+                )
+            }
         }
 
         // 3. استخدام المزود السحابي (Groq / Gemini)
@@ -220,22 +227,34 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         if (!apiKey.isNullOrBlank()) {
             try {
                 val geminiService = GeminiService(apiKey)
-                val response = geminiService.generateResponse(enrichedQuery)
+                val response = withTimeout(30_000L) { geminiService.generateResponse(enrichedQuery) }
                 appendMessage(ChatMessage(text = response, isFromUser = false))
                 _uiState.update { it.copy(isLoading = false) }
                 return@withContext
-            } catch (_: Exception) {}
+            } catch (e: Exception) {
+                android.util.Log.e(
+                    "ChatViewModel",
+                    "فشل تنفيذ طلب الذكاء الاصطناعي",
+                    e
+                )
+            }
         }
 
         // 4. Fallback إلى Qwen
         if (qwenService.isModelPresent()) {
             try {
-                val fallbackReply = qwenService.generateResponse(enrichedQuery)
+                val fallbackReply = withTimeout(60_000L) { qwenService.generateResponse(enrichedQuery) }
                 val cleanText = executeActionsIfPresent(fallbackReply)
                 appendMessage(ChatMessage(text = "$cleanText \n\n📱 [Qwen وضع أوفلاين]", isFromUser = false))
                 _uiState.update { it.copy(isLoading = false) }
                 return@withContext
-            } catch (_: Exception) {}
+            } catch (e: Exception) {
+                android.util.Log.e(
+                    "ChatViewModel",
+                    "فشل تنفيذ طلب الذكاء الاصطناعي",
+                    e
+                )
+            }
         }
 
         appendMessage(ChatMessage(
@@ -296,7 +315,13 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
             if (commandToRun != null) {
                 try {
                     intentHandler.handle(commandToRun)
-                } catch (_: Exception) {}
+                } catch (e: Exception) {
+                android.util.Log.e(
+                    "ChatViewModel",
+                    "فشل تنفيذ طلب الذكاء الاصطناعي",
+                    e
+                )
+            }
             }
         }
 

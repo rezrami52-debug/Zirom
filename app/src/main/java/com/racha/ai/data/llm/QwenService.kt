@@ -11,6 +11,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeout
 import java.io.File
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -71,9 +72,16 @@ class QwenService(private val context: Context) : LLMProvider {
 
     override fun isReady(): Boolean = isInitialized && llmInference != null
 
-    suspend fun generateResponse(prompt: String): String = withContext(Dispatchers.IO) {
-        val res = sendMessageWithContext(emptyList(), prompt, "")
-        res.getOrElse { "تعذر استخراج الإجابة محلياً: ${it.localizedMessage}" }
+    suspend fun generateResponse(prompt: String): String {
+        val result = sendMessageWithContext(
+            history = emptyList(),
+            userMessage = prompt,
+            userProfileContext = ""
+        )
+
+        return result.getOrElse { error ->
+            throw error
+        }
     }
 
     override suspend fun sendMessageWithContext(
@@ -81,21 +89,49 @@ class QwenService(private val context: Context) : LLMProvider {
         userMessage: String,
         userProfileContext: String
     ): Result<String> = withContext(Dispatchers.IO) {
-        modelMutex.withLock {
-            try {
-                if (!isInitialized) {
-                    val initResult = initialize()
-                    initResult.onFailure { return@withContext Result.failure(it) }
-                }
 
-                val inference = llmInference ?: return@withContext Result.failure(Exception("النموذج غير جاهز"))
-                val fullPrompt = buildPrompt(history, userMessage, userProfileContext)
-
-                val response = inference.generateResponse(fullPrompt)
-                Result.success(response.trim())
-            } catch (e: Exception) {
-                Result.failure(e)
+        val initResult = try {
+            withTimeout(45_000L) {
+                initialize()
             }
+        } catch (e: Exception) {
+            Log.e(TAG, "انتهت مهلة تهيئة Qwen", e)
+            Result.failure(e)
+        }
+
+        if (initResult.isFailure) {
+            return@withContext Result.failure(
+                initResult.exceptionOrNull()
+                    ?: Exception("فشل تشغيل نموذج Qwen")
+            )
+        }
+
+        try {
+            withTimeout(60_000L) {
+                modelMutex.withLock {
+                    val inference = llmInference
+                        ?: return@withLock Result.failure(
+                            Exception("نموذج Qwen غير جاهز")
+                        )
+
+                    val fullPrompt = buildPrompt(
+                        history,
+                        userMessage,
+                        userProfileContext
+                    )
+
+                    val response = inference.generateResponse(fullPrompt)
+
+                    if (response.isBlank()) {
+                        Result.failure(Exception("نموذج Qwen أعاد إجابة فارغة"))
+                    } else {
+                        Result.success(response.trim())
+                    }
+                }
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "خطأ أثناء توليد إجابة Qwen", e)
+            Result.failure(e)
         }
     }
 

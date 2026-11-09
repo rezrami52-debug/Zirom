@@ -151,7 +151,7 @@ class EveBubbleService : Service() {
             }
             ACTION_STOP_SERVICE -> closeAndDismiss()
         }
-        return START_STICKY
+        return START_NOT_STICKY
     }
 
     private fun handleNewNotification(speechText: String, notifKey: String?) {
@@ -709,7 +709,31 @@ class EveBubbleService : Service() {
             .setSmallIcon(android.R.drawable.ic_dialog_info)
             .setPriority(NotificationCompat.PRIORITY_MIN)
             .build()
-        startForeground(1001, notification)
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+                startForeground(
+                    1001,
+                    notification,
+                    android.content.pm.ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE
+                )
+            } else {
+                startForeground(1001, notification)
+            }
+        } catch (e: SecurityException) {
+            android.util.Log.e(
+                "EveBubbleService",
+                "فشل تشغيل خدمة إيف بسبب الصلاحيات",
+                e
+            )
+            stopSelf()
+        } catch (e: Exception) {
+            android.util.Log.e(
+                "EveBubbleService",
+                "فشل تشغيل خدمة إيف",
+                e
+            )
+            stopSelf()
+        }
     }
 
     override fun onDestroy() {
@@ -718,8 +742,15 @@ class EveBubbleService : Service() {
             try { windowManager.removeView(holder.view) } catch (_: Exception) {}
         }
         activeShelfWindows.clear()
-        screenReceiver?.let { unregisterReceiver(it) }
-        batteryReceiver?.let { unregisterReceiver(it) }
+        try {
+            screenReceiver?.let { unregisterReceiver(it) }
+        } catch (_: Exception) {
+        }
+
+        try {
+            batteryReceiver?.let { unregisterReceiver(it) }
+        } catch (_: Exception) {
+        }
         exoPlayer?.release()
         voiceInputHelper?.destroy()
         tts?.stop()
