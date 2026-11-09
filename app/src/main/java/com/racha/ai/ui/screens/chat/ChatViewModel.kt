@@ -4,6 +4,8 @@ import android.app.Application
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.racha.ai.core.agent.SelfEvolutionAgent
+import com.racha.ai.core.command.RachaCommand
+import com.racha.ai.core.command.RachaCommandRouter
 import com.racha.ai.core.apps.AppResolver
 import com.racha.ai.core.apps.IntentHandler
 import com.racha.ai.core.apps.PendingAction
@@ -154,6 +156,35 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                     source = "user"
                 )
                 appendMessage(ChatMessage(text = "✅ سجلتها عندي في الذاكرة يا رمزي! من اليوم فصاعداً حفظت أن '$term' تعني '$meaning'.", isFromUser = false))
+            }
+            return
+        }
+
+        // الموجّه المركزي: الأسئلة العامة تتجاوز IntentHandler
+        // وتذهب مباشرة إلى Qwen أو Gemini.
+        // الأوامر المعروفة تستمر عبر IntentHandler الموجود.
+        val centralCommand = RachaCommandRouter.classify(trimmed)
+
+        if (centralCommand is RachaCommand.AskAI) {
+            viewModelScope.launch {
+                _uiState.update { it.copy(isLoading = true) }
+
+                try {
+                    handleAiQuery(trimmed)
+                } catch (e: Exception) {
+                    android.util.Log.e(
+                        "ChatViewModel",
+                        "فشل الموجّه المركزي",
+                        e
+                    )
+                    appendMessage(
+                        ChatMessage(
+                            text = "عذراً يا رمزي، تعذر معالجة طلبك حالياً.",
+                            isFromUser = false
+                        )
+                    )
+                    _uiState.update { it.copy(isLoading = false) }
+                }
             }
             return
         }

@@ -46,3 +46,5 @@ local.properties
 *.jks
 *.keystore
 .env
+
+*.bak.*

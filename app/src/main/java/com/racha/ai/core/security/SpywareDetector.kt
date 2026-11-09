@@ -55,33 +55,12 @@ class SpywareDetector(private val context: Context) {
                     SecurityThreat(
                         appName = appName,
                         packageName = app.packageName,
-                        threatType = "تسجيل الشاشة ولوحة المفاتيح",
-                        description = "التطبيق يمتلك صلاحية الوصول الكاملة للشاشة (Accessibility)",
-                        severity = ThreatSeverity.HIGH
+                        threatType = "خدمة إمكانية وصول مفعّلة (تستحق المراجعة)",
+                        description = "قد تكون هذه الصلاحية مشروعة؛ تفعيلها وحده لا يثبت تسجيل الشاشة أو ضغطات المفاتيح.",
+                        severity = ThreatSeverity.LOW
                     )
                 )
             }
-
-            // 2. فحص التطبيقات المخفية (بدون أيقونة في الشاشة الرئيسية ولكنها تمتلك أذونات حساسة)
-            val launchIntent = pm.getLaunchIntentForPackage(app.packageName)
-            if (launchIntent == null) {
-                val hasAudio = pm.checkPermission(android.Manifest.permission.RECORD_AUDIO, app.packageName) == PackageManager.PERMISSION_GRANTED
-                val hasCamera = pm.checkPermission(android.Manifest.permission.CAMERA, app.packageName) == PackageManager.PERMISSION_GRANTED
-                val hasLoc = pm.checkPermission(android.Manifest.permission.ACCESS_FINE_LOCATION, app.packageName) == PackageManager.PERMISSION_GRANTED
-
-                if (hasAudio || hasCamera || hasLoc) {
-                    threats.add(
-                        SecurityThreat(
-                            appName = appName,
-                            packageName = app.packageName,
-                            threatType = "تطبيق شبحي مخفي",
-                            description = "تطبيق يعمل بدون أيقونة ويمتلك صلاحيات تجسس حساسة",
-                            severity = ThreatSeverity.HIGH
-                        )
-                    )
-                }
-            }
-        }
 
         // 3. فحص مدراء الجهاز (Device Administrators التي قد تمنع الحذف)
         val dpm = context.getSystemService(Context.DEVICE_POLICY_SERVICE) as? DevicePolicyManager
@@ -94,9 +73,9 @@ class SpywareDetector(private val context: Context) {
                     SecurityThreat(
                         appName = name,
                         packageName = pkg,
-                        threatType = "مسؤول جهاز (Device Admin)",
-                        description = "يمتلك صلاحية إدارة الهاتف والتحكم بالقفل ومسح البيانات",
-                        severity = ThreatSeverity.MEDIUM
+                        threatType = "مسؤول جهاز مفعّل (راجع سبب التفعيل)",
+                        description = "هذه صلاحية إدارية حساسة؛ وجودها وحده لا يثبت أن التطبيق ضار.",
+                        severity = ThreatSeverity.LOW
                     )
                 )
             }
