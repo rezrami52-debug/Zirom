@@ -72,11 +72,11 @@ class IntentHandler(
             val suffix = getFriendlyName().let { if (it.isNotBlank()) " $it" else "" }
 
             return@withContext if (report.isClean && report.activeMicApps.isEmpty()) {
-                HandlerResult.DirectReply("🛡️ قمت بفحص أمني كامل$suffix، هاتفك سليم 100% ولا توجد أي تطبيقات تتنصت على المايكروفون أو الكاميرا أو برمجيات خفية.")
+                HandlerResult.DirectReply("🛡️ قمت بفحص أمني كامل$suffix، لم تظهر مؤشرات ضمن الفحوص التي أمكن تشغيلها؛ هذا لا يثبت خلو الهاتف من التجسس.")
             } else {
                 val sb = StringBuilder("⚠️ تقرير فحص الأمان$suffix:\n")
                 if (report.activeMicApps.isNotEmpty()) {
-                    sb.append("• تطبيقات تستخدم المايكروفون حالياً: ${report.activeMicApps.joinToString(", ")}\n")
+                    sb.append("• تطبيقات لديها سماح باستخدام الميكروفون؛ لا يعني ذلك أنها تستخدمه الآن: ${report.activeMicApps.joinToString(", ")}\n")
                 }
                 for (threat in report.threatsFound) {
                     sb.append("• ${threat.appName}: ${threat.threatType} (${threat.description})\n")
@@ -175,7 +175,7 @@ class IntentHandler(
                 val report = spywareDetector.runFullSecurityAudit()
                 val suffix = getFriendlyName().let { if (it.isNotBlank()) " $it" else "" }
                 if (report.isClean && report.activeMicApps.isEmpty()) {
-                    HandlerResult.DirectReply("🛡️ قمت بفحص أمني كامل$suffix، هاتفك سليم ولا توجد أي برمجيات تنصت.")
+                    HandlerResult.DirectReply("🛡️ قمت بفحص أمني كامل$suffix، لم تظهر مؤشرات ضمن الفحوص التي أمكن تشغيلها؛ هذا لا يثبت خلو الهاتف من التجسس.")
                 } else {
                     HandlerResult.DirectReply("⚠️ رصدت بعض التطبيقات التي تمتلك أذونات حساسة$suffix، راجع تقرير الأمان.")
                 }
