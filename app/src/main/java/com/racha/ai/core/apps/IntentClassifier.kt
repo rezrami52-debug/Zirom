@@ -71,6 +71,14 @@ object IntentClassifier {
         if (isMediaCmd && hasPhoto) return IntentType.OPEN_PHOTOS
         if (isMediaCmd && hasMusic) return IntentType.OPEN_MUSIC
 
+        // الأوامر المحلية تأتي قبل فتح التطبيقات.
+        // مثال: "شغلي الفلاش" يجب ألا يُفسر كفتح تطبيق.
+        if (isTimeQuery(lower)) return IntentType.GET_TIME
+        if (isDateQuery(lower)) return IntentType.GET_DATE
+        if (isBatteryQuery(lower)) return IntentType.GET_BATTERY
+        if (isFlashlightQuery(lower)) return IntentType.TOGGLE_FLASHLIGHT
+        if (isBluetoothQuery(lower)) return IntentType.TOGGLE_BLUETOOTH
+
         val isOpenAppCmd = lower.startsWith("افتح") || lower.startsWith("افتحي") || lower.startsWith("شغل") ||
                            lower.startsWith("شغلي") || lower.startsWith("حل") || lower.startsWith("حلي") ||
                            lower.contains("تطبيق") || lower.contains("برنامج")
@@ -125,7 +133,24 @@ object IntentClassifier {
     }
 
     private fun isTimeQuery(lower: String): Boolean {
-        val timeWords = listOf("كم الساعة", "ماهي الساعة", "ما هي الساعة", "الساعة كام", "قداش الوقت", "الوقت الان", "time")
+        val timeWords = listOf(
+            "كم الساعة",
+            "ما الساعة",
+            "ماهي الساعة",
+            "ما هي الساعة",
+            "ما الوقت",
+            "ما هو الوقت",
+            "الساعة كام",
+            "قداش الساعة",
+            "قداش الوقت",
+            "الوقت الان",
+            "الوقت الآن",
+            "الساعة الآن",
+            "الساعة الان",
+            "شنوة الوقت",
+            "شنيه الوقت",
+            "time"
+        )
         return timeWords.any { lower.contains(it) } || lower == "الساعة" || lower == "الوقت"
     }
 
