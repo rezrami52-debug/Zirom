@@ -1,8 +1,11 @@
 package com.racha.ai.core.command
 
+import android.content.Context
 import com.racha.ai.core.apps.IntentHandler
+import com.racha.ai.core.context.LocationIntentHandler
 
 class RachaCommandExecutor(
+    private val context: Context,
     private val intentHandler: IntentHandler
 ) {
     sealed interface Result {
@@ -23,10 +26,23 @@ class RachaCommandExecutor(
         }
 
         return when (RachaCommandRouter.classify(cleanText)) {
-            is RachaCommand.AskAI -> Result.RequiresAI(cleanText)
-            else -> Result.KnownCommand(
-                intentHandler.handle(cleanText)
-            )
+            RachaCommand.GetLocation -> {
+                Result.KnownCommand(
+                    IntentHandler.HandlerResult.DirectReply(
+                        LocationIntentHandler.answer(context)
+                    )
+                )
+            }
+
+            is RachaCommand.AskAI -> {
+                Result.RequiresAI(cleanText)
+            }
+
+            else -> {
+                Result.KnownCommand(
+                    intentHandler.handle(cleanText)
+                )
+            }
         }
     }
 }
