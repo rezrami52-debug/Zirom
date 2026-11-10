@@ -517,19 +517,86 @@ class IntentHandler(
 
     private fun handleToggleFlashlight(text: String): HandlerResult {
         return try {
-            val cameraManager = context.getSystemService(Context.CAMERA_SERVICE) as CameraManager
-            val cameraId = cameraManager.cameraIdList.firstOrNull { id ->
-                val chars = cameraManager.getCameraCharacteristics(id)
-                chars.get(CameraCharacteristics.FLASH_INFO_AVAILABLE) == true
-            } ?: return HandlerResult.Error("⚠️ لا يوجد فلاش متاح في الجهاز.")
+            val cameraManager =
+                context.getSystemService(Context.CAMERA_SERVICE) as CameraManager
 
-            val lower = text.lowercase()
-            val enable = !(lower.contains("اطفئ") || lower.contains("اطفي") || lower.contains("إطفاء") || lower.contains("اغلق") || lower.contains("اقفل") || lower.contains("off"))
-            cameraManager.setTorchMode(cameraId, enable)
-            if (enable) HandlerResult.DirectReply("🔦 تم تشغيل الكشاف.")
-            else HandlerResult.DirectReply("🔦 تم إطفاء الكشاف.")
+            val cameraId = cameraManager.cameraIdList.firstOrNull { id ->
+                val characteristics =
+                    cameraManager.getCameraCharacteristics(id)
+
+                characteristics.get(
+                    CameraCharacteristics.FLASH_INFO_AVAILABLE
+                ) == true
+            } ?: return HandlerResult.Error(
+                "⚠️ لا يوجد كشاف متاح في هذا الجهاز."
+            )
+
+            val lower = text
+                .lowercase(Locale.ROOT)
+                .replace("أ", "ا")
+                .replace("إ", "ا")
+                .replace("آ", "ا")
+                .replace("ى", "ي")
+                .trim()
+
+            val turnOff = listOf(
+                "اطف",
+                "اطفي",
+                "اطفئ",
+                "اطفیه",
+                "طفي",
+                "طفيه",
+                "طفيه",
+                "سكر الفلاش",
+                "سكر الكشاف",
+                "سكّر الفلاش",
+                "سكّر الكشاف",
+                "اغلق الفلاش",
+                "اقفل الفلاش",
+                "off"
+            ).any { lower.contains(it) }
+
+            val turnOn = listOf(
+                "شغل",
+                "شغلي",
+                "شعل",
+                "شعلي",
+                "خدم",
+                "خدمي",
+                "حل الفلاش",
+                "حل للكشاف",
+                "حل الكشاف",
+                "ضوي",
+                "ضوي الفلاش",
+                "on"
+            ).any { lower.contains(it) }
+
+            if (!turnOn && !turnOff) {
+                return HandlerResult.DirectReply(
+                    "هل تريد تشغيل الكشاف أم إطفاءه؟"
+                )
+            }
+
+            val enabled = !turnOff
+
+            cameraManager.setTorchMode(cameraId, enabled)
+
+            if (enabled) {
+                HandlerResult.DirectReply("✅ تم تشغيل الكشاف يا رمزي.")
+            } else {
+                HandlerResult.DirectReply("✅ تم إطفاء الكشاف يا رمزي.")
+            }
         } catch (e: Exception) {
-            HandlerResult.Error("⚠️ تعذر التحكم في الفلاش: ${e.message}")
+            android.util.Log.e(
+                "RachaIntentHandler",
+                "فشل التحكم في الكشاف",
+                e
+            )
+
+            HandlerResult.Error(
+                "⚠️ لم أتمكن من تغيير حالة الكشاف. " +
+                    "تأكد من عدم استخدام الكاميرا من تطبيق آخر."
+            )
         }
     }
 
