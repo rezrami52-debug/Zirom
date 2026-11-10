@@ -18,6 +18,15 @@ class RachaCommandExecutor(
         ) : Result
     }
 
+    suspend fun executeForVoice(
+        text: String
+    ): IntentHandler.HandlerResult {
+        return when (val result = execute(text)) {
+            is Result.KnownCommand -> result.result
+            is Result.RequiresAI -> IntentHandler.HandlerResult.Unknown
+        }
+    }
+
     suspend fun execute(text: String): Result {
         val cleanText = text.trim()
 

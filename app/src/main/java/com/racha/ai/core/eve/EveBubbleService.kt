@@ -24,6 +24,7 @@ import androidx.media3.common.MediaItem
 import androidx.media3.exoplayer.ExoPlayer
 import com.racha.ai.core.apps.AppResolver
 import com.racha.ai.core.apps.IntentHandler
+import com.racha.ai.core.command.RachaCommandExecutor
 import com.racha.ai.core.contacts.ContactResolver
 import com.racha.ai.core.media.MediaItemData
 import com.racha.ai.core.overlay.OverlayLifecycleOwner
@@ -58,6 +59,7 @@ class EveBubbleService : Service() {
     private var tts: TextToSpeech? = null
     private var voiceInputHelper: VoiceInputHelper? = null
     private lateinit var intentHandler: IntentHandler
+    private lateinit var commandExecutor: RachaCommandExecutor
     private lateinit var securePreferences: SecurePreferences
     private lateinit var appPreferences: AppPreferences
     private lateinit var qwenService: QwenService
@@ -85,6 +87,7 @@ class EveBubbleService : Service() {
         securePreferences = SecurePreferences(this)
         appPreferences = AppPreferences(this)
         intentHandler = IntentHandler(this, AppResolver(this), ContactResolver(this))
+        commandExecutor = RachaCommandExecutor(this, intentHandler)
         qwenService = QwenService(this)
         exoPlayer = ExoPlayer.Builder(this).build()
 
@@ -590,7 +593,7 @@ class EveBubbleService : Service() {
                 val cleanCommand = text.replace(Regex("(?i)eve|racha|ايف|إيف|ايڤ|اف|راشا|رشا|روشا|يا "), "").trim()
 
                 if (cleanCommand.length > 2) {
-                    val result = withContext(Dispatchers.IO) { intentHandler.handle(cleanCommand) }
+                    val result = withContext(Dispatchers.IO) { commandExecutor.executeForVoice(cleanCommand) }
                     when (result) {
                         is IntentHandler.HandlerResult.DirectReply -> {
                             speakCleanText(result.message, continueConversation = true)
