@@ -146,7 +146,15 @@ class EveBubbleService : Service() {
             ACTION_NEW_NOTIFICATION -> {
                 val speechText = intent.getStringExtra(EXTRA_SPEECH_TEXT) ?: ""
                 val notifKey = intent.getStringExtra(EXTRA_NOTIF_KEY)
-                handleNewNotification(speechText, notifKey)
+                val silent = intent.getBooleanExtra(
+                    EXTRA_SILENT_NOTIFICATION,
+                    false
+                )
+                handleNewNotification(
+                    speechText = speechText,
+                    notifKey = notifKey,
+                    silent = silent
+                )
             }
             ACTION_CANCEL_NOTIFICATION -> {
                 val notifKey = intent.getStringExtra(EXTRA_NOTIF_KEY)
@@ -157,14 +165,47 @@ class EveBubbleService : Service() {
         return START_NOT_STICKY
     }
 
-    private fun handleNewNotification(speechText: String, notifKey: String?) {
+    private fun handleNewNotification(
+        speechText: String,
+        notifKey: String?,
+        silent: Boolean
+    ) {
         currentNotifKey = notifKey
         EveState.addNotification()
+
         pendingNotificationJob?.cancel()
+        pendingNotificationJob = null
+
+        if (silent) {
+            EveState.openShelf(MediaShelfType.NOTIFICATIONS)
+            return
+        }
+
         pendingNotificationJob = serviceScope.launch(Dispatchers.Main) {
             delay(15000)
-            speakCleanText("رمزي، وصلك إشعار: $speechText", continueConversation = false)
+
+            if (isScreenLockedNow()) {
+                speakCleanText(
+                    "رمزي، وصلك إشعار: $speechText",
+                    continueConversation = false
+                )
+            } else {
+                EveState.openShelf(MediaShelfType.NOTIFICATIONS)
+            }
         }
+    }
+
+    private fun isScreenLockedNow(): Boolean {
+        val powerManager = getSystemService(
+            Context.POWER_SERVICE
+        ) as android.os.PowerManager
+
+        val keyguardManager = getSystemService(
+            Context.KEYGUARD_SERVICE
+        ) as android.app.KeyguardManager
+
+        return !powerManager.isInteractive ||
+            keyguardManager.isKeyguardLocked
     }
 
     private fun handleCancelNotification(notifKey: String?) {

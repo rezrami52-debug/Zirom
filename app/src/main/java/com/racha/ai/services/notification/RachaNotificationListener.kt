@@ -1,11 +1,17 @@
 package com.racha.ai.services.notification
 
+import android.app.KeyguardManager
 import android.app.Notification
+import android.content.Context
 import android.content.Intent
+import android.os.PowerManager
 import android.service.notification.NotificationListenerService
 import android.service.notification.StatusBarNotification
 import android.util.Log
 import com.racha.ai.core.eve.EveBubbleService
+import com.racha.ai.core.eve.EveState
+import com.racha.ai.core.eve.MediaShelfType
+import com.racha.ai.core.preferences.AppPreferences
 import com.racha.ai.data.repository.NotificationRepository
 import com.racha.ai.domain.model.AppNotification
 
@@ -18,28 +24,47 @@ class RachaNotificationListener : NotificationListenerService() {
     override fun onNotificationPosted(sbn: StatusBarNotification?) {
         sbn ?: return
 
-        // تجاهل إشعارات تطبيقنا
         if (sbn.packageName == packageName) return
 
-        // تجاهل الإشعارات المستمرة (مثل مشغلات الوسائط وعدادات التحميل)
         val notification = sbn.notification ?: return
-        if (notification.flags and Notification.FLAG_ONGOING_EVENT != 0) return
+
+        if (notification.flags and Notification.FLAG_ONGOING_EVENT != 0) {
+            return
+        }
 
         val extras = notification.extras ?: return
-        val title = extras.getCharSequence(Notification.EXTRA_TITLE)?.toString() ?: ""
-        val text = extras.getCharSequence(Notification.EXTRA_TEXT)?.toString() ?: ""
+
+        val title = extras
+            .getCharSequence(Notification.EXTRA_TITLE)
+            ?.toString()
+            ?.trim()
+            ?: ""
+
+        val text = extras
+            .getCharSequence(Notification.EXTRA_TEXT)
+            ?.toString()
+            ?.trim()
+            ?: ""
 
         if (title.isBlank() && text.isBlank()) return
 
+        val ignoredApps = setOf(
+            "com.android.systemui",
+            "android",
+            "com.miui.systemui"
+        )
+
+        if (sbn.packageName in ignoredApps) return
+
         val appName = try {
-            val appInfo = packageManager.getApplicationInfo(sbn.packageName, 0)
+            val appInfo = packageManager.getApplicationInfo(
+                sbn.packageName,
+                0
+            )
             packageManager.getApplicationLabel(appInfo).toString()
-        } catch (e: Exception) {
+        } catch (_: Exception) {
             sbn.packageName
         }
-
-        val ignoredApps = setOf("com.android.systemui", "android", "com.miui.systemui")
-        if (sbn.packageName in ignoredApps) return
 
         val appNotification = AppNotification(
             packageName = sbn.packageName,
@@ -49,44 +74,88 @@ class RachaNotificationListener : NotificationListenerService() {
             timestamp = sbn.postTime
         )
 
-        // 1. حفظ في المستودع
         NotificationRepository.add(appNotification)
 
-        // 2. بناء النص الصوتي
-        val speechText = buildSpeechText(appName, title, text)
-        Log.d(TAG, "إرسال إشعار لـ EVE: $speechText")
+        val speechText = buildSpeechText(
+            appName = appName,
+            title = title,
+            text = text
+        )
 
-        // 3. إرسال أمر التنبيه الذكي لـ EVE فقط إذا كانت مفعلة
-        val prefs = com.racha.ai.core.preferences.AppPreferences(this)
-        if (!prefs.isEveBubbleEnabled()) return
+        val prefs = AppPreferences(this)
 
-        val eveIntent = Intent(this, EveBubbleService::class.java).apply {
+        if (!prefs.isEveBubbleEnabled()) {
+            return
+        }
+
+        val screenIsLocked = isScreenLocked()
+
+        val eveIntent = Intent(
+            this,
+            EveBubbleService::class.java
+        ).apply {
             action = EveBubbleService.ACTION_NEW_NOTIFICATION
             putExtra(EveBubbleService.EXTRA_SPEECH_TEXT, speechText)
             putExtra(EveBubbleService.EXTRA_NOTIF_KEY, sbn.key)
+
+            // الشاشة مفتوحة: عرض فقط بدون كلام.
+            putExtra(
+                EveBubbleService.EXTRA_SILENT_NOTIFICATION,
+                !screenIsLocked
+            )
         }
+
         try {
             startService(eveIntent)
+            Log.d(
+                TAG,
+                if (screenIsLocked) {
+                    "إشعار مع نطق لأن الشاشة مغلقة"
+                } else {
+                    "إشعار صامت لأن الشاشة مفتوحة"
+                }
+            )
         } catch (e: Exception) {
-            e.printStackTrace()
+            Log.e(TAG, "فشل إرسال الإشعار إلى EVE", e)
         }
     }
 
     override fun onNotificationRemoved(sbn: StatusBarNotification?) {
         sbn ?: return
-        // إذا قام المستخدم بمسح الإشعار يدوياً، نلغي تنبيه EVE
-        val cancelIntent = Intent(this, EveBubbleService::class.java).apply {
+
+        val cancelIntent = Intent(
+            this,
+            EveBubbleService::class.java
+        ).apply {
             action = EveBubbleService.ACTION_CANCEL_NOTIFICATION
             putExtra(EveBubbleService.EXTRA_NOTIF_KEY, sbn.key)
         }
+
         try {
             startService(cancelIntent)
         } catch (e: Exception) {
-            e.printStackTrace()
+            Log.e(TAG, "فشل إلغاء إشعار EVE", e)
         }
     }
 
-    private fun buildSpeechText(appName: String, title: String, text: String): String {
+    private fun isScreenLocked(): Boolean {
+        val powerManager = getSystemService(
+            Context.POWER_SERVICE
+        ) as PowerManager
+
+        val keyguardManager = getSystemService(
+            Context.KEYGUARD_SERVICE
+        ) as KeyguardManager
+
+        return !powerManager.isInteractive ||
+            keyguardManager.isKeyguardLocked
+    }
+
+    private fun buildSpeechText(
+        appName: String,
+        title: String,
+        text: String
+    ): String {
         val parts = mutableListOf<String>()
 
         val localizedApp = when (appName.lowercase()) {
@@ -102,11 +171,13 @@ class RachaNotificationListener : NotificationListenerService() {
             "twitter", "x" -> "تويتر"
             else -> appName
         }
+
         parts.add("من $localizedApp")
 
         if (title.isNotBlank() && title != appName) {
             parts.add(title)
         }
+
         if (text.isNotBlank() && text != title) {
             parts.add(text)
         }
