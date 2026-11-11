@@ -13,10 +13,6 @@ interface KnowledgeDao {
     @Query("SELECT * FROM knowledge_entries ORDER BY lastUsed DESC")
     fun getAll(): Flow<List<KnowledgeEntity>>
 
-    /**
-     * بحث نصي بسيط في السؤال + الإجابة + الكلمات المفتاحية.
-     * (سيتم تحسينه لاحقاً بـ FTS إذا احتجنا).
-     */
     @Query("""
         SELECT * FROM knowledge_entries
         WHERE question LIKE '%' || :query || '%'
@@ -29,6 +25,9 @@ interface KnowledgeDao {
 
     @Query("SELECT * FROM knowledge_entries WHERE id = :id LIMIT 1")
     suspend fun getById(id: String): KnowledgeEntity?
+
+    @Query("SELECT * FROM knowledge_entries WHERE question = :question LIMIT 1")
+    suspend fun findByQuestion(question: String): KnowledgeEntity?
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insert(entry: KnowledgeEntity)
@@ -45,9 +44,6 @@ interface KnowledgeDao {
     @Query("SELECT COUNT(*) FROM knowledge_entries")
     suspend fun count(): Int
 
-    /**
-     * زيادة hitCount عند الاستخدام.
-     */
     @Query("UPDATE knowledge_entries SET hitCount = hitCount + 1, lastUsed = :now WHERE id = :id")
     suspend fun incrementHit(id: String, now: Long = System.currentTimeMillis())
 }
