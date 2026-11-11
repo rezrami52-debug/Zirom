@@ -813,5 +813,6 @@ class EveBubbleService : Service() {
         const val ACTION_CANCEL_NOTIFICATION = "ACTION_CANCEL_NOTIFICATION"
         const val EXTRA_SPEECH_TEXT = "EXTRA_SPEECH_TEXT"
         const val EXTRA_NOTIF_KEY = "EXTRA_NOTIF_KEY"
+        const val EXTRA_SILENT_NOTIFICATION = "EXTRA_SILENT_NOTIFICATION"
     }
 }
