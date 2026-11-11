@@ -18,6 +18,8 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -27,6 +29,9 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.racha.ai.core.eve.EveAccessibilityService
 import com.racha.ai.core.preferences.AppPreferences
@@ -47,6 +52,7 @@ fun SettingsScreen(
 ) {
     val state by viewModel.uiState.collectAsState()
     val context = LocalContext.current
+    val lifecycleOwner = LocalLifecycleOwner.current
     val faceRepo = remember { FaceAuthRepository(context) }
     var isAppLockActive by remember { mutableStateOf(faceRepo.isFaceAuthEnabled()) }
     val appPrefs = remember { AppPreferences(context) }
@@ -64,6 +70,25 @@ fun SettingsScreen(
     var isMediaPermissionGranted by remember { mutableStateOf(checkMediaPermission(context)) }
     var isShizukuActive by remember { mutableStateOf(checkShizukuStatus()) }
     var isQwenInstalled by remember { mutableStateOf(qwenService.isModelPresent()) }
+
+    LaunchedEffect(Unit) {
+        isShizukuActive = checkShizukuStatus()
+    }
+
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) {
+                isShizukuActive = checkShizukuStatus()
+            }
+        }
+
+        lifecycleOwner.lifecycle.addObserver(observer)
+
+        onDispose {
+            lifecycleOwner.lifecycle.removeObserver(observer)
+        }
+    }
+
 
     var ttsSpeed by remember { mutableFloatStateOf(appPrefs.getTtsSpeed()) }
     var ttsPitch by remember { mutableFloatStateOf(appPrefs.getTtsPitch()) }
