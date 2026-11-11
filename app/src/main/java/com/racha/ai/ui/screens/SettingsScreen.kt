@@ -31,7 +31,7 @@ import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
-import androidx.lifecycle.compose.LocalLifecycleOwner
+import androidx.lifecycle.LifecycleOwner
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.racha.ai.core.eve.EveAccessibilityService
 import com.racha.ai.core.preferences.AppPreferences
@@ -52,7 +52,7 @@ fun SettingsScreen(
 ) {
     val state by viewModel.uiState.collectAsState()
     val context = LocalContext.current
-    val lifecycleOwner = LocalLifecycleOwner.current
+    val lifecycleOwner = context as? LifecycleOwner
     val faceRepo = remember { FaceAuthRepository(context) }
     var isAppLockActive by remember { mutableStateOf(faceRepo.isFaceAuthEnabled()) }
     val appPrefs = remember { AppPreferences(context) }
@@ -76,16 +76,20 @@ fun SettingsScreen(
     }
 
     DisposableEffect(lifecycleOwner) {
-        val observer = LifecycleEventObserver { _, event ->
-            if (event == Lifecycle.Event.ON_RESUME) {
-                isShizukuActive = checkShizukuStatus()
+        if (lifecycleOwner == null) {
+            onDispose { }
+        } else {
+            val observer = LifecycleEventObserver { _, event ->
+                if (event == Lifecycle.Event.ON_RESUME) {
+                    isShizukuActive = checkShizukuStatus()
+                }
             }
-        }
 
-        lifecycleOwner.lifecycle.addObserver(observer)
+            lifecycleOwner.lifecycle.addObserver(observer)
 
-        onDispose {
-            lifecycleOwner.lifecycle.removeObserver(observer)
+            onDispose {
+                lifecycleOwner.lifecycle.removeObserver(observer)
+            }
         }
     }
 
