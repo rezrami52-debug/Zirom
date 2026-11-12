@@ -17,6 +17,9 @@ import com.racha.ai.core.preferences.AppPreferences
 import com.racha.ai.core.security.SecurePreferences
 import com.racha.ai.data.api.GeminiService
 import com.racha.ai.data.llm.QwenService
+import com.racha.ai.data.local.ChatMessageEntity
+import com.racha.ai.data.local.ConversationEntity
+import com.racha.ai.data.local.RachaDatabase
 import com.racha.ai.data.repository.KnowledgeRepository
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -29,6 +32,7 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
+import java.util.UUID
 
 data class ChatMessage(
     val text: String,
@@ -58,6 +62,12 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
     private val selfEvolutionAgent = SelfEvolutionAgent(application)
     private val knowledgeRepo = KnowledgeRepository(application)
 
+    private val rachaDatabase = RachaDatabase.getDatabase(application)
+    private val conversationDao = rachaDatabase.conversationDao()
+    private val chatMessageDao = rachaDatabase.chatMessageDao()
+
+    private var activeConversationId: String? = null
+
     private var pendingLearningTerm: String? = null
     private var originalPendingQuestion: String? = null
 
@@ -71,18 +81,36 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                 hasApiKey = !securePrefs.getApiKey().isNullOrBlank()
             )
         }
+
+        viewModelScope.launch(Dispatchers.IO) {
+            restoreLatestConversation()
+        }
     }
 
     fun startNewChat() {
         _uiState.update {
             it.copy(
                 messages = emptyList(),
-                inputText = ""
+                inputText = "",
+                isLoading = false,
+                pendingChooser = null,
+                pendingSpecialTool = null
             )
         }
 
         pendingLearningTerm = null
         originalPendingQuestion = null
+
+        viewModelScope.launch(Dispatchers.IO) {
+            val conversation = ConversationEntity(
+                id = UUID.randomUUID().toString(),
+                title = "محادثة جديدة",
+                timestamp = System.currentTimeMillis()
+            )
+
+            conversationDao.insertConversation(conversation)
+            activeConversationId = conversation.id
+        }
     }
 
     fun onInputChange(newText: String) {
@@ -102,6 +130,106 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         _uiState.update {
             it.copy(messages = it.messages + message)
         }
+
+        if (!isPersistableChatMessage(message.text)) {
+            return
+        }
+
+        viewModelScope.launch(Dispatchers.IO) {
+            val conversationId = ensureActiveConversation()
+
+            chatMessageDao.insertMessage(
+                ChatMessageEntity(
+                    id = UUID.randomUUID().toString(),
+                    conversationId = conversationId,
+                    text = message.text,
+                    isFromUser = message.isFromUser,
+                    isError = false,
+                    timestamp = System.currentTimeMillis()
+                )
+            )
+
+            if (message.isFromUser) {
+                conversationDao.updateConversationTitle(
+                    id = conversationId,
+                    title = message.text
+                        .replace(Regex("\\s+"), " ")
+                        .trim()
+                        .take(45)
+                )
+            }
+        }
+    }
+
+
+    private suspend fun ensureActiveConversation(): String {
+        activeConversationId?.let { return it }
+
+        val latest = conversationDao
+            .getAllConversations()
+            .first()
+            .firstOrNull()
+
+        if (latest != null) {
+            activeConversationId = latest.id
+            return latest.id
+        }
+
+        val created = ConversationEntity(
+            id = UUID.randomUUID().toString(),
+            title = "محادثة جديدة",
+            timestamp = System.currentTimeMillis()
+        )
+
+        conversationDao.insertConversation(created)
+        activeConversationId = created.id
+        return created.id
+    }
+
+    private suspend fun restoreLatestConversation() {
+        val latest = conversationDao
+            .getAllConversations()
+            .first()
+            .firstOrNull()
+
+        val conversation = latest ?: ConversationEntity(
+            id = UUID.randomUUID().toString(),
+            title = "محادثة جديدة",
+            timestamp = System.currentTimeMillis()
+        ).also {
+            conversationDao.insertConversation(it)
+        }
+
+        activeConversationId = conversation.id
+
+        val savedMessages = chatMessageDao
+            .getMessagesByConversation(conversation.id)
+            .first()
+
+        val restoredMessages = savedMessages.map {
+            ChatMessage(
+                text = it.text,
+                isFromUser = it.isFromUser
+            )
+        }
+
+        _uiState.update {
+            it.copy(messages = restoredMessages)
+        }
+    }
+
+    private fun isPersistableChatMessage(text: String): Boolean {
+        val value = text.trim()
+
+        if (value.isBlank()) return false
+
+        return !value.startsWith("ghp_") &&
+            !value.startsWith("gsk_") &&
+            !value.startsWith("AIza") &&
+            !value.startsWith("github_pat_") &&
+            !value.startsWith("Bearer ") &&
+            !value.startsWith("مفتاح:") &&
+            !value.startsWith("api:")
     }
 
     fun sendMessage() {
