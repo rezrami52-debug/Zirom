@@ -24,6 +24,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -119,6 +120,11 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
 
         if (MemoryLearningPolicy.isLearningTrigger(trimmed)) {
             toggleScreenLearningMode()
+            return
+        }
+
+        if (isShowLearnedMemoryCommand(trimmed)) {
+            showLearnedScreenMemory()
             return
         }
 
@@ -661,6 +667,74 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
 
         _uiState.update {
             it.copy(pendingChooser = null)
+        }
+    }
+
+
+    private fun isShowLearnedMemoryCommand(text: String): Boolean {
+        val normalized = text
+            .trim()
+            .lowercase()
+            .replace(Regex("[ًٌٍَُِّْـ]"), "")
+            .replace(Regex("\\s+"), " ")
+
+        return normalized == "اعرضي ما تعلمت" ||
+            normalized == "اعرضي ماذا تعلمت" ||
+            normalized == "ماذا تعلمت" ||
+            normalized == "ما تعلمت" ||
+            normalized == "اعرضي ما تعلمتي"
+    }
+
+    private fun showLearnedScreenMemory() {
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                val memories = knowledgeRepo
+                    .getAll()
+                    .first()
+                    .filter { it.source == "screen_learning" }
+                    .take(10)
+
+                if (memories.isEmpty()) {
+                    appendMessage(
+                        ChatMessage(
+                            text = "لم أحفظ أي معلومات من متابعة الشاشة حتى الآن.",
+                            isFromUser = false
+                        )
+                    )
+                    return@launch
+                }
+
+                val builder = StringBuilder()
+                builder.append("🧠 المعلومات التي تعلمتها من الشاشة:\\n\\n")
+
+                memories.forEachIndexed { index, memory ->
+                    builder.append("${index + 1}. ")
+                    builder.append(memory.answer.take(500))
+                    builder.append("\\n\\n")
+                }
+
+                builder.append("المجموع المعروض: ${memories.size}")
+
+                appendMessage(
+                    ChatMessage(
+                        text = builder.toString().trim(),
+                        isFromUser = false
+                    )
+                )
+            } catch (e: Exception) {
+                android.util.Log.e(
+                    "ChatViewModel",
+                    "فشل عرض ذاكرة الشاشة",
+                    e
+                )
+
+                appendMessage(
+                    ChatMessage(
+                        text = "تعذر قراءة الذاكرة المحلية الآن.",
+                        isFromUser = false
+                    )
+                )
+            }
         }
     }
 
