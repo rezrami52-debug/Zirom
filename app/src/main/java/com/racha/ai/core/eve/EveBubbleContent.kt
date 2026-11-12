@@ -814,6 +814,8 @@ fun EveStandaloneShelfWindow(
                         var zoomScale by remember(currentItem.uri) { mutableFloatStateOf(1f) }
                         var panOffsetX by remember(currentItem.uri) { mutableFloatStateOf(0f) }
                         var panOffsetY by remember(currentItem.uri) { mutableFloatStateOf(0f) }
+                        var horizontalSwipe by remember(currentItem.uri) { mutableFloatStateOf(0f) }
+                        var showPhotoOptions by remember(currentItem.uri) { mutableStateOf(false) }
 
                         Column(modifier = Modifier.weight(1f).fillMaxWidth()) {
                             Box(
@@ -822,15 +824,41 @@ fun EveStandaloneShelfWindow(
                                     .fillMaxWidth()
                                     .clip(RoundedCornerShape(12.dp))
                                     .background(Color.Black)
-                                    .pointerInput(currentItem.uri) {
+                                    .pointerInput(currentItem.uri, currentIndex) {
                                         detectTransformGestures { _, pan, zoom, _ ->
+                                            val wasZoomed = zoomScale > 1.05f
+
                                             zoomScale = (zoomScale * zoom).coerceIn(1f, 5f)
-                                            if (zoomScale > 1f) {
+
+                                            if (zoomScale > 1.05f || wasZoomed) {
                                                 panOffsetX += pan.x * zoomScale
                                                 panOffsetY += pan.y * zoomScale
+                                                horizontalSwipe = 0f
                                             } else {
+                                                zoomScale = 1f
                                                 panOffsetX = 0f
                                                 panOffsetY = 0f
+
+                                                if (kotlin.math.abs(pan.x) > kotlin.math.abs(pan.y)) {
+                                                    horizontalSwipe += pan.x
+
+                                                    if (kotlin.math.abs(horizontalSwipe) >= 120f) {
+                                                        val targetIndex =
+                                                            if (horizontalSwipe < 0f) {
+                                                                currentIndex + 1
+                                                            } else {
+                                                                currentIndex - 1
+                                                            }
+
+                                                        if (targetIndex in mediaItems.indices) {
+                                                            activePreviewItem = mediaItems[targetIndex]
+                                                        }
+
+                                                        horizontalSwipe = 0f
+                                                    }
+                                                } else {
+                                                    horizontalSwipe = 0f
+                                                }
                                             }
                                         }
                                     },
