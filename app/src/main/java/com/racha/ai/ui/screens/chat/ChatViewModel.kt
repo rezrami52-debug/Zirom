@@ -12,6 +12,8 @@ import com.racha.ai.core.command.RachaCommandRouter
 import com.racha.ai.core.contacts.ContactResolver
 import com.racha.ai.core.context.LocationIntentHandler
 import com.racha.ai.core.eve.EveAccessibilityService
+import com.racha.ai.core.eve.EveState
+import com.racha.ai.core.eve.MediaShelfType
 import com.racha.ai.core.memory.MemoryLearningPolicy
 import com.racha.ai.core.preferences.AppPreferences
 import com.racha.ai.core.security.SecurePreferences
@@ -398,6 +400,55 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                     _uiState.update { it.copy(isLoading = false) }
                 }
             }
+            return
+        }
+
+        // تنفيذ أوامر الوسائط مباشرة حتى لا تذهب إلى نموذج الذكاء الاصطناعي
+        // أو تتوقف عند IntentHandler إذا اختلفت صياغة الأمر.
+        val normalizedMediaCommand = trimmed
+            .lowercase()
+            .replace(Regex("[ًٌٍَُِّْـ]"), "")
+            .replace(Regex("\\s+"), " ")
+            .trim()
+
+        val isTvCommand =
+            normalizedMediaCommand.contains("تلفاز") ||
+                normalizedMediaCommand.contains("تلفزيون") ||
+                normalizedMediaCommand.contains("تلفزة") ||
+                normalizedMediaCommand.contains("قنوات") ||
+                normalizedMediaCommand.contains("iptv") ||
+                normalizedMediaCommand.contains("بث مباشر")
+
+        if (centralCommand is RachaCommand.OpenPhotos) {
+            EveState.openShelf(MediaShelfType.PHOTOS)
+            appendMessage(
+                ChatMessage(
+                    text = "🖼️ تفضل يا رمزي، تم فتح ألبوم الصور في نافذة عائمة.",
+                    isFromUser = false
+                )
+            )
+            return
+        }
+
+        if (centralCommand is RachaCommand.OpenVideos) {
+            EveState.openShelf(MediaShelfType.VIDEOS)
+            appendMessage(
+                ChatMessage(
+                    text = "📽️ تفضل يا رمزي، تم فتح مقاطع الفيديو في نافذة عائمة.",
+                    isFromUser = false
+                )
+            )
+            return
+        }
+
+        if (isTvCommand) {
+            EveState.openShelf(MediaShelfType.LIVE_TV)
+            appendMessage(
+                ChatMessage(
+                    text = "📺 تفضل يا رمزي، تم فتح التلفاز والبث المباشر في نافذة عائمة.",
+                    isFromUser = false
+                )
+            )
             return
         }
 
