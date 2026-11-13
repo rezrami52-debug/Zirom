@@ -349,7 +349,7 @@ fun EveStandaloneShelfWindow(
                  (selectedCategory == "أفلام" && (ch.category == "أفلام" || ch.name.lowercase().contains("cinema") || ch.name.contains("سينما"))) ||
                  (selectedCategory == "رياضة" && ch.country.contains("رياض", ignoreCase = true))) &&
                 (q.isBlank() || ch.name.lowercase().contains(q))
-            }.take(100).toList()
+            }.toList()
         }
     }
 
