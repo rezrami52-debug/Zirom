@@ -37,6 +37,7 @@ import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
@@ -331,6 +332,9 @@ fun EveStandaloneShelfWindow(
     var selectedCategory by remember { mutableStateOf("الكل") }
     var tvSearchQuery by remember { mutableStateOf("") }
 
+    // حفظ موضع قائمة القنوات عند فتح قناة ثم العودة للقائمة
+    val tvListState = rememberLazyListState()
+
     val tvChannels by produceState<List<TvChannel>>(initialValue = emptyList(), shelfType) {
         if (shelfType == MediaShelfType.LIVE_TV) {
             value = withContext(Dispatchers.IO) { iptvManager.getAllChannels() }
@@ -452,6 +456,12 @@ fun EveStandaloneShelfWindow(
                 if (shelfType == MediaShelfType.LIVE_TV) {
                     if (activeTvChannel != null) {
                         val currentCh = activeTvChannel
+                        val currentChannelIndex = filteredTvChannels.indexOfFirst {
+                            it.id == currentCh.id && it.streamUrl == currentCh.streamUrl
+                        }
+                        val previousChannel = filteredTvChannels.getOrNull(currentChannelIndex - 1)
+                        val nextChannel = filteredTvChannels.getOrNull(currentChannelIndex + 1)
+
                         var isTvPlaying by remember { mutableStateOf(true) }
 
                         val exoPlayer = remember(currentCh.streamUrl) {
@@ -520,6 +530,79 @@ fun EveStandaloneShelfWindow(
 
                                 if (isTvLoading) {
                                     CircularProgressIndicator(color = Color(0xFF00E5FF), modifier = Modifier.size(36.dp))
+                                }
+                            }
+
+                            Spacer(modifier = Modifier.height(4.dp))
+
+                            // التنقل بين القنوات دون العودة إلى القائمة
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clip(RoundedCornerShape(10.dp))
+                                    .background(Color(0xFF0F172A))
+                                    .padding(horizontal = 8.dp, vertical = 3.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                IconButton(
+                                    onClick = {
+                                        previousChannel?.let { EveState.setActiveTvChannel(it) }
+                                    },
+                                    enabled = previousChannel != null,
+                                    modifier = Modifier.size(34.dp)
+                                ) {
+                                    Icon(
+                                        Icons.Default.SkipPrevious,
+                                        contentDescription = "القناة السابقة",
+                                        tint = if (previousChannel != null) {
+                                            Color(0xFF00E5FF)
+                                        } else {
+                                            Color.DarkGray
+                                        },
+                                        modifier = Modifier.size(21.dp)
+                                    )
+                                }
+
+                                Column(
+                                    horizontalAlignment = Alignment.CenterHorizontally,
+                                    modifier = Modifier.weight(1f)
+                                ) {
+                                    Text(
+                                        text = currentCh.name,
+                                        color = Color.White,
+                                        fontSize = 10.sp,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis
+                                    )
+                                    Text(
+                                        text = if (currentChannelIndex >= 0) {
+                                            "${currentChannelIndex + 1} / ${filteredTvChannels.size}"
+                                        } else {
+                                            ""
+                                        },
+                                        color = Color.Gray,
+                                        fontSize = 9.sp
+                                    )
+                                }
+
+                                IconButton(
+                                    onClick = {
+                                        nextChannel?.let { EveState.setActiveTvChannel(it) }
+                                    },
+                                    enabled = nextChannel != null,
+                                    modifier = Modifier.size(34.dp)
+                                ) {
+                                    Icon(
+                                        Icons.Default.SkipNext,
+                                        contentDescription = "القناة التالية",
+                                        tint = if (nextChannel != null) {
+                                            Color(0xFF00E5FF)
+                                        } else {
+                                            Color.DarkGray
+                                        },
+                                        modifier = Modifier.size(21.dp)
+                                    )
                                 }
                             }
 
@@ -633,6 +716,7 @@ fun EveStandaloneShelfWindow(
                                 }
                             } else {
                                 LazyColumn(
+                                    state = tvListState,
                                     modifier = Modifier.weight(1f).fillMaxWidth(),
                                     verticalArrangement = Arrangement.spacedBy(4.dp)
                                 ) {
