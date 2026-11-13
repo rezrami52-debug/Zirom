@@ -359,32 +359,77 @@ class EveBubbleService : Service() {
         }
     }
 
-    // زر تكبير ملء الشاشة الفوري بلمسة واحدة دون سحب
+    // التبديل بين أربع درجات لحجم نافذة الوسائط
     private fun toggleShelfFullscreen(type: MediaShelfType) {
         activeShelfWindows[type]?.let { holder ->
             val dm = resources.displayMetrics
-            val defaultW = (280 * dm.density).toInt()
-            val defaultH = (380 * dm.density).toInt()
-            val maxW = dm.widthPixels - 20
-            val maxH = dm.heightPixels - 120
+            val density = dm.density
 
-            if (holder.layoutParams.width > defaultW + 60) {
-                holder.layoutParams.width = defaultW
-                holder.layoutParams.height = defaultH
-                holder.layoutParams.x = (50 * dm.density).toInt()
-                holder.layoutParams.y = (150 * dm.density).toInt()
-            } else {
-                holder.layoutParams.width = maxW
-                holder.layoutParams.height = maxH
+            val normalW = (290 * density).toInt()
+            val normalH = (390 * density).toInt()
+
+            val screenW = dm.widthPixels
+            val screenH = dm.heightPixels
+
+            val availableW = (screenW - 20).coerceAtLeast(normalW)
+            val availableH = (screenH - 120).coerceAtLeast(normalH)
+
+            val mediumW = (screenW * 0.58f).toInt()
+            val mediumH = (availableH * 0.58f).toInt()
+
+            val largeW = (screenW * 0.78f).toInt()
+            val largeH = (availableH * 0.78f).toInt()
+
+            val fullscreenW = availableW
+            val fullscreenH = availableH
+
+            val currentW = holder.layoutParams.width
+
+            val nextSize = when {
+                currentW <= normalW + 40 -> {
+                    // المستوى الثاني: تكبير متوسط
+                    intArrayOf(mediumW, mediumH)
+                }
+
+                currentW <= mediumW + 40 -> {
+                    // المستوى الثالث: تكبير كبير
+                    intArrayOf(largeW, largeH)
+                }
+
+                currentW <= largeW + 40 -> {
+                    // المستوى الرابع: ملء الشاشة
+                    intArrayOf(fullscreenW, fullscreenH)
+                }
+
+                else -> {
+                    // العودة إلى الحجم الطبيعي
+                    intArrayOf(normalW, normalH)
+                }
+            }
+
+            val newW = nextSize[0]
+            val newH = nextSize[1]
+
+            holder.layoutParams.width = newW
+            holder.layoutParams.height = newH
+
+            if (newW >= fullscreenW - 30 && newH >= fullscreenH - 30) {
                 holder.layoutParams.x = 10
                 holder.layoutParams.y = 70
+            } else {
+                holder.layoutParams.x = ((screenW - newW) / 2).coerceAtLeast(10)
+                holder.layoutParams.y = ((screenH - newH) / 2).coerceAtLeast(70)
             }
+
             try {
-                windowManager.updateViewLayout(holder.view, holder.layoutParams)
-            } catch (_: Exception) {}
+                windowManager.updateViewLayout(
+                    holder.view,
+                    holder.layoutParams
+                )
+            } catch (_: Exception) {
+            }
         }
     }
-
     private fun updateShelfPosition(type: MediaShelfType, dx: Float, dy: Float) {
         activeShelfWindows[type]?.let { holder ->
             holder.layoutParams.x += dx.roundToInt()
