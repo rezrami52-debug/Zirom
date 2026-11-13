@@ -101,12 +101,42 @@ class IptvManager(private val context: Context) {
         val result = mutableListOf<TvChannel>()
         result.addAll(builtInChannels)
 
-        val customFile = listOf(File(CUSTOM_M3U_PATH), File(CUSTOM_M3U_ALT)).firstOrNull { it.exists() && it.length() > 50 }
-        if (customFile != null) {
+        val externalIptvDirectory = File(
+            context.getExternalFilesDir(null),
+            "iptv"
+        )
+
+        val playlistFiles = buildList {
+            add(File(CUSTOM_M3U_PATH))
+            add(File(CUSTOM_M3U_ALT))
+
+            if (externalIptvDirectory.exists()) {
+                externalIptvDirectory
+                    .listFiles()
+                    ?.filter { file ->
+                        file.isFile &&
+                            file.length() > 50 &&
+                            (
+                                file.extension.equals("m3u", ignoreCase = true) ||
+                                file.extension.equals("m3u8", ignoreCase = true)
+                            )
+                    }
+                    ?.let { addAll(it) }
+            }
+        }.distinctBy { it.absolutePath }
+
+        for (playlistFile in playlistFiles) {
             try {
-                val parsed = parseM3uContent(customFile.readText())
+                if (!playlistFile.exists() || playlistFile.length() <= 50) {
+                    continue
+                }
+
+                val parsed = parseM3uContent(
+                    playlistFile.readText(Charsets.UTF_8)
+                )
+
                 if (parsed.isNotEmpty()) {
-                    result.addAll(0, parsed)
+                    result.addAll(parsed)
                 }
             } catch (e: Exception) {
                 e.printStackTrace()
@@ -114,6 +144,10 @@ class IptvManager(private val context: Context) {
         }
 
         result
+            .filter { it.name.isNotBlank() && it.streamUrl.isNotBlank() }
+            .distinctBy { channel ->
+                channel.name.lowercase() + "|" + channel.streamUrl
+            }
     }
 
     fun parseM3uContent(content: String): List<TvChannel> {
