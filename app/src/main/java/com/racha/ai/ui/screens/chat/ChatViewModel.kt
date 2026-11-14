@@ -18,6 +18,7 @@ import com.racha.ai.core.memory.MemoryLearningPolicy
 import com.racha.ai.core.preferences.AppPreferences
 import com.racha.ai.core.security.SecurePreferences
 import com.racha.ai.data.api.GeminiService
+import com.racha.ai.core.memory.SmartScreenProcessor
 import com.racha.ai.data.llm.QwenService
 import com.racha.ai.data.local.ChatMessageEntity
 import com.racha.ai.data.local.ConversationEntity
@@ -573,7 +574,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                     ?: continue
 
                 val safeText = MemoryLearningPolicy.cleanForMemory(
-                    snapshot.visibleText
+                    SmartScreenProcessor.cleanAndFormat(snapshot.visibleText)
                 )
 
                 if (safeText.isBlank()) continue
