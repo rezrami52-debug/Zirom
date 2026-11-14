@@ -20,6 +20,9 @@ import kotlinx.coroutines.launch
 import com.racha.ai.ui.navigation.RachaApp
 import com.racha.ai.ui.theme.RachaTheme
 
+
+private const val SHIZUKU_REQUEST_CODE = 1001
+
 class MainActivity : ComponentActivity() {
 
     private val requestNotificationPermission = registerForActivityResult(
@@ -32,17 +35,46 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+
+    private fun ensureShizukuPermission() {
+        try {
+            if (!Shizuku.pingBinder()) {
+                return
+            }
+
+            if (
+                Shizuku.checkSelfPermission() !=
+                PackageManager.PERMISSION_GRANTED
+            ) {
+                Shizuku.requestPermission(SHIZUKU_REQUEST_CODE)
+            }
+        } catch (_: Throwable) {
+        }
+    }
+
+    override fun onResume() {
+        super.onResume()
+        ensureShizukuPermission()
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        // تفعيل مستمع Shizuku التلقائي
+        // تهيئة Shizuku وطلب الصلاحية عند توفر Binder
         try {
             Shizuku.addBinderReceivedListenerSticky {
-                if (Shizuku.checkSelfPermission() != PackageManager.PERMISSION_GRANTED) {
-                    Shizuku.requestPermission(1001)
+                runOnUiThread {
+                    ensureShizukuPermission()
                 }
             }
-        } catch (_: Throwable) {}
+
+            // مهم: إذا كانت خدمة Shizuku تعمل قبل فتح Racha
+            // فلن يكفي مستمع Binder وحده، لذلك نفحصها فوراً.
+            if (Shizuku.pingBinder()) {
+                ensureShizukuPermission()
+            }
+        } catch (_: Throwable) {
+        }
 
 
         // طلب إذن الإشعارات (Android 13+)
