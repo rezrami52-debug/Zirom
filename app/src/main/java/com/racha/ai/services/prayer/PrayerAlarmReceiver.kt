@@ -7,7 +7,6 @@ import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
-import android.media.AudioAttributes
 import android.os.Build
 import android.os.PowerManager
 import android.util.Log
@@ -59,11 +58,8 @@ class PrayerAlarmReceiver : BroadcastReceiver() {
                 ).apply {
                     description = "إشعارات مواقيت الصلاة والأذان"
                     enableVibration(true)
-                    val audioAttributes = AudioAttributes.Builder()
-                        .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
-                        .setUsage(AudioAttributes.USAGE_ALARM)
-                        .build()
-                    setSound(android.provider.Settings.System.DEFAULT_ALARM_ALERT_URI, audioAttributes)
+                    // ✅ التعديل الجراحي: إلغاء صوت النظام لمنع التضارب، والاعتماد على TTS فقط
+                    setSound(null, null)
                 }
                 manager.createNotificationChannel(channel)
             }
@@ -92,13 +88,12 @@ class PrayerAlarmReceiver : BroadcastReceiver() {
 
         Log.d(TAG, "استلام تنبيه صلاة: $prayerName (pre=$isPreAlert)")
 
-        // حجز WakeLock مؤقت لمنع المعالج من النوم حتى ينتهي الصوت
         val powerManager = context.getSystemService(Context.POWER_SERVICE) as? PowerManager
         val wakeLock = powerManager?.newWakeLock(
             PowerManager.PARTIAL_WAKE_LOCK,
             "racha:prayer_alarm_wakelock"
         )
-        wakeLock?.acquire(15000L) // 15 ثانية كافية
+        wakeLock?.acquire(15000L)
 
         try {
             val prayerKey = PrayerMessagesProvider.getPrayerKey(prayerName)
@@ -113,10 +108,10 @@ class PrayerAlarmReceiver : BroadcastReceiver() {
             else
                 "🕌 حان وقت صلاة $prayerName"
 
-            // 1. إرسال الإشعار
+            // 1. إرسال الإشعار (بدون صوت نظام مزعج)
             sendNotification(context, title, content, prayerName.hashCode())
 
-            // 2. القراءة الصوتية
+            // 2. القراءة الصوتية الواضحة عبر التطبيق (Jarvis Style)
             TextToSpeechHelper.initialize(context.applicationContext)
             val speechText = if (isPreAlert)
                 "اقترب وقت صلاة $prayerName. توضّأ واستعد."
