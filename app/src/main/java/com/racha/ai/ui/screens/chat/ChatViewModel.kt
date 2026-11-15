@@ -77,6 +77,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
 
     private var screenLearningJob: Job? = null
     private var lastLearnedScreenText: String? = null
+    private var lastScreenAnalysisAt: Long = 0L
 
     init {
         _uiState.update {
@@ -576,20 +577,99 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                     ?.getLatestScreenSnapshot()
                     ?: continue
 
-                val safeText = SmartScreenProcessor.cleanAndFormat(snapshot.visibleText)
+                val safeText = SmartScreenProcessor.cleanAndFormat(
+                    snapshot.visibleText
+                )
 
-                if (safeText.isBlank()) continue
-                if (safeText == lastLearnedScreenText) continue
+                if (!SmartScreenProcessor.isWorthAnalyzing(safeText)) {
+                    continue
+                }
+
+                if (SmartScreenProcessor.containsSensitiveData(safeText)) {
+                    continue
+                }
+
+                if (safeText == lastLearnedScreenText) {
+                    continue
+                }
+
+                val now = System.currentTimeMillis()
+
+                if (now - lastScreenAnalysisAt < 8_000L) {
+                    continue
+                }
 
                 lastLearnedScreenText = safeText
+                lastScreenAnalysisAt = now
 
-                knowledgeRepo.saveOrUpdate(
-                    question = "محتوى شاشة ${snapshot.appName} ${safeText.hashCode()}",
-                    answer = safeText,
-                    topic = "تعلم من الشاشة",
-                    keywords = "${snapshot.appName},${snapshot.packageName}",
-                    source = "screen_learning"
-                )
+                val screenPrompt = """
+                    حلّل محتوى الشاشة التالي بهدف التعلم طويل المدى.
+
+                    التطبيق: ${snapshot.appName}
+                    الحزمة: ${snapshot.packageName}
+
+                    المحتوى:
+                    $safeText
+
+                    أعد النتيجة بهذه الصيغة فقط:
+                    مفيد: نعم أو لا
+                    العنوان: عنوان قصير للمعلومة
+                    المعلومة: شرح عربي واضح ومختصر
+                    الموضوع: تصنيف المعلومة
+                    الكلمات: كلمات مفتاحية مفصولة بفواصل
+
+                    القواعد:
+                    - أجب بمفيد: لا إذا كان المحتوى مجرد أزرار أو إشعار عابر أو قائمة مؤقتة.
+                    - لا تحفظ كلمات المرور أو مفاتيح API أو الرموز السرية أو البيانات الشخصية.
+                    - تجاهل كلمات مثل رجوع، إلغاء، مشاركة، فتح، إغلاق.
+                    - لا تنقل النص حرفيًا؛ افهمه وأعد صياغته بالعربية.
+                    - إذا لم توجد معلومة قابلة للتعلم، أعد مفيد: لا فقط.
+                """.trimIndent()
+
+                val memory = try {
+                    val analysis = withTimeout(25_000L) {
+                        qwenService.generateResponse(screenPrompt)
+                    }
+
+                    SmartScreenProcessor.parseScreenMemory(analysis)
+                } catch (e: Exception) {
+                    android.util.Log.e(
+                        "ChatViewModel",
+                        "فشل تحليل الشاشة للتعلم",
+                        e
+                    )
+                    null
+                }
+
+                if (memory != null) {
+                    val memoryKey = "screen:${snapshot.packageName}:${memory.title}"
+                        .lowercase()
+                        .replace(Regex("\\s+"), "_")
+                        .take(220)
+
+                    val structuredAnswer = buildString {
+                        append("العنوان: ")
+                        append(memory.title)
+                        append("\nالتطبيق: ")
+                        append(snapshot.appName)
+                        append("\nالموضوع: ")
+                        append(memory.topic)
+                        append("\nالمعلومة: ")
+                        append(memory.information)
+                    }
+
+                    knowledgeRepo.saveOrUpdate(
+                        question = memoryKey,
+                        answer = structuredAnswer,
+                        topic = memory.topic,
+                        keywords = listOf(
+                            snapshot.appName,
+                            snapshot.packageName,
+                            memory.keywords
+                        ).joinToString(","),
+                        source = "screen_learning"
+                    )
+                }
             }
         }
     }
@@ -872,13 +952,15 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                 val memories = knowledgeRepo
                     .getAll()
                     .first()
-                    .filter { it.source == "screen_learning" }
+                    .filter { memory ->
+                        memory.source == "screen_learning"
+                    }
                     .take(10)
 
                 if (memories.isEmpty()) {
                     appendMessage(
                         ChatMessage(
-                            text = "لم أحفظ أي معلومات من متابعة الشاشة حتى الآن.",
+                            text = "لم أحفظ أي معلومات مفهومة من متابعة الشاشة حتى الآن.",
                             isFromUser = false
                         )
                     )
@@ -886,12 +968,12 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                 }
 
                 val builder = StringBuilder()
-                builder.append("🧠 المعلومات التي تعلمتها من الشاشة:\\n\\n")
+                builder.append("🧠 المعلومات التي فهمتها من الشاشة:\n\n")
 
                 memories.forEachIndexed { index, memory ->
                     builder.append("${index + 1}. ")
-                    builder.append(memory.answer.take(500))
-                    builder.append("\\n\\n")
+                    builder.append(memory.answer.take(700))
+                    builder.append("\n\n")
                 }
 
                 builder.append("المجموع المعروض: ${memories.size}")
