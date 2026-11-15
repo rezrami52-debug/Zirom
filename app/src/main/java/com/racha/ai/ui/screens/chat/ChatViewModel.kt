@@ -576,7 +576,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                     ?.getLatestScreenSnapshot()
                     ?: continue
 
-                val safeText = MemoryLearningPolicy.cleanForMemory(
+                val safeText = 
                     SmartScreenProcessor.cleanAndFormat(snapshot.visibleText)
                 )
 

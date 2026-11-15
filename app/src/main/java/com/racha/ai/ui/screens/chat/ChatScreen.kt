@@ -167,6 +167,7 @@ fun ChatScreen(
                 onAvatarClick = { launchEveBubble() },
                 onOpenMenu = { isDrawerOpen = true },
                 onNewChat = { viewModel.startNewChat() },
+                isLearning = state.isScreenLearningActive,
                 isLearning = state.isScreenLearningActive
             )
 
