@@ -114,6 +114,16 @@ class KnowledgeRepository(context: Context) {
         dao.deleteById(id)
     }
 
+
+    suspend fun deleteScreenLearningMemories() {
+        try {
+            dao.deleteBySource("screen_learning")
+            Log.d(TAG, "تم حذف ذكريات الشاشة فقط")
+        } catch (e: Exception) {
+            Log.e(TAG, "فشل حذف ذكريات الشاشة", e)
+        }
+    }
+
     suspend fun deleteAll() {
         dao.deleteAll()
     }

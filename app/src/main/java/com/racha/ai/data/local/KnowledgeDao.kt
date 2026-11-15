@@ -41,6 +41,10 @@ interface KnowledgeDao {
     @Query("DELETE FROM knowledge_entries")
     suspend fun deleteAll()
 
+
+    @Query("DELETE FROM knowledge_entries WHERE source = :source")
+    suspend fun deleteBySource(source: String)
+
     @Query("SELECT COUNT(*) FROM knowledge_entries")
     suspend fun count(): Int
 

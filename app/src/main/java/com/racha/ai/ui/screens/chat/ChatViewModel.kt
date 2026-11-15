@@ -256,6 +256,12 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
             return
         }
 
+
+        if (isClearScreenMemoryCommand(trimmed)) {
+            clearScreenLearningMemories()
+            return
+        }
+
         if (isShowLearnedMemoryCommand(trimmed)) {
             showLearnedScreenMemory()
             return
@@ -944,6 +950,48 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
             normalized == "ماذا تعلمت" ||
             normalized == "ما تعلمت" ||
             normalized == "اعرضي ما تعلمتي"
+    }
+
+
+    private fun isClearScreenMemoryCommand(text: String): Boolean {
+        val normalized = text
+            .trim()
+            .lowercase()
+            .replace(Regex("[ًٌٍَُِّْـ]"), "")
+            .replace(Regex("\\s+"), " ")
+
+        return normalized == "امسحي ذاكرة الشاشة القديمة" ||
+            normalized == "امسحي ذاكرة الشاشة" ||
+            normalized == "احذفي ذاكرة الشاشة القديمة" ||
+            normalized == "احذفي ذكريات الشاشة"
+    }
+
+    private fun clearScreenLearningMemories() {
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                knowledgeRepo.deleteScreenLearningMemories()
+
+                appendMessage(
+                    ChatMessage(
+                        text = "تم حذف ذكريات الشاشة القديمة فقط. المحادثات وبقية الذاكرة لم تتأثر.",
+                        isFromUser = false
+                    )
+                )
+            } catch (e: Exception) {
+                android.util.Log.e(
+                    "ChatViewModel",
+                    "فشل حذف ذكريات الشاشة",
+                    e
+                )
+
+                appendMessage(
+                    ChatMessage(
+                        text = "تعذر حذف ذكريات الشاشة حاليًا.",
+                        isFromUser = false
+                    )
+                )
+            }
+        }
     }
 
     private fun showLearnedScreenMemory() {
