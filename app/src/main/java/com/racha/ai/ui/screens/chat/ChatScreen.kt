@@ -166,7 +166,8 @@ fun ChatScreen(
                 unreadCount = unreadCount,
                 onAvatarClick = { launchEveBubble() },
                 onOpenMenu = { isDrawerOpen = true },
-                onNewChat = { viewModel.startNewChat() }
+                onNewChat = { viewModel.startNewChat() },
+                isLearning = state.isScreenLearningActive
             )
 
         // 3. بطاقة الطقس ومواقيت الصلاة
@@ -292,7 +293,8 @@ fun TopBarRacha(
     unreadCount: Int,
     onAvatarClick: () -> Unit,
     onOpenMenu: () -> Unit,
-    onNewChat: () -> Unit
+    onNewChat: () -> Unit,
+    isLearning: Boolean = false
 ) {
     Surface(
         modifier = Modifier
@@ -323,10 +325,10 @@ fun TopBarRacha(
                     Canvas(modifier = Modifier.size(24.dp, 32.dp)) {
                         drawEveOriginalStyle(
                             glow = 1.0f,
-                            isSleeping = !state.isScreenLearningActive,
+                            isSleeping = !isLearning,
                             eyeHeightScale = 1.0f,
                             isNotifying = false,
-                            speaking = state.isScreenLearningActive
+                            speaking = isLearning
                         )
                     }
                 }
