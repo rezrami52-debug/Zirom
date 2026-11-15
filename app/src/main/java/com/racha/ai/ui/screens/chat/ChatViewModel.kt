@@ -48,7 +48,8 @@ data class ChatUiState(
     val isLoading: Boolean = false,
     val hasApiKey: Boolean = false,
     val pendingSpecialTool: String? = null,
-    val pendingChooser: IntentHandler.HandlerResult.ShowChooser? = null
+    val pendingChooser: IntentHandler.HandlerResult.ShowChooser? = null,
+    val isScreenLearningActive: Boolean = false
 )
 
 class ChatViewModel(application: Application) : AndroidViewModel(application) {
@@ -548,6 +549,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
             screenLearningJob?.cancel()
             screenLearningJob = null
             lastLearnedScreenText = null
+            _uiState.update { it.copy(isScreenLearningActive = false) }
 
             appendMessage(
                 ChatMessage(
@@ -565,6 +567,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
             )
         )
 
+        _uiState.update { it.copy(isScreenLearningActive = true) }
         screenLearningJob = viewModelScope.launch(Dispatchers.IO) {
             while (true) {
                 delay(2500L)

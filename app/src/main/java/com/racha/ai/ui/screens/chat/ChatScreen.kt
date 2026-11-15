@@ -323,10 +323,10 @@ fun TopBarRacha(
                     Canvas(modifier = Modifier.size(24.dp, 32.dp)) {
                         drawEveOriginalStyle(
                             glow = 1.0f,
-                            isSleeping = false,
+                            isSleeping = !state.isScreenLearningActive,
                             eyeHeightScale = 1.0f,
                             isNotifying = false,
-                            speaking = false
+                            speaking = state.isScreenLearningActive
                         )
                     }
                 }
