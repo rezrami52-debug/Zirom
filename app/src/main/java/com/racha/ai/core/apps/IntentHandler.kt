@@ -261,12 +261,8 @@ class IntentHandler(
             IntentClassifier.IntentType.SET_ALARM -> handleSetAlarm(text)
             IntentClassifier.IntentType.CORRECTION -> HandlerResult.NeedsCorrection(text)
             else -> {
-                val dynamicRes = dynamicActionRunner.tryExecuteDynamicAction(text)
-                if (dynamicRes != null && dynamicRes.success) {
-                    HandlerResult.DirectReply(dynamicRes.feedback)
-                } else {
-                    handleAdvancedCommands(text)
-                }
+                // تنفيذ أوامر Shell المولدة من الذكاء الاصطناعي معطّل مؤقتاً.
+                handleAdvancedCommands(text)
             }
         }
     }
