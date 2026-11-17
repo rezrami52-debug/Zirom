@@ -16,7 +16,7 @@ import androidx.sqlite.db.SupportSQLiteDatabase
         KnowledgeEntity::class,
         LockAttemptEntity::class
     ],
-    version = 2,
+    version = 3,
     exportSchema = false
 )
 abstract class RachaDatabase : RoomDatabase() {
@@ -30,6 +30,12 @@ abstract class RachaDatabase : RoomDatabase() {
 
     companion object {
         private const val DATABASE_NAME = "racha_database"
+
+        private val MIGRATION_2_3 = object : Migration(2, 3) {
+            override fun migrate(database: SupportSQLiteDatabase) {
+                database.execSQL("ALTER TABLE chat_messages ADD COLUMN imagePath TEXT")
+            }
+        }
 
         private val MIGRATION_1_2 = object : Migration(1, 2) {
             override fun migrate(
@@ -133,7 +139,7 @@ abstract class RachaDatabase : RoomDatabase() {
                     RachaDatabase::class.java,
                     DATABASE_NAME
                 )
-                    .addMigrations(MIGRATION_1_2)
+                    .addMigrations(MIGRATION_1_2, MIGRATION_2_3)
                     .build()
                     .also { INSTANCE = it }
             }

@@ -32,6 +32,8 @@ import android.speech.tts.TextToSpeech
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import coil.compose.AsyncImage
+import java.io.File
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
@@ -122,6 +124,10 @@ fun ChatScreen(
     val cardBorder = Brush.linearGradient(
         listOf(primaryGlow.copy(alpha = 0.6f), Color.White.copy(alpha = 0.1f))
     )
+
+    val imagePickerLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        viewModel.onImageSelected(uri)
+    }
 
     val cameraLauncher = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
         if (result.resultCode == android.app.Activity.RESULT_OK) viewModel.onSpecialToolCompleted(true, "📸 تم التقاط الصورة")
@@ -226,7 +232,7 @@ fun ChatScreen(
             text = state.inputText,
             onValueChange = viewModel::onInputChange,
             onSend = {
-                if (state.inputText.isNotBlank()) viewModel.sendMessage()
+                if (state.inputText.isNotBlank() || state.pendingImagePath != null) viewModel.sendMessage()
                 else if (micPermission.status.isGranted) {
                     isListening = true
                     voiceHelper.startListening(
@@ -239,7 +245,10 @@ fun ChatScreen(
             },
             isListening = isListening,
             isDark = isDarkTheme,
-            glow = primaryGlow
+            glow = primaryGlow,
+            selectedImagePath = state.pendingImagePath,
+            onAttach = { imagePickerLauncher.launch(arrayOf("image/jpeg", "image/png", "image/webp")) },
+            onRemoveAttachment = viewModel::removePendingImage
         )
 
         }
@@ -523,6 +532,19 @@ fun MessageBubbleRacha(
             modifier = Modifier.widthIn(max = 300.dp)
         ) {
             Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp)) {
+                message.imagePath?.let { imagePath ->
+                    AsyncImage(
+                        model = File(imagePath),
+                        contentDescription = "الصورة المرفقة",
+                        contentScale = ContentScale.Fit,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .heightIn(max = 220.dp)
+                            .clip(RoundedCornerShape(12.dp))
+                    )
+                    if (message.text.isNotBlank()) Spacer(modifier = Modifier.height(8.dp))
+                }
+
                 Text(
                     text = message.text,
                     color = Color.White,
@@ -565,56 +587,96 @@ fun InputBarRacha(
     onSend: () -> Unit,
     isListening: Boolean,
     isDark: Boolean,
-    glow: Color
+    glow: Color,
+    selectedImagePath: String? = null,
+    onAttach: () -> Unit = {},
+    onRemoveAttachment: () -> Unit = {}
 ) {
-    Row(
+    Column(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 6.dp),
-        verticalAlignment = Alignment.CenterVertically
+            .padding(horizontal = 16.dp, vertical = 6.dp)
     ) {
-        Surface(
-            modifier = Modifier.weight(1f),
-            shape = RoundedCornerShape(26.dp),
-            color = Color(0xFF0F172A).copy(alpha = 0.88f),
-            border = BorderStroke(1.dp, glow.copy(alpha = 0.4f))
-        ) {
-            Box(modifier = Modifier.padding(horizontal = 20.dp, vertical = 12.dp)) {
-                BasicTextField(
-                    value = text,
-                    onValueChange = onValueChange,
-                    textStyle = TextStyle(color = Color.White, fontSize = 15.sp),
-                    cursorBrush = SolidColor(glow),
-                    modifier = Modifier.fillMaxWidth(),
-                    decorationBox = { innerTextField ->
-                        if (text.isEmpty()) {
-                            Text("اكتب رسالتك لـ Racha...", color = Color(0xFF64748B), fontSize = 15.sp)
-                        }
-                        innerTextField()
-                    }
+        selectedImagePath?.let { imagePath ->
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(bottom = 6.dp)
+                    .clip(RoundedCornerShape(14.dp))
+                    .background(Color(0xFF0F172A).copy(alpha = 0.92f))
+                    .border(1.dp, glow.copy(alpha = 0.5f), RoundedCornerShape(14.dp))
+                    .padding(8.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                AsyncImage(
+                    model = File(imagePath),
+                    contentDescription = "معاينة الصورة المختارة",
+                    contentScale = ContentScale.Crop,
+                    modifier = Modifier
+                        .size(54.dp)
+                        .clip(RoundedCornerShape(8.dp))
                 )
+                Spacer(modifier = Modifier.width(10.dp))
+                Text(
+                    text = "ستُرسل الصورة إلى Gemini للتحليل عند الضغط على إرسال.",
+                    color = Color.White,
+                    fontSize = 12.sp,
+                    modifier = Modifier.weight(1f)
+                )
+                IconButton(onClick = onRemoveAttachment, modifier = Modifier.size(32.dp)) {
+                    Icon(Icons.Default.Close, contentDescription = "إزالة الصورة", tint = Color.LightGray)
+                }
             }
         }
 
-        Spacer(modifier = Modifier.width(8.dp))
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            IconButton(onClick = onAttach, enabled = !isListening) {
+                Icon(Icons.Default.AttachFile, contentDescription = "إرفاق صورة", tint = glow)
+            }
 
-        Surface(
-            onClick = onSend,
-            shape = CircleShape,
-            color = Color(0xFF0F172A).copy(alpha = 0.9f),
-            border = BorderStroke(1.5.dp, glow),
-            modifier = Modifier.size(48.dp)
-        ) {
-            Box(contentAlignment = Alignment.Center) {
-                if (isListening) {
-                    CircularProgressIndicator(color = glow, modifier = Modifier.size(22.dp), strokeWidth = 2.dp)
-                } else {
-                    Icon(
-                        imageVector = if (text.isNotBlank()) Icons.Default.Send else Icons.Default.Mic,
-                        contentDescription = "Send",
-                        tint = glow,
-                        modifier = Modifier.size(22.dp)
+            Surface(
+                modifier = Modifier.weight(1f),
+                shape = RoundedCornerShape(26.dp),
+                color = Color(0xFF0F172A).copy(alpha = 0.88f),
+                border = BorderStroke(1.dp, glow.copy(alpha = 0.4f))
+            ) {
+                Box(modifier = Modifier.padding(horizontal = 20.dp, vertical = 12.dp)) {
+                    BasicTextField(
+                        value = text,
+                        onValueChange = onValueChange,
+                        textStyle = TextStyle(color = Color.White, fontSize = 15.sp),
+                        cursorBrush = SolidColor(glow),
+                        modifier = Modifier.fillMaxWidth(),
+                        decorationBox = { innerTextField ->
+                            if (text.isEmpty()) {
+                                Text("اكتب رسالتك لـ Racha...", color = Color(0xFF64748B), fontSize = 15.sp)
+                            }
+                            innerTextField()
+                        }
                     )
+                }
+            }
+
+            Spacer(modifier = Modifier.width(8.dp))
+
+            Surface(
+                onClick = onSend,
+                shape = CircleShape,
+                color = Color(0xFF0F172A).copy(alpha = 0.9f),
+                border = BorderStroke(1.5.dp, glow),
+                modifier = Modifier.size(48.dp)
+            ) {
+                Box(contentAlignment = Alignment.Center) {
+                    if (isListening) {
+                        CircularProgressIndicator(color = glow, modifier = Modifier.size(22.dp), strokeWidth = 2.dp)
+                    } else {
+                        Icon(
+                            imageVector = if (text.isNotBlank() || selectedImagePath != null) Icons.Default.Send else Icons.Default.Mic,
+                            contentDescription = "إرسال الرسالة أو الصورة",
+                            tint = glow,
+                            modifier = Modifier.size(22.dp)
+                        )
+                    }
                 }
             }
         }

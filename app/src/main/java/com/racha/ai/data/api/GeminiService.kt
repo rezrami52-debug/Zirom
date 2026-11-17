@@ -34,7 +34,7 @@ class GeminiService(rawApiKey: String) {
 
     private val generativeModel by lazy {
         GenerativeModel(
-            modelName = "gemini-2.0-flash",
+            modelName = "gemini-3.8-flash",
             apiKey = apiKey,
             systemInstruction = content { text(jarvisSystemInstruction) }
         )
@@ -51,6 +51,23 @@ class GeminiService(rawApiKey: String) {
                 Log.e("GeminiService", "API Error", e)
                 throw e
             }
+        }
+    }
+
+    suspend fun analyzeImage(bitmap: Bitmap, prompt: String): String = withContext(Dispatchers.IO) {
+        check(!isGroq) { "تحليل الصور يتطلب مفتاح Gemini؛ مزود Groq الحالي نصّي فقط." }
+
+        val request = content {
+            text("حلل الصورة المرفقة وأجب بالعربية عن طلب المستخدم التالي: $prompt")
+            image(bitmap)
+        }
+
+        try {
+            val response = withTimeout(60_000L) { generativeModel.generateContent(request) }
+            response.text ?: "لم أتمكن من استخراج إجابة من الصورة."
+        } catch (e: Exception) {
+            Log.e("GeminiService", "Image analysis API error", e)
+            throw e
         }
     }
 

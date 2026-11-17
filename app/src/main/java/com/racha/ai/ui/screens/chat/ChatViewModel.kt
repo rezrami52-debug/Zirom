@@ -1,6 +1,9 @@
 package com.racha.ai.ui.screens.chat
 
 import android.app.Application
+import android.graphics.Bitmap
+import android.graphics.BitmapFactory
+import android.net.Uri
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.racha.ai.core.agent.SelfEvolutionAgent
@@ -35,11 +38,14 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
+import java.io.File
+import java.io.FileOutputStream
 import java.util.UUID
 
 data class ChatMessage(
     val text: String,
-    val isFromUser: Boolean
+    val isFromUser: Boolean,
+    val imagePath: String? = null
 )
 
 data class ChatUiState(
@@ -49,7 +55,8 @@ data class ChatUiState(
     val hasApiKey: Boolean = false,
     val pendingSpecialTool: String? = null,
     val pendingChooser: IntentHandler.HandlerResult.ShowChooser? = null,
-    val isScreenLearningActive: Boolean = false
+    val isScreenLearningActive: Boolean = false,
+    val pendingImagePath: String? = null
 )
 
 class ChatViewModel(application: Application) : AndroidViewModel(application) {
@@ -93,13 +100,15 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun startNewChat() {
+        val previousPendingImage = _uiState.value.pendingImagePath
         _uiState.update {
             it.copy(
                 messages = emptyList(),
                 inputText = "",
                 isLoading = false,
                 pendingChooser = null,
-                pendingSpecialTool = null
+                pendingSpecialTool = null,
+                pendingImagePath = null
             )
         }
 
@@ -107,6 +116,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         originalPendingQuestion = null
 
         viewModelScope.launch(Dispatchers.IO) {
+            deletePrivateChatImage(previousPendingImage)
             val conversation = ConversationEntity(
                 id = UUID.randomUUID().toString(),
                 title = "محادثة جديدة",
@@ -120,6 +130,169 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
 
     fun onInputChange(newText: String) {
         _uiState.update { it.copy(inputText = newText) }
+    }
+
+    fun onImageSelected(uri: Uri?) {
+        if (uri == null) return
+        viewModelScope.launch {
+            try {
+                val imageFile = withContext(Dispatchers.IO) { persistSelectedImage(uri) }
+                val previousPath = _uiState.value.pendingImagePath
+                _uiState.update { it.copy(pendingImagePath = imageFile.absolutePath) }
+                deletePrivateChatImage(previousPath)
+            } catch (e: Exception) {
+                android.util.Log.e("ChatViewModel", "Failed to import selected image", e)
+                appendMessage(
+                    ChatMessage(
+                        text = e.message ?: "تعذر قراءة الصورة. اختر صورة JPEG أو PNG أو WebP لا يتجاوز حجمها 12 ميغابايت.",
+                        isFromUser = false
+                    )
+                )
+            }
+        }
+    }
+
+    fun removePendingImage() {
+        val previousPath = _uiState.value.pendingImagePath ?: return
+        _uiState.update { it.copy(pendingImagePath = null) }
+        viewModelScope.launch(Dispatchers.IO) { deletePrivateChatImage(previousPath) }
+    }
+
+    private fun persistSelectedImage(uri: Uri): File {
+        val app = getApplication<Application>()
+        val mimeType = app.contentResolver.getType(uri)?.substringBefore(';')?.lowercase()
+        val extension = when (mimeType) {
+            "image/jpeg" -> "jpg"
+            "image/png" -> "png"
+            "image/webp" -> "webp"
+            else -> throw IllegalArgumentException(
+                "نوع الصورة غير مدعوم. اختر JPEG أو PNG أو WebP."
+            )
+        }
+
+        val imageDirectory = File(app.filesDir, "chat_images")
+        if (!imageDirectory.exists() && !imageDirectory.mkdirs()) {
+            throw IllegalStateException("تعذر إنشاء مجلد الصور داخل التطبيق.")
+        }
+
+        val fileId = UUID.randomUUID().toString()
+        val temporaryFile = File(imageDirectory, "$fileId.part")
+        val destinationFile = File(imageDirectory, "$fileId.$extension")
+        try {
+            val input = app.contentResolver.openInputStream(uri)
+                ?: throw IllegalArgumentException("تعذر فتح الصورة المختارة.")
+            input.use { source ->
+                FileOutputStream(temporaryFile).buffered().use { sink ->
+                    val buffer = ByteArray(16 * 1024)
+                    var totalBytes = 0L
+                    while (true) {
+                        val count = source.read(buffer)
+                        if (count < 0) break
+                        totalBytes += count
+                        if (totalBytes > MAX_CHAT_IMAGE_BYTES) {
+                            throw IllegalArgumentException("حجم الصورة يتجاوز الحد المسموح (12 ميغابايت).")
+                        }
+                        sink.write(buffer, 0, count)
+                    }
+                    if (totalBytes == 0L) {
+                        throw IllegalArgumentException("ملف الصورة فارغ.")
+                    }
+                }
+            }
+
+            val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+            BitmapFactory.decodeFile(temporaryFile.absolutePath, bounds)
+            if (bounds.outWidth <= 0 || bounds.outHeight <= 0) {
+                throw IllegalArgumentException("الملف المحدد ليس صورة قابلة للقراءة.")
+            }
+            if (!temporaryFile.renameTo(destinationFile)) {
+                throw IllegalStateException("تعذر حفظ الصورة داخل التطبيق.")
+            }
+            return destinationFile
+        } catch (e: Exception) {
+            temporaryFile.delete()
+            destinationFile.delete()
+            throw e
+        }
+    }
+
+    private fun deletePrivateChatImage(path: String?) {
+        if (path.isNullOrBlank()) return
+        try {
+            val app = getApplication<Application>()
+            val directory = File(app.filesDir, "chat_images").canonicalFile
+            val target = File(path).canonicalFile
+            if (target.parentFile == directory) target.delete()
+        } catch (e: Exception) {
+            android.util.Log.w("ChatViewModel", "Could not delete temporary image", e)
+        }
+    }
+
+    private fun decodeImageForAnalysis(path: String): Bitmap {
+        val file = File(path)
+        require(file.isFile) { "ملف الصورة المحفوظة غير موجود." }
+        val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+        BitmapFactory.decodeFile(file.absolutePath, bounds)
+        require(bounds.outWidth > 0 && bounds.outHeight > 0) { "تعذر فك ترميز الصورة." }
+
+        var sampleSize = 1
+        while (maxOf(bounds.outWidth, bounds.outHeight) / sampleSize > MAX_IMAGE_SIDE) {
+            sampleSize *= 2
+        }
+        val options = BitmapFactory.Options().apply { inSampleSize = sampleSize }
+        return BitmapFactory.decodeFile(file.absolutePath, options)
+            ?: throw IllegalArgumentException("تعذر تجهيز الصورة للتحليل.")
+    }
+
+    private fun isCredentialInput(text: String): Boolean {
+        val value = text.trim()
+        return value.startsWith("ghp_") || value.startsWith("github:", ignoreCase = true) ||
+            value.startsWith("github_pat_") || value.startsWith("gsk_") ||
+            value.startsWith("AIza") || value.startsWith("Bearer ", ignoreCase = true) ||
+            value.startsWith("مفتاح:") || value.startsWith("api:", ignoreCase = true)
+    }
+
+    private fun analyzeAttachedImage(imagePath: String, userPrompt: String) {
+        viewModelScope.launch(Dispatchers.IO) {
+            _uiState.update { it.copy(isLoading = true) }
+            var bitmap: Bitmap? = null
+            try {
+                val apiKey = securePrefs.getApiKey()
+                if (apiKey.isNullOrBlank() || apiKey.startsWith("gsk_")) {
+                    appendMessage(
+                        ChatMessage(
+                            text = "تحليل الصور يحتاج مفتاح Gemini محفوظ في الإعدادات؛ لم يتم إرسال الصورة إلى أي خدمة. أضف مفتاح Gemini ثم أعد المحاولة.",
+                            isFromUser = false
+                        )
+                    )
+                    return@launch
+                }
+
+                val decodedBitmap = decodeImageForAnalysis(imagePath)
+                bitmap = decodedBitmap
+                val response = withTimeout(60_000L) {
+                    GeminiService(apiKey).analyzeImage(decodedBitmap, userPrompt)
+                }
+                appendMessage(ChatMessage(text = response, isFromUser = false))
+            } catch (e: Exception) {
+                android.util.Log.e("ChatViewModel", "Image analysis failed", e)
+                appendMessage(
+                    ChatMessage(
+                        text = "تعذر تحليل الصورة الآن. تحقق من اتصال الإنترنت وصلاحية مفتاح Gemini، ثم أعد اختيار الصورة.",
+                        isFromUser = false
+                    )
+                )
+            } finally {
+                bitmap?.recycle()
+                _uiState.update { it.copy(isLoading = false) }
+            }
+        }
+    }
+
+    private companion object {
+        const val MAX_CHAT_IMAGE_BYTES = 12L * 1024L * 1024L
+        const val MAX_IMAGE_SIDE = 1536
+        const val DEFAULT_IMAGE_PROMPT = "صف الصورة المرفقة واشرح أهم ما يظهر فيها."
     }
 
     fun onSpecialToolCompleted(success: Boolean, msg: String) {
@@ -136,9 +309,8 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
             it.copy(messages = it.messages + message)
         }
 
-        if (!isPersistableChatMessage(message.text)) {
-            return
-        }
+        if (message.text.isBlank() && message.imagePath.isNullOrBlank()) return
+        if (message.text.isNotBlank() && !isPersistableChatMessage(message.text)) return
 
         viewModelScope.launch(Dispatchers.IO) {
             val conversationId = ensureActiveConversation()
@@ -150,7 +322,8 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                     text = message.text,
                     isFromUser = message.isFromUser,
                     isError = false,
-                    timestamp = System.currentTimeMillis()
+                    timestamp = System.currentTimeMillis(),
+                    imagePath = message.imagePath
                 )
             )
 
@@ -214,7 +387,8 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         val restoredMessages = savedMessages.map {
             ChatMessage(
                 text = it.text,
-                isFromUser = it.isFromUser
+                isFromUser = it.isFromUser,
+                imagePath = it.imagePath
             )
         }
 
@@ -238,10 +412,36 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun sendMessage() {
-        val userText = _uiState.value.inputText
-        _uiState.update { it.copy(inputText = "") }
-
+        val currentState = _uiState.value
+        val userText = currentState.inputText
         val trimmed = userText.trim()
+        val imagePath = currentState.pendingImagePath
+
+        if (imagePath != null) {
+            if (isCredentialInput(trimmed)) {
+                appendMessage(
+                    ChatMessage(
+                        text = "أزل الصورة أولاً قبل إدخال مفتاح API، حتى لا يُرسل المفتاح مع الصورة.",
+                        isFromUser = false
+                    )
+                )
+                return
+            }
+
+            val imagePrompt = trimmed.ifBlank { DEFAULT_IMAGE_PROMPT }
+            _uiState.update { it.copy(inputText = "", pendingImagePath = null) }
+            appendMessage(
+                ChatMessage(
+                    text = imagePrompt,
+                    isFromUser = true,
+                    imagePath = imagePath
+                )
+            )
+            analyzeAttachedImage(imagePath, imagePrompt)
+            return
+        }
+
+        _uiState.update { it.copy(inputText = "") }
         if (trimmed.isBlank()) return
 
         appendMessage(
