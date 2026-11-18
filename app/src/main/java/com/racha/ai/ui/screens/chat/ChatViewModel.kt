@@ -55,6 +55,8 @@ data class ChatUiState(
     val hasApiKey: Boolean = false,
     val pendingSpecialTool: String? = null,
     val pendingChooser: IntentHandler.HandlerResult.ShowChooser? = null,
+    val selectedFileUri: String? = null,
+    val selectedFileSummary: String? = null,
     val selectedImageUri: String? = null,
     val isScreenLearningActive: Boolean = false,
     val pendingImagePath: String? = null
@@ -128,6 +130,20 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
             activeConversationId = conversation.id
         }
     }
+    fun onFileSelected(uri: android.net.Uri?) {
+        if (uri == null) return
+        _uiState.update { it.copy(selectedFileUri = uri.toString(), selectedFileSummary = "جاري تحليل الملف...") }
+        
+        viewModelScope.launch(Dispatchers.IO) {
+            val analysis = com.racha.ai.core.tools.FileAnalyzer.analyzeFile(getApplication(), uri)
+            _uiState.update { it.copy(selectedFileSummary = analysis.summary) }
+        }
+    }
+
+    fun clearSelectedFile() {
+        _uiState.update { it.copy(selectedFileUri = null, selectedFileSummary = null) }
+    }
+
 
     fun onInputChange(newText: String) {
         _uiState.update { it.copy(inputText = newText) }

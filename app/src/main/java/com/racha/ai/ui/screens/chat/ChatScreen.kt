@@ -262,6 +262,29 @@ fun ChatScreen(
             }
         }
 
+        // معاينة الملف المرفق
+        state.selectedFileUri?.let { uriString ->
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                androidx.compose.foundation.layout.Box(
+                    modifier = Modifier.size(50.dp).clip(RoundedCornerShape(12.dp)).background(primaryGlow.copy(alpha = 0.2f)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(Icons.Default.AttachFile, contentDescription = "ملف", tint = primaryGlow, modifier = Modifier.size(28.dp))
+                }
+                Spacer(modifier = Modifier.width(12.dp))
+                Column(modifier = Modifier.weight(1f)) {
+                    Text("تم إرفاق ملف للتحليل", color = if (isDarkTheme) Color.White else Color(0xFF0A1B3A), fontSize = 14.sp, fontWeight = FontWeight.Bold)
+                    Text("جاري المعالجة...", color = Color.Gray, fontSize = 12.sp)
+                }
+                IconButton(onClick = { viewModel.clearSelectedFile() }) {
+                    Icon(Icons.Default.Close, contentDescription = "إزالة الملف", tint = Color(0xFFFF5252))
+                }
+            }
+        }
+
         // 5. حقل الإدخال
         InputBarRacha(
             text = state.inputText,
