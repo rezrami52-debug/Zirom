@@ -67,20 +67,16 @@ object FileAnalyzer {
         }
     }
 
-    private fun getFileName(context: Context, uri: Uri): String? {
-        var result: String? = null
-        if (uri.scheme == "content") {
+        private fun getFileName(context: Context, uri: Uri): String? {
+        val displayName: String? = if (uri.scheme == "content") {
             context.contentResolver.query(uri, null, null, null, null)?.use { cursor ->
                 if (cursor.moveToFirst()) {
-                    result = cursor.getString(cursor.getColumnIndexOrThrow(OpenableColumns.DISPLAY_NAME))
-                }
+                    cursor.getString(cursor.getColumnIndexOrThrow(OpenableColumns.DISPLAY_NAME))
+                } else null
             }
-        }
-        if (result == null) {
-            result = uri.path
-            result = result?.substring(result.lastIndexOf('/') + 1)
-        }
-        return result
+        } else null
+
+        return displayName ?: uri.path?.substringAfterLast('/')
     }
 
     private fun getFileSize(context: Context, uri: Uri): String {
