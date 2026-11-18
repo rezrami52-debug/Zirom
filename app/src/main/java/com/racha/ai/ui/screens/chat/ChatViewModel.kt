@@ -144,6 +144,10 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         _uiState.update { it.copy(selectedFileUri = null, selectedFileSummary = null) }
     }
 
+    fun clearSelectedImage() {
+        _uiState.update { it.copy(selectedImageUri = null) }
+    }
+
 
     fun onInputChange(newText: String) {
         _uiState.update { it.copy(inputText = newText) }
@@ -433,6 +437,17 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         val userText = currentState.inputText
         val trimmed = userText.trim()
         val imagePath = currentState.pendingImagePath
+        
+        // دمج سياق الملف والصورة المرفقة في النص المرسل للذكاء الاصطناعي
+        val fileContext = if (currentState.selectedFileSummary != null) {
+            "\n\n[📎 ملف مرفق للتحليل:\n${currentState.selectedFileSummary}]"
+        } else ""
+        
+        val imageContext = if (currentState.selectedImageUri != null) {
+            "\n\n[🖼️ صورة مرفقة للتحليل: يرجى وصف محتواها أو الإجابة بناءً عليها.]"
+        } else ""
+        
+        val finalQuery = "$trimmed$fileContext$imageContext"
 
         if (imagePath != null) {
             if (isCredentialInput(trimmed)) {
@@ -446,7 +461,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
             }
 
             val imagePrompt = trimmed.ifBlank { DEFAULT_IMAGE_PROMPT }
-            _uiState.update { it.copy(inputText = "", pendingImagePath = null) }
+            _uiState.update { it.copy(inputText = "", pendingImagePath = null, selectedFileUri = null, selectedFileSummary = null, selectedImageUri = null) }
             appendMessage(
                 ChatMessage(
                     text = imagePrompt,
@@ -458,7 +473,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
             return
         }
 
-        _uiState.update { it.copy(inputText = "") }
+        _uiState.update { it.copy(inputText = "", selectedFileUri = null, selectedFileSummary = null, selectedImageUri = null) }
         if (trimmed.isBlank()) return
 
         appendMessage(
@@ -683,7 +698,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                 _uiState.update { it.copy(isLoading = true) }
 
                 try {
-                    handleAiQuery(trimmed)
+                    handleAiQuery(finalQuery)
                 } catch (e: Exception) {
                     android.util.Log.e(
                         "ChatViewModel",
@@ -753,7 +768,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                     }
 
                     is IntentHandler.HandlerResult.Unknown -> {
-                        handleAiQuery(trimmed)
+                        handleAiQuery(finalQuery)
                     }
                 }
             } catch (e: Exception) {
