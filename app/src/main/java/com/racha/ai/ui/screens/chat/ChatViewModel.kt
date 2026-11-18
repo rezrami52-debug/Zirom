@@ -55,6 +55,7 @@ data class ChatUiState(
     val hasApiKey: Boolean = false,
     val pendingSpecialTool: String? = null,
     val pendingChooser: IntentHandler.HandlerResult.ShowChooser? = null,
+    val selectedImageUri: String? = null,
     val isScreenLearningActive: Boolean = false,
     val pendingImagePath: String? = null
 )

@@ -227,6 +227,41 @@ fun ChatScreen(
             }
         }
 
+                // معاينة الصورة المرفقة
+        state.selectedImageUri?.let { uriString ->
+            val uri = android.net.Uri.parse(uriString)
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 4.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(60.dp)
+                        .clip(RoundedCornerShape(12.dp))
+                        .border(1.dp, primaryGlow, RoundedCornerShape(12.dp))
+                ) {
+                    AsyncImage(
+                        model = uri,
+                        contentDescription = "معاينة الصورة",
+                        modifier = Modifier.fillMaxSize(),
+                        contentScale = androidx.compose.ui.layout.ContentScale.Crop
+                    )
+                }
+                Spacer(modifier = Modifier.width(12.dp))
+                Text(
+                    "تم إرفاق صورة للتحليل",
+                    color = if (isDarkTheme) Color.White else Color.Black,
+                    fontSize = 14.sp,
+                    modifier = Modifier.weight(1f)
+                )
+                IconButton(onClick = { viewModel.clearSelectedImage() }) {
+                    Icon(Icons.Default.Close, contentDescription = "إزالة الصورة", tint = Color(0xFFFF5252))
+                }
+            }
+        }
+
         // 5. حقل الإدخال
         InputBarRacha(
             text = state.inputText,
