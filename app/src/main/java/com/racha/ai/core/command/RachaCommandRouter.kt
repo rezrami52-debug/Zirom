@@ -10,6 +10,9 @@ object RachaCommandRouter {
             return RachaCommand.Unknown
         }
 
+        if (isSecurityAuditRequest(lower)) return RachaCommand.CheckSecurity
+        if (isDataUsageRequest(lower)) return RachaCommand.CheckDataUsage
+
         if (isNearestPavedRoadRequest(lower)) {
             return RachaCommand.FindNearestPavedRoad
         }
@@ -77,6 +80,34 @@ object RachaCommandRouter {
         }
 
         return RachaCommand.AskAI(text)
+    }
+
+    private fun isSecurityAuditRequest(text: String): Boolean {
+        val normalized = normalizeArabic(text)
+        return listOf(
+            "تجسس", "تنصت", "مراقب", "مراقبة", "فحص الامان", "فحص الامن",
+            "حماية الهاتف", "هل الهاتف امن", "هل هاتفي امن"
+        ).any { normalized.contains(it) }
+    }
+
+    private fun isDataUsageRequest(text: String): Boolean {
+        val normalized = normalizeArabic(text)
+        val asksAboutUsage = listOf(
+            "استهلاك", "يستهلك", "تستهلك", "يستهلكون", "قداش كليت",
+            "كونسوماسيون", "كمية البيانات"
+        ).any { normalized.contains(it) }
+        val mentionsNetworkData = listOf(
+            "انترنت", "انترنات", "النت", "بيانات", "data", "كونيكسيون"
+        ).any { normalized.contains(it) }
+        return asksAboutUsage && mentionsNetworkData
+    }
+
+    private fun normalizeArabic(text: String): String {
+        return text.lowercase()
+            .replace(Regex("[\u064B-\u065F\u0670\u0640]"), "")
+            .replace(Regex("[أإآٱ]"), "ا")
+            .replace(Regex("\\s+"), " ")
+            .trim()
     }
 
     private fun isNearestPavedRoadRequest(text: String): Boolean {

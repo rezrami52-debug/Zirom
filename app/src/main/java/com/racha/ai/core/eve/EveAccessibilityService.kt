@@ -65,6 +65,34 @@ class EveAccessibilityService : AccessibilityService() {
         }
     }
 
+    fun readCurrentWindowSnapshot(): ScreenSnapshot? {
+        val rootNode = rootInActiveWindow ?: return null
+        val pkgName = rootNode.packageName?.toString() ?: return null
+        if (pkgName == "com.android.systemui") return null
+
+        val appName = try {
+            val appInfo = packageManager.getApplicationInfo(pkgName, 0)
+            packageManager.getApplicationLabel(appInfo).toString()
+        } catch (_: Exception) {
+            pkgName
+        }
+
+        val extractedTexts = mutableListOf<String>()
+        extractTextFromNode(rootNode, extractedTexts)
+        val fullText = extractedTexts
+            .filter { it.isNotBlank() && it.length > 2 }
+            .distinct()
+            .joinToString("\n")
+            .take(2000)
+
+        if (fullText.isBlank()) return null
+        return ScreenSnapshot(
+            packageName = pkgName,
+            appName = appName,
+            visibleText = fullText
+        )
+    }
+
     fun getLatestScreenSnapshot(): ScreenSnapshot? {
         updateCurrentScreenSnapshot()
         return latestSnapshot

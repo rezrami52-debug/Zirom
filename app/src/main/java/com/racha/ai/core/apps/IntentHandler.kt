@@ -88,14 +88,21 @@ class IntentHandler(
         // 2. فحص استهلاك الإنترنت والبيانات
         if ((lower.contains("استهلاك") || lower.contains("كونسوماسيون") || lower.contains("شكون يستهلك") || lower.contains("قداش كليت")) &&
             (lower.contains("انترنت") || lower.contains("إنترنت") || lower.contains("نت") || lower.contains("بيانات") || lower.contains("data"))) {
-            val topApps = networkUsageManager.getTodayTopDataConsumers(5)
+            val topApps = try {
+                networkUsageManager.getTodayTopDataConsumers(5)
+            } catch (e: SecurityException) {
+                return@withContext HandlerResult.Error("لا أستطيع قراءة إحصاءات البيانات: فعّل وصول الاستخدام لـ Racha من إعدادات Android.")
+            } catch (e: Exception) {
+                android.util.Log.e(TAG, "تعذر قراءة إحصاءات الشبكة", e)
+                return@withContext HandlerResult.Error("تعذر قراءة إحصاءات استهلاك البيانات من Android.")
+            }
             val suffix = getFriendlyName().let { if (it.isNotBlank()) " $it" else "" }
 
             return@withContext if (topApps.isNotEmpty()) {
                 val listStr = topApps.joinToString("\n") { "• ${it.appName}: ${it.formattedUsage}" }
                 HandlerResult.DirectReply("📊 أكثر التطبيقات استهلاكاً للإنترنت اليوم$suffix:\n\n$listStr")
             } else {
-                HandlerResult.DirectReply("📊 استهلاك الإنترنت اليوم خفيف جداً، ولم يتجاوز أي تطبيق 1 ميغابايت$suffix.")
+                HandlerResult.DirectReply("📊 لم أعثر على تطبيق تجاوز 1 ميغابايت منذ منتصف الليل حتى الآن$suffix.")
             }
         }
 
@@ -181,13 +188,20 @@ class IntentHandler(
                 }
             }
             IntentClassifier.IntentType.CHECK_DATA_USAGE -> {
-                val topApps = networkUsageManager.getTodayTopDataConsumers(5)
+                val topApps = try {
+                networkUsageManager.getTodayTopDataConsumers(5)
+            } catch (e: SecurityException) {
+                return@withContext HandlerResult.Error("لا أستطيع قراءة إحصاءات البيانات: فعّل وصول الاستخدام لـ Racha من إعدادات Android.")
+            } catch (e: Exception) {
+                android.util.Log.e(TAG, "تعذر قراءة إحصاءات الشبكة", e)
+                return@withContext HandlerResult.Error("تعذر قراءة إحصاءات استهلاك البيانات من Android.")
+            }
                 val suffix = getFriendlyName().let { if (it.isNotBlank()) " $it" else "" }
                 if (topApps.isNotEmpty()) {
                     val listStr = topApps.joinToString("\n") { "• ${it.appName}: ${it.formattedUsage}" }
                     HandlerResult.DirectReply("📊 استهلاك الإنترنت اليوم$suffix:\n\n$listStr")
                 } else {
-                    HandlerResult.DirectReply("📊 استهلاك الإنترنت منخفض جداً اليوم$suffix.")
+                    HandlerResult.DirectReply("📊 لم أعثر على تطبيق تجاوز 1 ميغابايت منذ منتصف الليل حتى الآن$suffix.")
                 }
             }
             IntentClassifier.IntentType.WATCH_MOVIE,
@@ -480,8 +494,10 @@ class IntentHandler(
                 ShizukuShellRunner.takeScreenshot()
                 HandlerResult.DirectReply("تم التقاط صورة الشاشة وحفظها بنجاح.")
             }
-            lower.contains("ماذا ترى") || lower.contains("اقرأ الشاشة") -> {
-                val snapshot = EveAccessibilityService.instance?.getLatestScreenSnapshot()
+            lower.contains("ماذا ترى") || lower.contains("اقرأ الشاشة") ||
+                lower.contains("اقرئي الشاشة") || lower.contains("شوف الشاشة") ||
+                lower.contains("شوفي الشاشة") || lower.contains("حللي الشاشة") -> {
+                val snapshot = EveAccessibilityService.instance?.readCurrentWindowSnapshot()
                 if (snapshot != null && snapshot.visibleText.isNotBlank()) {
                     HandlerResult.DirectReply("أرى تطبيق ${snapshot.appName}:\n" + snapshot.visibleText.take(180))
                 } else {

@@ -8,6 +8,8 @@ sealed interface RachaCommand {
     data object OpenMap : RachaCommand
     data class PlayMedia(val query: String) : RachaCommand
     data object ReadScreen : RachaCommand
+    data object CheckSecurity : RachaCommand
+    data object CheckDataUsage : RachaCommand
     data object GetLocation : RachaCommand
     data object GetBattery : RachaCommand
     data object GetTime : RachaCommand

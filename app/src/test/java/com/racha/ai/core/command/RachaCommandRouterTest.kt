@@ -44,4 +44,20 @@ class RachaCommandRouterTest {
             RachaCommandRouter.classify(text)
         )
     }
+    @Test
+    fun routesTypedDataUsageRequestLocally() {
+        assertEquals(
+            RachaCommand.CheckDataUsage,
+            RachaCommandRouter.classify("أكثر التطبيقات استهلاكًا للإنترنت اليوم")
+        )
+    }
+
+    @Test
+    fun routesSecurityAuditRequestLocally() {
+        assertEquals(
+            RachaCommand.CheckSecurity,
+            RachaCommandRouter.classify("فحص الأمان")
+        )
+    }
+
 }

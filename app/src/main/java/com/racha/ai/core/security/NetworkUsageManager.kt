@@ -1,5 +1,6 @@
 package com.racha.ai.core.security
 
+import android.app.AppOpsManager
 import android.app.usage.NetworkStats
 import android.app.usage.NetworkStatsManager
 import android.content.Context
@@ -7,6 +8,7 @@ import android.content.pm.ApplicationInfo
 import android.content.pm.PackageManager
 import android.net.ConnectivityManager
 import android.os.Build
+import android.os.Process
 import com.racha.ai.core.shizuku.ShizukuShellRunner
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -30,12 +32,28 @@ class NetworkUsageManager(private val context: Context) {
         if (ShizukuShellRunner.isShizukuAvailable()) {
             ShizukuShellRunner.execCommand("appops set ${context.packageName} GET_USAGE_STATS allow")
         }
+
+        val appOps = context.getSystemService(Context.APP_OPS_SERVICE) as? AppOpsManager
+        val mode = try {
+            appOps?.checkOpNoThrow(
+                AppOpsManager.OPSTR_GET_USAGE_STATS,
+                Process.myUid(),
+                context.packageName
+            )
+        } catch (_: Exception) {
+            null
+        }
+        if (mode != AppOpsManager.MODE_ALLOWED) {
+            throw SecurityException(
+                "إذن إحصاءات الاستخدام غير مفعّل. فعّل وصول الاستخدام لـ Racha من إعدادات التطبيقات الخاصة."
+            )
+        }
     }
 
     suspend fun getTodayTopDataConsumers(limit: Int = 5): List<AppNetworkUsage> = withContext(Dispatchers.IO) {
         ensureUsageStatsPermission()
         val list = mutableListOf<AppNetworkUsage>()
-        if (networkStatsManager == null) return@withContext emptyList()
+        if (networkStatsManager == null) throw IllegalStateException("NetworkStatsManager غير متاح")
 
         val cal = Calendar.getInstance().apply {
             set(Calendar.HOUR_OF_DAY, 0)
@@ -55,11 +73,9 @@ class NetworkUsageManager(private val context: Context) {
 
         val usageMap = mutableMapOf<Int, Long>()
 
-        // 1. استهلاك الواي فاي (Wi-Fi)
-        accumulateTraffic(NetworkStats.Bucket.DEFAULT_NETWORK_ALL, ConnectivityManager.TYPE_WIFI, startTime, endTime, usageMap)
-
-        // 2. استهلاك بيانات الهاتف (Mobile Data)
-        accumulateTraffic(NetworkStats.Bucket.DEFAULT_NETWORK_ALL, ConnectivityManager.TYPE_MOBILE, startTime, endTime, usageMap)
+        // استهلاك الواي فاي وبيانات الهاتف منذ منتصف الليل.
+        accumulateTraffic(ConnectivityManager.TYPE_WIFI, startTime, endTime, usageMap)
+        accumulateTraffic(ConnectivityManager.TYPE_MOBILE, startTime, endTime, usageMap)
 
         for ((uid, bytes) in usageMap) {
             val appInfo = uidToAppMap[uid] ?: continue
@@ -81,22 +97,23 @@ class NetworkUsageManager(private val context: Context) {
 
     private fun accumulateTraffic(
         networkType: Int,
-        transportType: Int,
         startTime: Long,
         endTime: Long,
         outMap: MutableMap<Int, Long>
     ) {
+        val stats = networkStatsManager?.querySummary(networkType, null, startTime, endTime)
+            ?: throw IllegalStateException("تعذر فتح إحصاءات الشبكة")
         try {
             val bucket = NetworkStats.Bucket()
-            val stats = networkStatsManager?.querySummary(transportType, null, startTime, endTime)
-            while (stats?.hasNextBucket() == true) {
+            while (stats.hasNextBucket()) {
                 stats.getNextBucket(bucket)
                 val uid = bucket.uid
                 val bytes = bucket.rxBytes + bucket.txBytes
                 outMap[uid] = (outMap[uid] ?: 0L) + bytes
             }
-            stats?.close()
-        } catch (_: Exception) {}
+        } finally {
+            stats.close()
+        }
     }
 
     private fun formatBytes(bytes: Long): String {
