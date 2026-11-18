@@ -1,0 +1,181 @@
+   540	                        isFromUser = false
+   541	                    )
+   542	                )
+   543	                _uiState.update { it.copy(isLoading = false) }
+   544	            }
+   545	        }
+   546	    }
+   547	
+   548	    private fun toggleScreenLearningMode() {
+   549	        if (screenLearningJob?.isActive == true) {
+   550	            screenLearningJob?.cancel()
+   551	            screenLearningJob = null
+   552	            lastLearnedScreenText = null
+   553	            _uiState.update { it.copy(isScreenLearningActive = false) }
+   554	
+   555	            appendMessage(
+   556	                ChatMessage(
+   557	                    text = "⏸️ أوقفت وقت التعلم.",
+   558	                    isFromUser = false
+   559	                )
+   560	            )
+   561	            return
+   562	        }
+   563	
+   564	        appendMessage(
+   565	            ChatMessage(
+   566	                text = "🧠 بدأ وقت التعلم. سأتابع الشاشة وأحفظ المعلومات الجديدة محليًا، ولن أحفظ الأسرار أو مفاتيح API.",
+   567	                isFromUser = false
+   568	            )
+   569	        )
+   570	
+   571	        _uiState.update { it.copy(isScreenLearningActive = true) }
+   572	        screenLearningJob = viewModelScope.launch(Dispatchers.IO) {
+   573	            while (true) {
+   574	                delay(2500L)
+   575	
+   576	                val snapshot = EveAccessibilityService.instance
+   577	                    ?.getLatestScreenSnapshot()
+   578	                    ?: continue
+   579	
+   580	                val safeText = SmartScreenProcessor.cleanAndFormat(
+   581	                    snapshot.visibleText
+   582	                )
+   583	
+   584	                if (!SmartScreenProcessor.isWorthAnalyzing(safeText)) {
+   585	                    continue
+   586	                }
+   587	
+   588	                if (SmartScreenProcessor.containsSensitiveData(safeText)) {
+   589	                    continue
+   590	                }
+   591	
+   592	                if (safeText == lastLearnedScreenText) {
+   593	                    continue
+   594	                }
+   595	
+   596	                val now = System.currentTimeMillis()
+   597	
+   598	                if (now - lastScreenAnalysisAt < 8_000L) {
+   599	                    continue
+   600	                }
+   601	
+   602	                lastLearnedScreenText = safeText
+   603	                lastScreenAnalysisAt = now
+   604	
+   605	                val screenPrompt = """
+   606	                    حلّل محتوى الشاشة التالي بهدف التعلم طويل المدى.
+   607	
+   608	                    التطبيق: ${snapshot.appName}
+   609	                    الحزمة: ${snapshot.packageName}
+   610	
+   611	                    المحتوى:
+   612	                    $safeText
+   613	
+   614	                    أعد النتيجة بهذه الصيغة فقط:
+   615	                    مفيد: نعم أو لا
+   616	                    العنوان: عنوان قصير للمعلومة
+   617	                    المعلومة: شرح عربي واضح ومختصر
+   618	                    الموضوع: تصنيف المعلومة
+   619	                    الكلمات: كلمات مفتاحية مفصولة بفواصل
+   620	
+   621	                    القواعد:
+   622	                    - أجب بمفيد: لا إذا كان المحتوى مجرد أزرار أو إشعار عابر أو قائمة مؤقتة.
+   623	                    - لا تحفظ كلمات المرور أو مفاتيح API أو الرموز السرية أو البيانات الشخصية.
+   624	                    - تجاهل كلمات مثل رجوع، إلغاء، مشاركة، فتح، إغلاق.
+   625	                    - لا تنقل النص حرفيًا؛ افهمه وأعد صياغته بالعربية.
+   626	                    - إذا لم توجد معلومة قابلة للتعلم، أعد مفيد: لا فقط.
+   627	                """.trimIndent()
+   628	
+   629	                val memory = try {
+   630	                    val analysis = withTimeout(25_000L) {
+   631	                        qwenService.generateResponse(screenPrompt)
+   632	                    }
+   633	
+   634	                    SmartScreenProcessor.parseScreenMemory(analysis)
+   635	                } catch (e: Exception) {
+   636	                    android.util.Log.e(
+   637	                        "ChatViewModel",
+   638	                        "فشل تحليل الشاشة للتعلم",
+   639	                        e
+   640	                    )
+   641	                    null
+   642	                }
+   643	
+   644	                if (memory != null) {
+   645	                    val memoryKey = "screen:${snapshot.packageName}:${memory.title}"
+   646	                        .lowercase()
+   647	                        .replace(Regex("\\s+"), "_")
+   648	                        .take(220)
+   649	
+   650	                    val structuredAnswer = buildString {
+   651	                        append("العنوان: ")
+   652	                        append(memory.title)
+   653	                        append("\nالتطبيق: ")
+   654	                        append(snapshot.appName)
+   655	                        append("\nالموضوع: ")
+   656	                        append(memory.topic)
+   657	                        append("\nالمعلومة: ")
+   658	                        append(memory.information)
+   659	                    }
+   660	
+   661	                    knowledgeRepo.saveOrUpdate(
+   662	                        question = memoryKey,
+   663	                        answer = structuredAnswer,
+   664	                        topic = memory.topic,
+   665	                        keywords = listOf(
+   666	                            snapshot.appName,
+   667	                            snapshot.packageName,
+   668	                            memory.keywords
+   669	                        ).joinToString(","),
+   670	                        source = "screen_learning"
+   671	                    )
+   672	                }
+   673	            }
+   674	        }
+   675	    }
+   676	
+   677	    private suspend fun handleAiQuery(query: String) =
+   678	        withContext(Dispatchers.IO) {
+   679	            val learnedContext = knowledgeRepo.buildContextFor(
+   680	                query,
+   681	                limit = 2
+   682	            )
+   683	
+   684	            val enrichedQuery =
+   685	                if (learnedContext.isNotBlank()) {
+   686	                    "$learnedContext\nسؤال رمزي: $query"
+   687	                } else {
+   688	                    query
+   689	                }
+   690	
+   691	            val selectedProvider = appPrefs.getLLMProvider()
+   692	
+   693	            if (
+   694	                selectedProvider == "qwen" &&
+   695	                qwenService.isModelPresent()
+   696	            ) {
+   697	                try {
+   698	                    val localReply = withTimeout(60_000L) {
+   699	                        qwenService.generateResponse(enrichedQuery)
+   700	                    }
+   701	
+   702	                    val cleanText = executeActionsIfPresent(localReply)
+   703	
+   704	                    if (isUnclearResponse(cleanText)) {
+   705	                        val ambiguousWord = extractUnclearWord(query)
+   706	                        pendingLearningTerm = ambiguousWord
+   707	                        originalPendingQuestion = query
+   708	
+   709	                        appendMessage(
+   710	                            ChatMessage(
+   711	                                text = "شنوة تقصد بـ '$ambiguousWord' يا رمزي؟ وضحلي معناها وسأحفظها عندي فوراً.",
+   712	                                isFromUser = false
+   713	                            )
+   714	                        )
+   715	                    } else {
+   716	                        appendMessage(
+   717	                            ChatMessage(
+   718	                                text = "$cleanText\n\n📱 [Qwen محلي أوفلاين]",
+   719	                                isFromUser = false
+   720	                            )

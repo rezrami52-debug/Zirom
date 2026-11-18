@@ -75,7 +75,7 @@ class QwenService(private val context: Context) : LLMProvider {
     suspend fun generateResponse(prompt: String): String {
         val result = sendMessageWithContext(
             history = emptyList(),
-            userMessage = prompt,
+            userMessage = prompt.take(1500),
             userProfileContext = ""
         )
 

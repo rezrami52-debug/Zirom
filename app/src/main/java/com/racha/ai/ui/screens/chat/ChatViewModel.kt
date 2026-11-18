@@ -898,11 +898,16 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
 
             if (
                 selectedProvider == "qwen" &&
-                qwenService.isModelPresent()
+                qwenService.isReady()
             ) {
                 try {
                     val localReply = withTimeout(60_000L) {
-                        qwenService.generateResponse(enrichedQuery)
+                        qwenService.generateResponse(
+                        enrichedQuery
+                            .replace("<|im_start|>", "[بداية]")
+                            .replace("<|im_end|>", "[نهاية]")
+                            .take(1500) // حد أقصى آمن لمنع انهيار MediaPipe
+                    )
                     }
 
                     val cleanText = executeActionsIfPresent(localReply)
@@ -964,10 +969,15 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                 }
             }
 
-            if (qwenService.isModelPresent()) {
+            if (qwenService.isReady()) {
                 try {
                     val fallbackReply = withTimeout(60_000L) {
-                        qwenService.generateResponse(enrichedQuery)
+                        qwenService.generateResponse(
+                        enrichedQuery
+                            .replace("<|im_start|>", "[بداية]")
+                            .replace("<|im_end|>", "[نهاية]")
+                            .take(1500) // حد أقصى آمن لمنع انهيار MediaPipe
+                    )
                     }
 
                     val cleanText = executeActionsIfPresent(fallbackReply)

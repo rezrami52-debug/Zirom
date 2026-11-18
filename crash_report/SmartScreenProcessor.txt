@@ -1,0 +1,181 @@
+     1	package com.racha.ai.core.memory
+     2	
+     3	object SmartScreenProcessor {
+     4	
+     5	    data class ScreenMemory(
+     6	        val title: String,
+     7	        val information: String,
+     8	        val topic: String,
+     9	        val keywords: String
+    10	    )
+    11	
+    12	    private val uiNoise = setOf(
+    13	        "رجوع",
+    14	        "عودة",
+    15	        "موافق",
+    16	        "إلغاء",
+    17	        "حفظ",
+    18	        "مشاركة",
+    19	        "إرسال",
+    20	        "فتح",
+    21	        "إغلاق",
+    22	        "back",
+    23	        "home",
+    24	        "menu",
+    25	        "ok",
+    26	        "cancel",
+    27	        "send",
+    28	        "share",
+    29	        "close",
+    30	        "android.widget",
+    31	        "android.view"
+    32	    )
+    33	
+    34	    fun cleanAndFormat(rawText: String): String {
+    35	        if (rawText.isBlank()) return ""
+    36	
+    37	        return rawText
+    38	            .replace("\\n\\n", "\n")
+    39	            .replace("\\n", "\n")
+    40	            .replace("\r", "\n")
+    41	            .split("\n")
+    42	            .map { line ->
+    43	                line.trim().replace(Regex("\\s+"), " ")
+    44	            }
+    45	            .filter { line ->
+    46	                line.length > 3 &&
+    47	                    !uiNoise.any { noise ->
+    48	                        line.equals(noise, ignoreCase = true)
+    49	                    } &&
+    50	                    !line.startsWith("android.", ignoreCase = true) &&
+    51	                    !line.startsWith("androidx.", ignoreCase = true)
+    52	            }
+    53	            .distinct()
+    54	            .joinToString("\n• ")
+    55	            .let { cleaned ->
+    56	                if (cleaned.isBlank()) "" else "• $cleaned"
+    57	            }
+    58	            .take(1800)
+    59	    }
+    60	
+    61	    fun containsSensitiveData(text: String): Boolean {
+    62	        val patterns = listOf(
+    63	            Regex("(?i)AIza[0-9A-Za-z_-]{20,}"),
+    64	            Regex("(?i)gsk_[0-9A-Za-z_-]{20,}"),
+    65	            Regex("(?i)ghp_[0-9A-Za-z_]{20,}"),
+    66	            Regex("(?i)api[_ -]?key\\s*[:=]"),
+    67	            Regex("(?i)password\\s*[:=]"),
+    68	            Regex("(?i)passwd\\s*[:=]"),
+    69	            Regex("(?i)token\\s*[:=]"),
+    70	            Regex("(?i)authorization\\s*[:=]"),
+    71	            Regex("(?i)bearer\\s+[0-9A-Za-z._-]+")
+    72	        )
+    73	
+    74	        return patterns.any { pattern ->
+    75	            pattern.containsMatchIn(text)
+    76	        }
+    77	    }
+    78	
+    79	    fun isWorthAnalyzing(text: String): Boolean {
+    80	        val normalized = text
+    81	            .replace(Regex("\\s+"), " ")
+    82	            .trim()
+    83	
+    84	        if (normalized.length < 25) return false
+    85	        if (containsSensitiveData(normalized)) return false
+    86	
+    87	        val meaningfulWords = normalized
+    88	            .split(" ")
+    89	            .count { word -> word.length > 2 }
+    90	
+    91	        return meaningfulWords >= 4
+    92	    }
+    93	
+    94	    fun parseScreenMemory(response: String): ScreenMemory? {
+    95	        if (response.isBlank()) return null
+    96	
+    97	        val useful = readField(
+    98	            response,
+    99	            "مفيد",
+   100	            "useful",
+   101	            "قابل للتعلم"
+   102	        )?.lowercase().orEmpty()
+   103	
+   104	        val isUseful =
+   105	            useful.contains("نعم") ||
+   106	                useful.contains("yes") ||
+   107	                useful.contains("true")
+   108	
+   109	        if (!isUseful) return null
+   110	
+   111	        val title = readField(
+   112	            response,
+   113	            "العنوان",
+   114	            "title"
+   115	        ).orEmpty().trim()
+   116	
+   117	        val information = readField(
+   118	            response,
+   119	            "المعلومة",
+   120	            "المعلومات",
+   121	            "information",
+   122	            "summary",
+   123	            "الملخص"
+   124	        ).orEmpty().trim()
+   125	
+   126	        val topic = readField(
+   127	            response,
+   128	            "الموضوع",
+   129	            "topic",
+   130	            "الفئة"
+   131	        ).orEmpty().trim()
+   132	
+   133	        val keywords = readField(
+   134	            response,
+   135	            "الكلمات",
+   136	            "الكلمات المفتاحية",
+   137	            "keywords"
+   138	        ).orEmpty().trim()
+   139	
+   140	        if (title.isBlank()) return null
+   141	        if (information.length < 15) return null
+   142	
+   143	        return ScreenMemory(
+   144	            title = title.take(120),
+   145	            information = information.take(900),
+   146	            topic = topic
+   147	                .ifBlank { "معلومات عامة" }
+   148	                .take(80),
+   149	            keywords = keywords.take(240)
+   150	        )
+   151	    }
+   152	
+   153	    private fun readField(
+   154	        text: String,
+   155	        vararg labels: String
+   156	    ): String? {
+   157	        labels.forEach { label ->
+   158	            val pattern = Regex(
+   159	                "(?im)^\\s*${Regex.escape(label)}\\s*[:：-]\\s*(.+?)\\s*$"
+   160	            )
+   161	
+   162	            val value = pattern
+   163	                .find(text)
+   164	                ?.groupValues
+   165	                ?.getOrNull(1)
+   166	                ?.trim()
+   167	
+   168	            if (!value.isNullOrBlank()) {
+   169	                return value
+   170	            }
+   171	        }
+   172	
+   173	        return null
+   174	    }
+   175	
+   176	    fun isLikelyCodeOrTechnical(text: String): Boolean {
+   177	        return text.contains(
+   178	            Regex("(?i)fun |val |var |class |import |package |\\{ |\\}")
+   179	        )
+   180	    }
+   181	}

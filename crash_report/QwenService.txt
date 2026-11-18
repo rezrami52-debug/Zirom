@@ -1,0 +1,196 @@
+     1	package com.racha.ai.data.llm
+     2	
+     3	import android.content.Context
+     4	import android.content.Intent
+     5	import android.content.IntentFilter
+     6	import android.os.BatteryManager
+     7	import android.util.Log
+     8	import com.google.mediapipe.tasks.genai.llminference.LlmInference
+     9	import com.racha.ai.data.local.ChatMessageEntity
+    10	import kotlinx.coroutines.Dispatchers
+    11	import kotlinx.coroutines.sync.Mutex
+    12	import kotlinx.coroutines.sync.withLock
+    13	import kotlinx.coroutines.withContext
+    14	import kotlinx.coroutines.withTimeout
+    15	import java.io.File
+    16	import java.text.SimpleDateFormat
+    17	import java.util.Date
+    18	import java.util.Locale
+    19	
+    20	class QwenService(private val context: Context) : LLMProvider {
+    21	
+    22	    companion object {
+    23	        private const val TAG = "RachaQwen"
+    24	        private const val MODEL_FILENAME = "qwen2.5-1.5b-instruct.task"
+    25	        private val modelMutex = Mutex()
+    26	    }
+    27	
+    28	    override val name: String = "Qwen (محلي)"
+    29	
+    30	    private var llmInference: LlmInference? = null
+    31	    private var isInitialized = false
+    32	
+    33	    fun getModelFile(): File {
+    34	        val primaryPath = File("/storage/emulated/0/Racha/models", MODEL_FILENAME)
+    35	        if (primaryPath.exists() && primaryPath.length() > 100_000_000) return primaryPath
+    36	
+    37	        val secondaryPath = File("/sdcard/Racha/models", MODEL_FILENAME)
+    38	        if (secondaryPath.exists() && secondaryPath.length() > 100_000_000) return secondaryPath
+    39	
+    40	        return File(File(context.filesDir, "models"), MODEL_FILENAME)
+    41	    }
+    42	
+    43	    fun isModelPresent(): Boolean {
+    44	        val f = getModelFile()
+    45	        return f.exists() && f.length() > 100_000_000
+    46	    }
+    47	
+    48	    suspend fun initialize(): Result<Unit> = withContext(Dispatchers.IO) {
+    49	        modelMutex.withLock {
+    50	            try {
+    51	                if (isInitialized && llmInference != null) return@withContext Result.success(Unit)
+    52	
+    53	                val modelFile = getModelFile()
+    54	                if (!modelFile.exists() || modelFile.length() < 100_000_000) {
+    55	                    return@withContext Result.failure(Exception("ملف Qwen غير موجود"))
+    56	                }
+    57	
+    58	                // ضبط معايير الاستدلال لمعالجات الهواتف
+    59	                val options = LlmInference.LlmInferenceOptions.builder()
+    60	                    .setModelPath(modelFile.absolutePath)
+    61	                    .setMaxTokens(1024)
+    62	                    .build()
+    63	
+    64	                llmInference = LlmInference.createFromOptions(context, options)
+    65	                isInitialized = true
+    66	                Result.success(Unit)
+    67	            } catch (e: Exception) {
+    68	                Result.failure(e)
+    69	            }
+    70	        }
+    71	    }
+    72	
+    73	    override fun isReady(): Boolean = isInitialized && llmInference != null
+    74	
+    75	    suspend fun generateResponse(prompt: String): String {
+    76	        val result = sendMessageWithContext(
+    77	            history = emptyList(),
+    78	            userMessage = prompt,
+    79	            userProfileContext = ""
+    80	        )
+    81	
+    82	        return result.getOrElse { error ->
+    83	            throw error
+    84	        }
+    85	    }
+    86	
+    87	    override suspend fun sendMessageWithContext(
+    88	        history: List<ChatMessageEntity>,
+    89	        userMessage: String,
+    90	        userProfileContext: String
+    91	    ): Result<String> = withContext(Dispatchers.IO) {
+    92	
+    93	        val initResult = try {
+    94	            withTimeout(45_000L) {
+    95	                initialize()
+    96	            }
+    97	        } catch (e: Exception) {
+    98	            Log.e(TAG, "انتهت مهلة تهيئة Qwen", e)
+    99	            Result.failure(e)
+   100	        }
+   101	
+   102	        if (initResult.isFailure) {
+   103	            return@withContext Result.failure(
+   104	                initResult.exceptionOrNull()
+   105	                    ?: Exception("فشل تشغيل نموذج Qwen")
+   106	            )
+   107	        }
+   108	
+   109	        try {
+   110	            withTimeout(60_000L) {
+   111	                modelMutex.withLock {
+   112	                    val inference = llmInference
+   113	                        ?: return@withLock Result.failure(
+   114	                            Exception("نموذج Qwen غير جاهز")
+   115	                        )
+   116	
+   117	                    val fullPrompt = buildPrompt(
+   118	                        history,
+   119	                        userMessage,
+   120	                        userProfileContext
+   121	                    )
+   122	
+   123	                    val response = inference.generateResponse(fullPrompt)
+   124	
+   125	                    if (response.isBlank()) {
+   126	                        Result.failure(Exception("نموذج Qwen أعاد إجابة فارغة"))
+   127	                    } else {
+   128	                        Result.success(response.trim())
+   129	                    }
+   130	                }
+   131	            }
+   132	        } catch (e: Exception) {
+   133	            Log.e(TAG, "خطأ أثناء توليد إجابة Qwen", e)
+   134	            Result.failure(e)
+   135	        }
+   136	    }
+   137	
+   138	    private fun getLivePhoneContext(): String {
+   139	        return try {
+   140	            val time = SimpleDateFormat("HH:mm", Locale.getDefault()).format(Date())
+   141	            val bIntent = context.registerReceiver(null, IntentFilter(Intent.ACTION_BATTERY_CHANGED))
+   142	            val level = bIntent?.getIntExtra(BatteryManager.EXTRA_LEVEL, -1) ?: -1
+   143	            val scale = bIntent?.getIntExtra(BatteryManager.EXTRA_SCALE, -1) ?: -1
+   144	            val pct = if (level >= 0 && scale > 0) (level * 100) / scale else 75
+   145	            val charging = bIntent?.getIntExtra(BatteryManager.EXTRA_STATUS, -1) == BatteryManager.BATTERY_STATUS_CHARGING
+   146	            "الوقت: $time | البطارية: $pct% ${if (charging) "(في الشاحن)" else ""} | الموقع: سوسة، تونس"
+   147	        } catch (_: Exception) {
+   148	            "الموقع: سوسة، تونس"
+   149	        }
+   150	    }
+   151	
+   152	    private fun buildPrompt(
+   153	        history: List<ChatMessageEntity>,
+   154	        userMessage: String,
+   155	        userProfileContext: String
+   156	    ): String {
+   157	        val sb = StringBuilder()
+   158	        val phoneStatus = getLivePhoneContext()
+   159	
+   160	        sb.append("<|im_start|>system\n")
+   161	        sb.append("أنت EVE و Racha، رفيق ذكي وخبير برمجيات وأنظمة لصديقك رمزي.\n")
+   162	        sb.append("معطيات الهاتف الحية: [$phoneStatus].\n\n")
+   163	
+   164	        sb.append("قواعد السلوك:\n")
+   165	        sb.append("1. أجب بالعربية العفوية والطبيعية وتحدث معه باسمه 'رمزي' كصديق مقرب.\n")
+   166	        sb.append("2. إجاباتك ذكية ومباشرة (1 إلى 2 أسطر).\n")
+   167	        sb.append("3. افهم اللهجة التونسية بطلاقة (مثال: 'شنية أحوالك' = كيف حالك، 'حللي' = افتح لي، 'وقتاش' = متى).\n")
+   168	        sb.append("4. إذا طلب رمزي فتح تطبيق أو فيديو أو تشغيل فلاش، وافق بود وأضف وسماً برمجياً في نهاية ردك:\n")
+   169	        sb.append("   - لفتح تطبيق: [ACTION: OPEN_APP(اسم التطبيق بالإنجليزية مثل facebook, tiktok, youtube)]\n")
+   170	        sb.append("   - لفتح الفيديوهات: [ACTION: OPEN_VIDEOS]\n")
+   171	        sb.append("   - لفتح الصور: [ACTION: OPEN_PHOTOS]\n")
+   172	        sb.append("   - لتشغيل الفلاش: [ACTION: FLASHLIGHT(on)] ولإطفائه: [ACTION: FLASHLIGHT(off)]\n")
+   173	        sb.append("   - لقفل الشاشة: [ACTION: LOCK_SCREEN]\n")
+   174	        sb.append("5. إذا طلب رمزي الذهاب إلى مكان، أضف في نهاية الرد: [ACTION: NAVIGATE(destination=اسم المكان)]\n")
+   175	        sb.append("6. إذا طلب أقرب طريق معبد أو طريق رئيسي، أضف: [ACTION: FIND_PAVED_ROAD]\n")
+   176	        sb.append("7. لا تخترع إحداثيات ولا أسماء طرق. دع التطبيق يتولى فتح الخرائط.\n")
+   177	        sb.append("<|im_end|>\n")
+   178	
+   179	        for (msg in history.takeLast(4)) {
+   180	            val role = if (msg.isFromUser) "user" else "assistant"
+   181	            sb.append("<|im_start|>$role\n${msg.text}<|im_end|>\n")
+   182	        }
+   183	
+   184	        sb.append("<|im_start|>user\n$userMessage<|im_end|>\n")
+   185	        sb.append("<|im_start|>assistant\n")
+   186	        return sb.toString()
+   187	    }
+   188	
+   189	    override fun close() {
+   190	        try {
+   191	            llmInference?.close()
+   192	            llmInference = null
+   193	            isInitialized = false
+   194	        } catch (_: Exception) {}
+   195	    }
+   196	}
