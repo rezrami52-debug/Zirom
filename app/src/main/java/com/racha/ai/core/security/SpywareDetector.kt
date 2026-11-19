@@ -80,7 +80,7 @@ class SpywareDetector(
                 "خدمات إمكانية الوصول"
             )
             val enabledNotificationListeners = enabledPackages(
-                Settings.Secure.ENABLED_NOTIFICATION_LISTENERS,
+                "enabled_notification_listeners",
                 "مستمعي الإشعارات"
             )
 
@@ -165,7 +165,7 @@ class SpywareDetector(
                     "لدى التطبيق سماح خاص بالظهور فوق تطبيقات أخرى؛ قد يُستخدم للفقاعات أو أدوات مساعدة، ولا يثبت إساءة الاستخدام."
                 ),
                 Triple(
-                    AppOpsManager.OPSTR_REQUEST_INSTALL_PACKAGES,
+                    "android:request_install_packages",
                     "طلب تثبيت تطبيقات أخرى",
                     "لدى التطبيق سماح بطلب تثبيت حزم؛ راجع ما إذا كنت تثق بمصدره، فهذا السماح وحده لا يثبت تثبيت برمجية ضارة."
                 ),
