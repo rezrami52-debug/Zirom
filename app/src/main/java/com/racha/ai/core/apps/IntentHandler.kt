@@ -18,6 +18,7 @@ import com.racha.ai.core.eve.EveState
 import com.racha.ai.core.eve.MediaShelfType
 import com.racha.ai.core.media.IptvManager
 import com.racha.ai.core.security.NetworkUsageManager
+import com.racha.ai.core.security.SecurityAuditReport
 import com.racha.ai.core.security.SpywareDetector
 import com.racha.ai.core.shizuku.ShizukuShellRunner
 import com.racha.ai.services.location.LocationHelper
@@ -66,23 +67,12 @@ class IntentHandler(
             return@withContext HandlerResult.DirectReply(navigationReply)
         }
 
-        // 1. فحص التنصت والمراقبة والأمان
-        if (lower.contains("تنصت") || lower.contains("تجسس") || lower.contains("مراقب") || lower.contains("مراقبة") || lower.contains("فحص الامان") || lower.contains("فحص الأمان")) {
+        // فحص أمني محلي محدود؛ لا يُرسل السؤال إلى النموذج اللغوي.
+        if (lower.contains("تنصت") || lower.contains("تجسس") ||
+            lower.contains("مراقب") || lower.contains("مراقبة") ||
+            lower.contains("فحص الامان") || lower.contains("فحص الأمان")) {
             val report = spywareDetector.runFullSecurityAudit()
-            val suffix = getFriendlyName().let { if (it.isNotBlank()) " $it" else "" }
-
-            return@withContext if (report.isClean && report.activeMicApps.isEmpty()) {
-                HandlerResult.DirectReply("🛡️ قمت بفحص أمني كامل$suffix، لم تظهر مؤشرات ضمن الفحوص التي أمكن تشغيلها؛ هذا لا يثبت خلو الهاتف من التجسس.")
-            } else {
-                val sb = StringBuilder("⚠️ تقرير فحص الأمان$suffix:\n")
-                if (report.activeMicApps.isNotEmpty()) {
-                    sb.append("• تطبيقات لديها سماح باستخدام الميكروفون؛ لا يعني ذلك أنها تستخدمه الآن: ${report.activeMicApps.joinToString(", ")}\n")
-                }
-                for (threat in report.threatsFound) {
-                    sb.append("• ${threat.appName}: ${threat.threatType} (${threat.description})\n")
-                }
-                HandlerResult.DirectReply(sb.toString().trim())
-            }
+            return@withContext buildSecurityAuditReply(report)
         }
 
         // 2. فحص استهلاك الإنترنت والبيانات
@@ -179,13 +169,7 @@ class IntentHandler(
         val intentType = IntentClassifier.classify(text)
         return@withContext when (intentType) {
             IntentClassifier.IntentType.CHECK_SPYWARE -> {
-                val report = spywareDetector.runFullSecurityAudit()
-                val suffix = getFriendlyName().let { if (it.isNotBlank()) " $it" else "" }
-                if (report.isClean && report.activeMicApps.isEmpty()) {
-                    HandlerResult.DirectReply("🛡️ قمت بفحص أمني كامل$suffix، لم تظهر مؤشرات ضمن الفحوص التي أمكن تشغيلها؛ هذا لا يثبت خلو الهاتف من التجسس.")
-                } else {
-                    HandlerResult.DirectReply("⚠️ رصدت بعض التطبيقات التي تمتلك أذونات حساسة$suffix، راجع تقرير الأمان.")
-                }
+                buildSecurityAuditReply(spywareDetector.runFullSecurityAudit())
             }
             IntentClassifier.IntentType.CHECK_DATA_USAGE -> {
                 val topApps = try {
@@ -473,6 +457,45 @@ class IntentHandler(
                 if (appResolver.openApp(app.packageName)) "✅ تم فتح ${app.appName}" else "⚠️ فشل فتح ${app.appName}"
             }
         }
+    }
+
+    private fun buildSecurityAuditReply(report: SecurityAuditReport): HandlerResult {
+        val suffix = getFriendlyName().let { if (it.isNotBlank()) " $it" else "" }
+        val sb = StringBuilder("🛡️ خلاصة فحص أمني محدود$suffix:\n")
+
+        if (report.threatsFound.isEmpty()) {
+            sb.append("لم أرصد مؤشرًا واضحًا ضمن الفحوص التي أمكن تنفيذها. هذا لا يثبت خلو الهاتف من كل تهديد.\n")
+        } else {
+            sb.append("وجدت إعدادات أو خدمات تستحق المراجعة؛ وجودها لا يثبت التجسس: \n")
+            for (threat in report.threatsFound.take(8)) {
+                val severityText = when (threat.severity) {
+                    com.racha.ai.core.security.ThreatSeverity.HIGH -> "مرتفع"
+                    com.racha.ai.core.security.ThreatSeverity.MEDIUM -> "متوسط"
+                    com.racha.ai.core.security.ThreatSeverity.LOW -> "منخفض"
+                }
+                sb.append("• ${threat.appName}: ${threat.description} (أولوية المراجعة: $severityText).\n")
+            }
+            if (report.threatsFound.size > 8) {
+                sb.append("• توجد نتائج إضافية لم أعرضها هنا.\n")
+            }
+        }
+
+        if (report.micPermissionApps.isNotEmpty()) {
+            sb.append(
+                "• إذن الميكروفون ممنوح لهذه التطبيقات: " +
+                    report.micPermissionApps.take(8).joinToString("، ") +
+                    ". هذا لا يعني أنها تستخدمه الآن.\n"
+            )
+        }
+
+        if (report.scanWarnings.isNotEmpty()) {
+            sb.append("• لم يكتمل الفحص: ${report.scanWarnings.joinToString("؛ ")}\n")
+            sb.append("لذلك لا أستطيع وصف الهاتف بأنه آمن بناءً على هذه النتيجة.")
+        } else if (report.threatsFound.isEmpty()) {
+            sb.append("الفحص اقتصر على بعض الإعدادات والصلاحيات، وليس تحليلًا شاملًا للبرمجيات الخبيثة.")
+        }
+
+        return HandlerResult.DirectReply(sb.toString().trim())
     }
 
     private fun handleAdvancedCommands(text: String): HandlerResult {

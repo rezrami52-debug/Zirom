@@ -6,7 +6,6 @@ import android.content.pm.ApplicationInfo
 import android.content.pm.PackageManager
 import android.os.Build
 import android.provider.Settings
-import com.racha.ai.core.shizuku.ShizukuShellRunner
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
@@ -27,11 +26,11 @@ enum class ThreatSeverity {
 }
 
 data class SecurityAuditReport(
-    val isClean: Boolean,
     val threatsFound: List<SecurityThreat>,
-    val activeMicApps: List<String>,
+    val micPermissionApps: List<String>,
     val suspiciousAccessibilityApps: List<String>,
-    val hiddenApps: List<String>
+    val hiddenApps: List<String>,
+    val scanWarnings: List<String> = emptyList()
 )
 
 class SpywareDetector(
@@ -42,19 +41,26 @@ class SpywareDetector(
         withContext(Dispatchers.IO) {
             val threats = mutableListOf<SecurityThreat>()
             val accessibilityApps = mutableListOf<String>()
-            val activeMic = mutableListOf<String>()
+            val micPermissionApps = mutableListOf<String>()
+            val scanWarnings = mutableListOf<String>()
             val pm = context.packageManager
 
-            val enabledServices = Settings.Secure.getString(
-                context.contentResolver,
-                Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES
-            ) ?: ""
+            val enabledServices = try {
+                Settings.Secure.getString(
+                    context.contentResolver,
+                    Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES
+                ) ?: ""
+            } catch (_: Exception) {
+                scanWarnings.add("تعذر قراءة إعداد خدمات إمكانية الوصول.")
+                ""
+            }
 
             val installedApps = try {
                 pm.getInstalledApplications(
                     PackageManager.GET_META_DATA
                 )
             } catch (_: Exception) {
+                scanWarnings.add("تعذر تعداد التطبيقات المثبتة؛ نتيجة الفحص غير مكتملة.")
                 emptyList()
             }
 
@@ -118,6 +124,7 @@ class SpywareDetector(
                         ?.distinct()
                         ?: emptyList()
                 } catch (_: Exception) {
+                    scanWarnings.add("تعذر التحقق من بعض الأذونات المطلوبة للتطبيقات.")
                     emptyList()
                 }
             }
@@ -144,6 +151,13 @@ class SpywareDetector(
                 }
 
                 val permissions = sensitivePermissions(packageName)
+                val hasGrantedMicPermission = pm.checkPermission(
+                    "android.permission.RECORD_AUDIO",
+                    packageName
+                ) == PackageManager.PERMISSION_GRANTED
+                if (hasGrantedMicPermission) {
+                    micPermissionApps.add(name)
+                }
                 val source = installSource(packageName)
                 val accessibilityEnabled =
                     enabledServices.contains(packageName)
@@ -185,6 +199,7 @@ class SpywareDetector(
             val activeAdmins = try {
                 dpm?.activeAdmins ?: emptyList()
             } catch (_: Exception) {
+                scanWarnings.add("تعذر فحص مسؤولي الجهاز؛ نتيجة الفحص غير مكتملة.")
                 emptyList()
             }
 
@@ -218,64 +233,6 @@ class SpywareDetector(
                 )
             }
 
-            if (ShizukuShellRunner.isShizukuAvailable()) {
-                try {
-                    val command =
-                        "cmd appops query-op --user 0 RECORD_AUDIO allow"
-
-                    val output =
-                        ShizukuShellRunner.execCommand(command)
-
-                    for (line in output.lines()) {
-                        val match = Regex(
-                            "[a-zA-Z0-9._]+"
-                        ).find(line) ?: continue
-
-                        val packageName = match.value
-
-                        if (
-                            packageName == context.packageName ||
-                            packageName.contains("systemui") ||
-                            packageName.contains("google")
-                        ) {
-                            continue
-                        }
-
-                        val name = appName(packageName)
-
-                        if (!activeMic.contains(name)) {
-                            activeMic.add(name)
-                        }
-
-                        val existing = threats.firstOrNull {
-                            it.packageName == packageName
-                        }
-
-                        if (existing == null) {
-                            threats.add(
-                                SecurityThreat(
-                                    appName = name,
-                                    packageName = packageName,
-                                    threatType = "استخدام ميكروفون مرصود",
-                                    description =
-                                        "ظهر التطبيق ضمن نتائج AppOps " +
-                                            "للسماح باستخدام الميكروفون. " +
-                                            "قد يكون الاستخدام مشروعًا؛ راجع الوقت " +
-                                            "والسياق قبل الاستنتاج.",
-                                    severity = ThreatSeverity.MEDIUM,
-                                    installSource =
-                                        installSource(packageName),
-                                    sensitivePermissions =
-                                        sensitivePermissions(packageName)
-                                )
-                            )
-                        }
-                    }
-                } catch (_: Exception) {
-                    // قد لا يسمح إصدار Android أو Shizuku بقراءة AppOps.
-                }
-            }
-
             val hiddenApps = threats
                 .filter {
                     it.threatType.contains("مخفي")
@@ -283,14 +240,14 @@ class SpywareDetector(
                 .map { it.appName }
 
             SecurityAuditReport(
-                isClean = threats.isEmpty(),
                 threatsFound = threats.distinctBy {
                     "${it.packageName}:${it.threatType}"
                 },
-                activeMicApps = activeMic.distinct(),
+                micPermissionApps = micPermissionApps.distinct(),
                 suspiciousAccessibilityApps =
                     accessibilityApps.distinct(),
-                hiddenApps = hiddenApps.distinct()
+                hiddenApps = hiddenApps.distinct(),
+                scanWarnings = scanWarnings.distinct()
             )
         }
 }
