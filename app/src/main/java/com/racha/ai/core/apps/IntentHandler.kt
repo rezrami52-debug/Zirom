@@ -18,6 +18,7 @@ import com.racha.ai.core.eve.EveState
 import com.racha.ai.core.eve.MediaShelfType
 import com.racha.ai.core.media.IptvManager
 import com.racha.ai.core.security.NetworkUsageManager
+import com.racha.ai.core.security.ReviewPriority
 import com.racha.ai.core.security.SecurityAuditReport
 import com.racha.ai.core.security.SpywareDetector
 import com.racha.ai.core.shizuku.ShizukuShellRunner
@@ -461,39 +462,53 @@ class IntentHandler(
 
     private fun buildSecurityAuditReply(report: SecurityAuditReport): HandlerResult {
         val suffix = getFriendlyName().let { if (it.isNotBlank()) " $it" else "" }
-        val sb = StringBuilder("🛡️ خلاصة فحص أمني محدود$suffix:\n")
+        val sb = StringBuilder("🛡️ نتيجة فحص إعدادات الأمان$suffix:\n")
 
-        if (report.threatsFound.isEmpty()) {
-            sb.append("لم أرصد مؤشرًا واضحًا ضمن الفحوص التي أمكن تنفيذها. هذا لا يثبت خلو الهاتف من كل تهديد.\n")
+        if (report.findings.isEmpty()) {
+            sb.append("لم أجد في نطاق الفحوص مؤشرات إعدادات خاصة تستحق المراجعة. هذا ليس إثباتًا لخلو الهاتف من كل برمجية ضارة.\n")
         } else {
-            sb.append("وجدت إعدادات أو خدمات تستحق المراجعة؛ وجودها لا يثبت التجسس: \n")
-            for (threat in report.threatsFound.take(8)) {
-                val severityText = when (threat.severity) {
-                    com.racha.ai.core.security.ThreatSeverity.HIGH -> "مرتفع"
-                    com.racha.ai.core.security.ThreatSeverity.MEDIUM -> "متوسط"
-                    com.racha.ai.core.security.ThreatSeverity.LOW -> "منخفض"
+            sb.append("وجدت إعدادات أو أذونات تستحق المراجعة، لكنها لا تثبت التجسس:\n")
+            for (finding in report.findings.take(10)) {
+                val priorityText = when (finding.priority) {
+                    ReviewPriority.HIGH -> "عالية"
+                    ReviewPriority.MEDIUM -> "متوسطة"
+                    ReviewPriority.LOW -> "منخفضة"
                 }
-                sb.append("• ${threat.appName}: ${threat.description} (أولوية المراجعة: $severityText).\n")
+                sb.append("• ${finding.appName} — ${finding.category}: ${finding.explanation} (أولوية المراجعة: $priorityText).\n")
+                finding.installSource?.let { installerPackage ->
+                    val installerName = try {
+                        context.packageManager.getApplicationLabel(
+                            context.packageManager.getApplicationInfo(installerPackage, 0)
+                        ).toString()
+                    } catch (_: Exception) {
+                        installerPackage
+                    }
+                    sb.append("  مصدر التثبيت المسجل: $installerName. هذا وصف للمصدر فقط وليس حكمًا على موثوقيته.\n")
+                }
             }
-            if (report.threatsFound.size > 8) {
-                sb.append("• توجد نتائج إضافية لم أعرضها هنا.\n")
+            if (report.findings.size > 10) {
+                sb.append("• توجد نتائج أخرى؛ عرضت أول 10 لتبقى الخلاصة مقروءة.\n")
             }
         }
 
-        if (report.micPermissionApps.isNotEmpty()) {
+        if (report.microphonePermissionApps.isNotEmpty()) {
             sb.append(
-                "• إذن الميكروفون ممنوح لهذه التطبيقات: " +
-                    report.micPermissionApps.take(8).joinToString("، ") +
-                    ". هذا لا يعني أنها تستخدمه الآن.\n"
+                "• إذن الميكروفون ممنوح لـ: " +
+                    report.microphonePermissionApps.take(8).joinToString("، ") +
+                    ". هذا لا يعني أن الميكروفون استُخدم الآن.\n"
             )
         }
 
-        if (report.scanWarnings.isNotEmpty()) {
-            sb.append("• لم يكتمل الفحص: ${report.scanWarnings.joinToString("؛ ")}\n")
-            sb.append("لذلك لا أستطيع وصف الهاتف بأنه آمن بناءً على هذه النتيجة.")
-        } else if (report.threatsFound.isEmpty()) {
-            sb.append("الفحص اقتصر على بعض الإعدادات والصلاحيات، وليس تحليلًا شاملًا للبرمجيات الخبيثة.")
+        when (report.activeVpnDetected) {
+            true -> sb.append("• رصدت اتصال VPN نشطًا؛ قد يكون مشروعًا، ولا يحدد هذا الفحص التطبيق المسؤول عنه.\n")
+            false -> sb.append("• لم يُرصد اتصال VPN نشط وقت الفحص.\n")
+            null -> Unit
         }
+
+        if (report.scanWarnings.isNotEmpty()) {
+            sb.append("• تعذر إكمال بعض الفحوص: ${report.scanWarnings.distinct().joinToString("؛ ")}\n")
+        }
+        sb.append("هذا فحص محلي لإعدادات وأذونات محددة؛ لا يفحص كل الملفات أو يكتشف كل البرمجيات الخبيثة، ولا يثبت وحده أن الهاتف مخترق أو آمن تمامًا.")
 
         return HandlerResult.DirectReply(sb.toString().trim())
     }
