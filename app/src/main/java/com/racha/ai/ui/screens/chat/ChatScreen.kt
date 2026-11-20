@@ -125,8 +125,26 @@ fun ChatScreen(
         listOf(primaryGlow.copy(alpha = 0.6f), Color.White.copy(alpha = 0.1f))
     )
 
-    val imagePickerLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
-        viewModel.onImageSelected(uri)
+    val attachmentPickerLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        if (uri != null) {
+            val mimeType = context.contentResolver.getType(uri)?.substringBefore(';')?.lowercase().orEmpty()
+            val displayName = runCatching {
+                context.contentResolver.query(
+                    uri,
+                    arrayOf(android.provider.OpenableColumns.DISPLAY_NAME),
+                    null,
+                    null,
+                    null
+                )?.use { cursor ->
+                    val index = cursor.getColumnIndex(android.provider.OpenableColumns.DISPLAY_NAME)
+                    if (cursor.moveToFirst() && index >= 0) cursor.getString(index) else null
+                }
+            }.getOrNull().orEmpty()
+            val extension = displayName.substringAfterLast('.', "").lowercase()
+            val supportedImage = mimeType in setOf("image/jpeg", "image/png", "image/webp") ||
+                extension in setOf("jpg", "jpeg", "png", "webp")
+            if (supportedImage) viewModel.onImageSelected(uri) else viewModel.onFileSelected(uri)
+        }
     }
 
     val cameraLauncher = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
@@ -276,8 +294,16 @@ fun ChatScreen(
                 }
                 Spacer(modifier = Modifier.width(12.dp))
                 Column(modifier = Modifier.weight(1f)) {
-                    Text("تم إرفاق ملف للتحليل", color = if (isDarkTheme) Color.White else Color(0xFF0A1B3A), fontSize = 14.sp, fontWeight = FontWeight.Bold)
-                    Text("جاري المعالجة...", color = Color.Gray, fontSize = 12.sp)
+                    Text("تحليل ملف محلي", color = if (isDarkTheme) Color.White else Color(0xFF0A1B3A), fontSize = 14.sp, fontWeight = FontWeight.Bold)
+                    Text(
+                        state.selectedFileSummary ?: "جارٍ تحليل الملف محليًا...",
+                        color = Color.Gray,
+                        fontSize = 11.sp,
+                        lineHeight = 15.sp,
+                        maxLines = 8,
+                        overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
+                    )
+                    Text("لن يُرفع الملف أو يُشغّل؛ النتيجة لا تُحفظ في سجل المحادثة.", color = Color.Gray, fontSize = 10.sp)
                 }
                 IconButton(onClick = { viewModel.clearSelectedFile() }) {
                     Icon(Icons.Default.Close, contentDescription = "إزالة الملف", tint = Color(0xFFFF5252))
@@ -290,7 +316,7 @@ fun ChatScreen(
             text = state.inputText,
             onValueChange = viewModel::onInputChange,
             onSend = {
-                if (state.inputText.isNotBlank() || state.pendingImagePath != null) viewModel.sendMessage()
+                if (state.inputText.isNotBlank() || state.pendingImagePath != null || state.selectedFileUri != null) viewModel.sendMessage()
                 else if (micPermission.status.isGranted) {
                     isListening = true
                     voiceHelper.startListening(
@@ -305,7 +331,8 @@ fun ChatScreen(
             isDark = isDarkTheme,
             glow = primaryGlow,
             selectedImagePath = state.pendingImagePath,
-            onAttach = { imagePickerLauncher.launch(arrayOf("image/jpeg", "image/png", "image/webp")) },
+            hasSelectedFile = state.selectedFileUri != null,
+            onAttach = { attachmentPickerLauncher.launch(arrayOf("*/*")) },
             onRemoveAttachment = viewModel::removePendingImage
         )
 
@@ -647,6 +674,7 @@ fun InputBarRacha(
     isDark: Boolean,
     glow: Color,
     selectedImagePath: String? = null,
+    hasSelectedFile: Boolean = false,
     onAttach: () -> Unit = {},
     onRemoveAttachment: () -> Unit = {}
 ) {
@@ -689,7 +717,7 @@ fun InputBarRacha(
 
         Row(verticalAlignment = Alignment.CenterVertically) {
             IconButton(onClick = onAttach, enabled = !isListening) {
-                Icon(Icons.Default.AttachFile, contentDescription = "إرفاق صورة", tint = glow)
+                Icon(Icons.Default.AttachFile, contentDescription = "إرفاق صورة أو ملف", tint = glow)
             }
 
             Surface(
@@ -729,7 +757,7 @@ fun InputBarRacha(
                         CircularProgressIndicator(color = glow, modifier = Modifier.size(22.dp), strokeWidth = 2.dp)
                     } else {
                         Icon(
-                            imageVector = if (text.isNotBlank() || selectedImagePath != null) Icons.Default.Send else Icons.Default.Mic,
+                            imageVector = if (text.isNotBlank() || selectedImagePath != null || hasSelectedFile) Icons.Default.Send else Icons.Default.Mic,
                             contentDescription = "إرسال الرسالة أو الصورة",
                             tint = glow,
                             modifier = Modifier.size(22.dp)

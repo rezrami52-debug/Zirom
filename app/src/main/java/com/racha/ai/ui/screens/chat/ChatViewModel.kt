@@ -86,6 +86,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
     private var originalPendingQuestion: String? = null
 
     private var screenLearningJob: Job? = null
+    private var fileAnalysisJob: Job? = null
     private var lastLearnedScreenText: String? = null
     private var lastScreenAnalysisAt: Long = 0L
 
@@ -103,6 +104,8 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun startNewChat() {
+        fileAnalysisJob?.cancel()
+        fileAnalysisJob = null
         val previousPendingImage = _uiState.value.pendingImagePath
         _uiState.update {
             it.copy(
@@ -111,7 +114,10 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                 isLoading = false,
                 pendingChooser = null,
                 pendingSpecialTool = null,
-                pendingImagePath = null
+                pendingImagePath = null,
+                selectedFileUri = null,
+                selectedFileSummary = null,
+                selectedImageUri = null
             )
         }
 
@@ -132,15 +138,40 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
     }
     fun onFileSelected(uri: android.net.Uri?) {
         if (uri == null) return
-        _uiState.update { it.copy(selectedFileUri = uri.toString(), selectedFileSummary = "جاري تحليل الملف...") }
-        
-        viewModelScope.launch(Dispatchers.IO) {
-            val analysis = com.racha.ai.core.tools.FileAnalyzer.analyzeFile(getApplication(), uri)
-            _uiState.update { it.copy(selectedFileSummary = analysis.summary) }
+        fileAnalysisJob?.cancel()
+        removePendingImage()
+        val uriValue = uri.toString()
+        _uiState.update {
+            it.copy(
+                selectedFileUri = uriValue,
+                selectedFileSummary = FILE_ANALYSIS_LOADING,
+                selectedImageUri = null
+            )
+        }
+
+        fileAnalysisJob = viewModelScope.launch(Dispatchers.IO) {
+            try {
+                val analysis = withTimeout(90_000L) {
+                    com.racha.ai.core.tools.FileAnalyzer.analyzeFile(getApplication(), uri)
+                }
+                _uiState.update {
+                    if (it.selectedFileUri == uriValue) it.copy(selectedFileSummary = analysis.summary) else it
+                }
+            } catch (cancelled: kotlinx.coroutines.CancellationException) {
+                throw cancelled
+            } catch (error: Exception) {
+                _uiState.update {
+                    if (it.selectedFileUri == uriValue) {
+                        it.copy(selectedFileSummary = "تعذّر تحليل الملف محليًا. أعد اختياره وحاول مجددًا؛ لم يُرفع الملف.")
+                    } else it
+                }
+            }
         }
     }
 
     fun clearSelectedFile() {
+        fileAnalysisJob?.cancel()
+        fileAnalysisJob = null
         _uiState.update { it.copy(selectedFileUri = null, selectedFileSummary = null) }
     }
 
@@ -155,6 +186,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
 
     fun onImageSelected(uri: Uri?) {
         if (uri == null) return
+        clearSelectedFile()
         viewModelScope.launch {
             try {
                 val imageFile = withContext(Dispatchers.IO) { persistSelectedImage(uri) }
@@ -314,6 +346,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         const val MAX_CHAT_IMAGE_BYTES = 12L * 1024L * 1024L
         const val MAX_IMAGE_SIDE = 1536
         const val DEFAULT_IMAGE_PROMPT = "صف الصورة المرفقة واشرح أهم ما يظهر فيها."
+        const val FILE_ANALYSIS_LOADING = "جارٍ تحليل الملف محليًا..."
     }
 
     fun onSpecialToolCompleted(success: Boolean, msg: String) {
@@ -437,6 +470,27 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         val userText = currentState.inputText
         val trimmed = userText.trim()
         val imagePath = currentState.pendingImagePath
+
+        // APK/ZIP والملفات العامة تُعرض محليًا فقط؛ لا تدخل في طلب Gemini/Qwen ولا تُحفظ في Room.
+        if (currentState.selectedFileUri != null) {
+            val localReport = currentState.selectedFileSummary
+            if (localReport.isNullOrBlank() || localReport == FILE_ANALYSIS_LOADING) return
+            val localMessages = buildList {
+                if (trimmed.isNotBlank()) add(ChatMessage(text = trimmed, isFromUser = true))
+                add(ChatMessage(text = localReport, isFromUser = false))
+            }
+            fileAnalysisJob?.cancel()
+            _uiState.update {
+                it.copy(
+                    inputText = "",
+                    selectedFileUri = null,
+                    selectedFileSummary = null,
+                    selectedImageUri = null,
+                    messages = it.messages + localMessages
+                )
+            }
+            return
+        }
         
         // دمج سياق الملف والصورة المرفقة في النص المرسل للذكاء الاصطناعي
         val fileContext = if (currentState.selectedFileSummary != null) {
