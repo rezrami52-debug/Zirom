@@ -21,7 +21,8 @@ import kotlin.coroutines.coroutineContext
 
 /** تحليل ساكن محلي فقط: لا تثبيت، لا تشغيل للملف، ولا فكّ لمحتويات الأرشيف. */
 object FileAnalyzer {
-    private const val MAX_ARCHIVE_BYTES = 100L * 1024L * 1024L
+    private const val MAX_APK_BYTES = 160L * 1024L * 1024L
+    private const val MAX_ZIP_BYTES = 100L * 1024L * 1024L
     private const val MAX_TEXT_BYTES = 128 * 1024
     private const val MAX_ARCHIVE_ENTRIES = 2_000
     private const val MAX_ARCHIVE_DECLARED_UNCOMPRESSED_BYTES = 512L * 1024L * 1024L
@@ -59,7 +60,7 @@ object FileAnalyzer {
 
     @Suppress("DEPRECATION")
     private suspend fun analyzeApk(context: Context, uri: Uri, fileName: String): FileAnalysisResult {
-        val staged = stageFile(context, uri, MAX_ARCHIVE_BYTES)
+        val staged = stageFile(context, uri, MAX_APK_BYTES)
         try {
             // PackageManager يقرأ بيانات الحزمة من الأرشيف ولا يثبّت التطبيق ولا يشغّله.
             val signingFlag = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
@@ -164,7 +165,7 @@ object FileAnalyzer {
         component.name.substringAfterLast('.')
 
     private suspend fun analyzeZip(context: Context, uri: Uri, fileName: String): FileAnalysisResult {
-        val staged = stageFile(context, uri, MAX_ARCHIVE_BYTES)
+        val staged = stageFile(context, uri, MAX_ZIP_BYTES)
         try {
             val names = mutableListOf<String>()
             val warnings = mutableListOf<String>()
