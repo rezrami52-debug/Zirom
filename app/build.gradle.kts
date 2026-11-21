@@ -129,4 +129,10 @@ dependencies {
     implementation("io.coil-kt:coil-compose:2.6.0")
     implementation("dev.rikka.shizuku:api:13.1.5")
     implementation("dev.rikka.shizuku:provider:13.1.5")
+
+    // Experimental local APK source decompilation. 1.5.6 is the latest
+    // published Maven Central version verified for both JADX artifacts.
+    implementation("io.github.skylot:jadx-core:1.5.6")
+    implementation("io.github.skylot:jadx-dex-input:1.5.6")
+    implementation("com.github.tony19:logback-android:3.0.0")
 }

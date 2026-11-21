@@ -147,6 +147,12 @@ fun ChatScreen(
         }
     }
 
+    val decompiledExportLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.CreateDocument("application/zip")
+    ) { uri ->
+        if (uri != null) viewModel.exportDecompiledSources(uri)
+    }
+
     val cameraLauncher = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
         if (result.resultCode == android.app.Activity.RESULT_OK) viewModel.onSpecialToolCompleted(true, "📸 تم التقاط الصورة")
         else viewModel.onSpecialToolCancelled()
@@ -294,7 +300,12 @@ fun ChatScreen(
                 }
                 Spacer(modifier = Modifier.width(12.dp))
                 Column(modifier = Modifier.weight(1f)) {
-                    Text("تحليل ملف محلي", color = if (isDarkTheme) Color.White else Color(0xFF0A1B3A), fontSize = 14.sp, fontWeight = FontWeight.Bold)
+                    Text(
+                        state.selectedFileName ?: "تحليل ملف محلي",
+                        color = if (isDarkTheme) Color.White else Color(0xFF0A1B3A),
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.Bold
+                    )
                     Text(
                         state.selectedFileSummary ?: "جارٍ تحليل الملف محليًا...",
                         color = Color.Gray,
@@ -304,6 +315,46 @@ fun ChatScreen(
                         overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
                     )
                     Text("لن يُرفع الملف أو يُشغّل؛ النتيجة لا تُحفظ في سجل المحادثة.", color = Color.Gray, fontSize = 10.sp)
+                    if (state.selectedFileName.orEmpty().endsWith(".apk", ignoreCase = true)) {
+                        when {
+                            state.isApkDecompiling -> {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    CircularProgressIndicator(
+                                        modifier = Modifier.size(16.dp),
+                                        strokeWidth = 2.dp,
+                                        color = primaryGlow
+                                    )
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    TextButton(onClick = viewModel::cancelApkDecompilation) {
+                                        Text("إلغاء", color = primaryGlow)
+                                    }
+                                }
+                            }
+                            state.decompiledSourceZipPath != null -> {
+                                TextButton(
+                                    onClick = { decompiledExportLauncher.launch("racha-decompiled-sources.zip") }
+                                ) {
+                                    Text("تصدير الشيفرة المستخرجة", color = primaryGlow)
+                                }
+                            }
+                            else -> {
+                                TextButton(onClick = viewModel::decompileSelectedApk) {
+                                    Text("تفكيك شيفرة الحزمة الرئيسية", color = primaryGlow)
+                                }
+                            }
+                        }
+                        state.apkDecompileStatus?.let { status ->
+                            Text(status, color = Color.Gray, fontSize = 10.sp, lineHeight = 14.sp)
+                        }
+                        if (state.apkDecompileStatus == null) {
+                            Text(
+                                "تجريبي: لا يشغّل APK، لكن فك ملف غير موثوق يظل يعالج بياناته بمحلل وقد يحمل مخاطر. لا يضمن استعادة المصدر الأصلي.",
+                                color = Color.Gray,
+                                fontSize = 10.sp,
+                                lineHeight = 14.sp
+                            )
+                        }
+                    }
                 }
                 IconButton(onClick = { viewModel.clearSelectedFile() }) {
                     Icon(Icons.Default.Close, contentDescription = "إزالة الملف", tint = Color(0xFFFF5252))

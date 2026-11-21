@@ -4,6 +4,7 @@ import android.app.Application
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.net.Uri
+import android.provider.OpenableColumns
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.racha.ai.core.agent.SelfEvolutionAgent
@@ -28,6 +29,7 @@ import com.racha.ai.data.local.ConversationEntity
 import com.racha.ai.data.local.RachaDatabase
 import com.racha.ai.data.repository.KnowledgeRepository
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -57,6 +59,10 @@ data class ChatUiState(
     val pendingChooser: IntentHandler.HandlerResult.ShowChooser? = null,
     val selectedFileUri: String? = null,
     val selectedFileSummary: String? = null,
+    val selectedFileName: String? = null,
+    val isApkDecompiling: Boolean = false,
+    val apkDecompileStatus: String? = null,
+    val decompiledSourceZipPath: String? = null,
     val selectedImageUri: String? = null,
     val isScreenLearningActive: Boolean = false,
     val pendingImagePath: String? = null
@@ -87,6 +93,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
 
     private var screenLearningJob: Job? = null
     private var fileAnalysisJob: Job? = null
+    private var apkDecompilationJob: Job? = null
     private var lastLearnedScreenText: String? = null
     private var lastScreenAnalysisAt: Long = 0L
 
@@ -106,6 +113,9 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
     fun startNewChat() {
         fileAnalysisJob?.cancel()
         fileAnalysisJob = null
+        apkDecompilationJob?.cancel()
+        apkDecompilationJob = null
+        _uiState.value.decompiledSourceZipPath?.let { File(it).delete() }
         val previousPendingImage = _uiState.value.pendingImagePath
         _uiState.update {
             it.copy(
@@ -117,6 +127,10 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                 pendingImagePath = null,
                 selectedFileUri = null,
                 selectedFileSummary = null,
+                selectedFileName = null,
+                isApkDecompiling = false,
+                apkDecompileStatus = null,
+                decompiledSourceZipPath = null,
                 selectedImageUri = null
             )
         }
@@ -139,12 +153,20 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
     fun onFileSelected(uri: android.net.Uri?) {
         if (uri == null) return
         fileAnalysisJob?.cancel()
+        apkDecompilationJob?.cancel()
+        apkDecompilationJob = null
+        _uiState.value.decompiledSourceZipPath?.let { File(it).delete() }
         removePendingImage()
         val uriValue = uri.toString()
+        val displayName = queryFileDisplayName(uri)
         _uiState.update {
             it.copy(
                 selectedFileUri = uriValue,
                 selectedFileSummary = FILE_ANALYSIS_LOADING,
+                selectedFileName = displayName,
+                isApkDecompiling = false,
+                apkDecompileStatus = null,
+                decompiledSourceZipPath = null,
                 selectedImageUri = null
             )
         }
@@ -172,7 +194,131 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
     fun clearSelectedFile() {
         fileAnalysisJob?.cancel()
         fileAnalysisJob = null
-        _uiState.update { it.copy(selectedFileUri = null, selectedFileSummary = null) }
+        apkDecompilationJob?.cancel()
+        apkDecompilationJob = null
+        _uiState.value.decompiledSourceZipPath?.let { File(it).delete() }
+        _uiState.update {
+            it.copy(
+                selectedFileUri = null,
+                selectedFileSummary = null,
+                selectedFileName = null,
+                isApkDecompiling = false,
+                apkDecompileStatus = null,
+                decompiledSourceZipPath = null
+            )
+        }
+    }
+
+    private fun queryFileDisplayName(uri: Uri): String {
+        val fromProvider = runCatching {
+            getApplication<Application>().contentResolver.query(
+                uri,
+                arrayOf(OpenableColumns.DISPLAY_NAME),
+                null,
+                null,
+                null
+            )?.use { cursor ->
+                val index = cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME)
+                if (cursor.moveToFirst() && index >= 0) cursor.getString(index) else null
+            }
+        }.getOrNull()
+        return (fromProvider ?: uri.lastPathSegment ?: "ملف مجهول").take(160)
+    }
+
+    fun decompileSelectedApk() {
+        val current = _uiState.value
+        val uriValue = current.selectedFileUri ?: return
+        if (!current.selectedFileName.orEmpty().endsWith(".apk", ignoreCase = true) || current.isApkDecompiling) return
+
+        current.decompiledSourceZipPath?.let { File(it).delete() }
+        _uiState.update {
+            it.copy(
+                isApkDecompiling = true,
+                apkDecompileStatus = "يجري تفكيك شيفرة الحزمة الرئيسية محليًا. قد يستغرق ذلك وقتًا.",
+                decompiledSourceZipPath = null
+            )
+        }
+
+        lateinit var decompilationJob: Job
+        decompilationJob = viewModelScope.launch(Dispatchers.IO, start = CoroutineStart.LAZY) {
+            try {
+                val result = com.racha.ai.core.tools.ApkSourceDecompiler.decompileMainPackage(
+                    context = getApplication(),
+                    uri = Uri.parse(uriValue),
+                    onProgress = { done, total ->
+                        _uiState.update { state ->
+                            if (state.selectedFileUri == uriValue && state.isApkDecompiling) {
+                                state.copy(apkDecompileStatus = "تقدم JADX: $done من $total مهمة")
+                            } else state
+                        }
+                    },
+                    shouldCancel = {
+                        !decompilationJob.isActive || _uiState.value.selectedFileUri != uriValue
+                    }
+                )
+                _uiState.update { state ->
+                    if (state.selectedFileUri == uriValue) {
+                        state.copy(
+                            isApkDecompiling = false,
+                            decompiledSourceZipPath = result.archive.absolutePath,
+                            apkDecompileStatus = buildString {
+                                append("اكتمل استخراج ${result.javaFileCount} ملف Java-like للحزمة ${result.packageName}. ")
+                                append("أخطاء JADX: ${result.jadxErrors}. حجم ZIP: ${result.archiveBytes / 1024} KB. ")
+                                append("الناتج تقريبي وقد لا يطابق المصدر الأصلي؛ الشيفرة للحزمة الرئيسية فقط وقد تكون الموارد أوسع.")
+                            }
+                        )
+                    } else {
+                        result.archive.delete()
+                        state
+                    }
+                }
+            } catch (cancelled: kotlinx.coroutines.CancellationException) {
+                _uiState.update { state ->
+                    if (state.selectedFileUri == uriValue) {
+                        state.copy(isApkDecompiling = false, apkDecompileStatus = "أُلغيت عملية التفكيك.")
+                    } else state
+                }
+                throw cancelled
+            } catch (error: Exception) {
+                android.util.Log.e("ChatViewModel", "JADX package decompilation failed", error)
+                _uiState.update { state ->
+                    if (state.selectedFileUri == uriValue) {
+                        state.copy(
+                            isApkDecompiling = false,
+                            apkDecompileStatus = "تعذر تفكيك الحزمة: ${error.message?.take(180) ?: "خطأ غير متوقع"}. لم يُرفع APK."
+                        )
+                    } else state
+                }
+            }
+        }
+        apkDecompilationJob = decompilationJob
+        decompilationJob.start()
+    }
+
+    fun cancelApkDecompilation() {
+        apkDecompilationJob?.cancel()
+    }
+
+    fun exportDecompiledSources(destination: Uri) {
+        val sourcePath = _uiState.value.decompiledSourceZipPath ?: return
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                val source = File(sourcePath)
+                require(source.isFile) { "ملف ZIP المؤقت لم يعد متاحًا؛ أعد التفكيك." }
+                val output = getApplication<Application>().contentResolver.openOutputStream(destination, "w")
+                    ?: throw IllegalStateException("تعذر فتح ملف التصدير للكتابة.")
+                source.inputStream().buffered().use { input ->
+                    output.buffered().use { sink -> input.copyTo(sink) }
+                }
+                _uiState.update { state ->
+                    state.copy(apkDecompileStatus = "تم تصدير ملفات Java-like محليًا. لم يُرسل APK إلى أي خدمة.")
+                }
+            } catch (error: Exception) {
+                _uiState.update { state ->
+                    state.copy(apkDecompileStatus = "تعذر تصدير الملفات: ${error.message?.take(160) ?: "خطأ غير متوقع"}.")
+                }
+            }
+        }
     }
 
     fun clearSelectedImage() {
@@ -480,11 +626,18 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                 add(ChatMessage(text = localReport, isFromUser = false))
             }
             fileAnalysisJob?.cancel()
+            apkDecompilationJob?.cancel()
+            apkDecompilationJob = null
+            currentState.decompiledSourceZipPath?.let { File(it).delete() }
             _uiState.update {
                 it.copy(
                     inputText = "",
                     selectedFileUri = null,
                     selectedFileSummary = null,
+                    selectedFileName = null,
+                    isApkDecompiling = false,
+                    apkDecompileStatus = null,
+                    decompiledSourceZipPath = null,
                     selectedImageUri = null,
                     messages = it.messages + localMessages
                 )
