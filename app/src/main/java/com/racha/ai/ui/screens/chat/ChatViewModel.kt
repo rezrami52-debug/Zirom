@@ -21,6 +21,9 @@ import com.racha.ai.core.eve.MediaShelfType
 import com.racha.ai.core.memory.MemoryLearningPolicy
 import com.racha.ai.core.preferences.AppPreferences
 import com.racha.ai.core.security.SecurePreferences
+import com.racha.ai.core.tools.ApkSourceDecompiler
+import com.racha.ai.core.tools.ApkSourceDecompiler.ExtractedFileEntry
+import com.racha.ai.core.tools.LocalApkCommandMatcher
 import com.racha.ai.data.api.GeminiService
 import com.racha.ai.core.memory.SmartScreenProcessor
 import com.racha.ai.data.llm.QwenService
@@ -63,6 +66,12 @@ data class ChatUiState(
     val isApkDecompiling: Boolean = false,
     val apkDecompileStatus: String? = null,
     val decompiledSourceZipPath: String? = null,
+    val decompiledFiles: List<ExtractedFileEntry> = emptyList(),
+    val isDecompiledBrowserOpen: Boolean = false,
+    val decompiledSearchQuery: String = "",
+    val selectedDecompiledFilePath: String? = null,
+    val decompiledFilePreview: String? = null,
+    val isLoadingDecompiledPreview: Boolean = false,
     val selectedImageUri: String? = null,
     val isScreenLearningActive: Boolean = false,
     val pendingImagePath: String? = null
@@ -131,6 +140,12 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                 isApkDecompiling = false,
                 apkDecompileStatus = null,
                 decompiledSourceZipPath = null,
+                decompiledFiles = emptyList(),
+                isDecompiledBrowserOpen = false,
+                decompiledSearchQuery = "",
+                selectedDecompiledFilePath = null,
+                decompiledFilePreview = null,
+                isLoadingDecompiledPreview = false,
                 selectedImageUri = null
             )
         }
@@ -167,6 +182,12 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                 isApkDecompiling = false,
                 apkDecompileStatus = null,
                 decompiledSourceZipPath = null,
+                decompiledFiles = emptyList(),
+                isDecompiledBrowserOpen = false,
+                decompiledSearchQuery = "",
+                selectedDecompiledFilePath = null,
+                decompiledFilePreview = null,
+                isLoadingDecompiledPreview = false,
                 selectedImageUri = null
             )
         }
@@ -204,7 +225,13 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                 selectedFileName = null,
                 isApkDecompiling = false,
                 apkDecompileStatus = null,
-                decompiledSourceZipPath = null
+                decompiledSourceZipPath = null,
+                decompiledFiles = emptyList(),
+                isDecompiledBrowserOpen = false,
+                decompiledSearchQuery = "",
+                selectedDecompiledFilePath = null,
+                decompiledFilePreview = null,
+                isLoadingDecompiledPreview = false
             )
         }
     }
@@ -235,7 +262,13 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
             it.copy(
                 isApkDecompiling = true,
                 apkDecompileStatus = "يجري تفكيك شيفرة الحزمة الرئيسية محليًا. قد يستغرق ذلك وقتًا.",
-                decompiledSourceZipPath = null
+                decompiledSourceZipPath = null,
+                decompiledFiles = emptyList(),
+                isDecompiledBrowserOpen = false,
+                decompiledSearchQuery = "",
+                selectedDecompiledFilePath = null,
+                decompiledFilePreview = null,
+                isLoadingDecompiledPreview = false
             )
         }
 
@@ -261,8 +294,11 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                         state.copy(
                             isApkDecompiling = false,
                             decompiledSourceZipPath = result.archive.absolutePath,
+                            decompiledFiles = result.files,
+                            isDecompiledBrowserOpen = true,
+                            decompiledSearchQuery = "",
                             apkDecompileStatus = buildString {
-                                append("اكتمل استخراج ${result.javaFileCount} ملف Java-like للحزمة ${result.packageName}. ")
+                                append("اكتمل استخراج ${result.files.size} ملف للحزمة ${result.packageName}، منها ${result.javaFileCount} ملف Java-like. ")
                                 append("أخطاء JADX: ${result.jadxErrors}. حجم ZIP: ${result.archiveBytes / 1024} KB. ")
                                 append("الناتج تقريبي وقد لا يطابق المصدر الأصلي؛ الشيفرة للحزمة الرئيسية فقط وقد تكون الموارد أوسع.")
                             }
@@ -275,7 +311,15 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
             } catch (cancelled: kotlinx.coroutines.CancellationException) {
                 _uiState.update { state ->
                     if (state.selectedFileUri == uriValue) {
-                        state.copy(isApkDecompiling = false, apkDecompileStatus = "أُلغيت عملية التفكيك.")
+                        state.copy(
+                            isApkDecompiling = false,
+                            apkDecompileStatus = "أُلغيت عملية التفكيك.",
+                            decompiledFiles = emptyList(),
+                            isDecompiledBrowserOpen = false,
+                            selectedDecompiledFilePath = null,
+                            decompiledFilePreview = null,
+                            isLoadingDecompiledPreview = false
+                        )
                     } else state
                 }
                 throw cancelled
@@ -317,6 +361,61 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                 _uiState.update { state ->
                     state.copy(apkDecompileStatus = "تعذر تصدير الملفات: ${error.message?.take(160) ?: "خطأ غير متوقع"}.")
                 }
+            }
+        }
+    }
+
+    fun openDecompiledBrowser() {
+        if (_uiState.value.decompiledFiles.isNotEmpty()) {
+            _uiState.update { it.copy(isDecompiledBrowserOpen = true) }
+        }
+    }
+
+    fun closeDecompiledBrowser() {
+        _uiState.update { it.copy(isDecompiledBrowserOpen = false) }
+    }
+
+    fun setDecompiledSearchQuery(query: String) {
+        _uiState.update { it.copy(decompiledSearchQuery = query.take(200)) }
+    }
+
+    fun previewDecompiledFile(path: String) {
+        val state = _uiState.value
+        val archivePath = state.decompiledSourceZipPath ?: return
+        val entry = state.decompiledFiles.firstOrNull { it.path == path } ?: return
+        _uiState.update {
+            it.copy(
+                selectedDecompiledFilePath = path,
+                decompiledFilePreview = if (entry.isTextPreviewable) null else "هذا ملف غير نصي؛ يمكنك تصديره لفتحه محليًا بتطبيق مناسب.",
+                isLoadingDecompiledPreview = entry.isTextPreviewable
+            )
+        }
+        if (!entry.isTextPreviewable) return
+
+        viewModelScope.launch(Dispatchers.IO) {
+            val preview = runCatching {
+                ApkSourceDecompiler.readTextPreview(File(archivePath), path)
+            }.getOrElse { error ->
+                "تعذرت معاينة الملف محليًا: ${error.message?.take(160) ?: "خطأ غير متوقع"}"
+            }
+            _uiState.update {
+                if (it.selectedDecompiledFilePath == path && it.decompiledSourceZipPath == archivePath) {
+                    it.copy(decompiledFilePreview = preview, isLoadingDecompiledPreview = false)
+                } else it
+            }
+        }
+    }
+
+    fun exportDecompiledFile(path: String, destination: Uri) {
+        val archivePath = _uiState.value.decompiledSourceZipPath ?: return
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                val output = getApplication<Application>().contentResolver.openOutputStream(destination, "w")
+                    ?: throw IllegalStateException("تعذر فتح ملف التصدير للكتابة.")
+                output.use { ApkSourceDecompiler.copyArchiveEntry(File(archivePath), path, it) }
+                _uiState.update { it.copy(apkDecompileStatus = "تم تصدير الملف المحدد محليًا؛ لم يُرسل محتواه إلى خدمة ذكاء اصطناعي.") }
+            } catch (error: Exception) {
+                _uiState.update { it.copy(apkDecompileStatus = "تعذر تصدير الملف: ${error.message?.take(160) ?: "خطأ غير متوقع"}.") }
             }
         }
     }
@@ -617,6 +716,22 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         val trimmed = userText.trim()
         val imagePath = currentState.pendingImagePath
 
+        if (LocalApkCommandMatcher.matches(trimmed)) {
+            if (trimmed.isNotBlank()) appendMessage(ChatMessage(text = trimmed, isFromUser = true))
+            _uiState.update { it.copy(inputText = "") }
+            when {
+                currentState.selectedFileUri == null -> appendMessage(
+                    ChatMessage(text = "أرفق ملف APK أولًا؛ سأفككه محليًا ولن أرسل هذا الأمر إلى Gemini أو Qwen.", isFromUser = false)
+                )
+                !currentState.selectedFileName.orEmpty().endsWith(".apk", ignoreCase = true) -> appendMessage(
+                    ChatMessage(text = "الأمر المحلي الحالي مخصص لملفات APK. أرفق APK موثوقًا ثم أعد الطلب.", isFromUser = false)
+                )
+                currentState.decompiledFiles.isNotEmpty() -> openDecompiledBrowser()
+                else -> decompileSelectedApk()
+            }
+            return
+        }
+
         // APK/ZIP والملفات العامة تُعرض محليًا فقط؛ لا تدخل في طلب Gemini/Qwen ولا تُحفظ في Room.
         if (currentState.selectedFileUri != null) {
             val localReport = currentState.selectedFileSummary
@@ -638,6 +753,12 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                     isApkDecompiling = false,
                     apkDecompileStatus = null,
                     decompiledSourceZipPath = null,
+                    decompiledFiles = emptyList(),
+                    isDecompiledBrowserOpen = false,
+                    decompiledSearchQuery = "",
+                    selectedDecompiledFilePath = null,
+                    decompiledFilePreview = null,
+                    isLoadingDecompiledPreview = false,
                     selectedImageUri = null,
                     messages = it.messages + localMessages
                 )

@@ -44,9 +44,12 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.foundation.text.selection.SelectionContainer
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
@@ -64,6 +67,7 @@ import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.window.Dialog
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.google.accompanist.permissions.ExperimentalPermissionsApi
 import com.google.accompanist.permissions.isGranted
@@ -71,6 +75,7 @@ import com.google.accompanist.permissions.rememberPermissionState
 import com.racha.ai.theme.AppThemeManager
 import com.racha.ai.R
 import com.racha.ai.core.tools.PhotoCaptureActivity
+import com.racha.ai.core.tools.ApkSourceDecompiler.ExtractedFileEntry
 import com.racha.ai.core.voice.VoiceInputHelper
 import com.racha.ai.data.repository.NotificationRepository
 import kotlinx.coroutines.launch
@@ -151,6 +156,14 @@ fun ChatScreen(
         ActivityResultContracts.CreateDocument("application/zip")
     ) { uri ->
         if (uri != null) viewModel.exportDecompiledSources(uri)
+    }
+    var pendingDecompiledFileExportPath by remember { mutableStateOf<String?>(null) }
+    val decompiledFileExportLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.CreateDocument("application/octet-stream")
+    ) { uri ->
+        val path = pendingDecompiledFileExportPath
+        pendingDecompiledFileExportPath = null
+        if (uri != null && path != null) viewModel.exportDecompiledFile(path, uri)
     }
 
     val cameraLauncher = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
@@ -331,16 +344,18 @@ fun ChatScreen(
                                 }
                             }
                             state.decompiledSourceZipPath != null -> {
-                                TextButton(
-                                    onClick = { decompiledExportLauncher.launch("racha-decompiled-sources.zip") }
-                                ) {
-                                    Text("تصدير الشيفرة المستخرجة", color = primaryGlow)
+                                TextButton(onClick = viewModel::openDecompiledBrowser) {
+                                    Text("استعراض الملفات (${state.decompiledFiles.size})", color = primaryGlow)
+                                }
+                                TextButton(onClick = { decompiledExportLauncher.launch("racha-decompiled-sources.zip") }) {
+                                    Text("تصدير جميع النتائج ZIP", color = primaryGlow)
                                 }
                             }
                             else -> {
                                 TextButton(onClick = viewModel::decompileSelectedApk) {
-                                    Text("تفكيك شيفرة الحزمة الرئيسية", color = primaryGlow)
+                                    Text("فكّكي هذا الملف محليًا", color = primaryGlow)
                                 }
+                                Text("أو اكتبي: فكّكي هذا الملف", color = Color.Gray, fontSize = 10.sp)
                             }
                         }
                         state.apkDecompileStatus?.let { status ->
@@ -427,6 +442,140 @@ fun ChatScreen(
                         viewModel.sendMessage()
                     }
                 )
+            }
+        }
+    }
+    if (state.isDecompiledBrowserOpen) {
+        DecompiledFilesDialog(
+            files = state.decompiledFiles,
+            searchQuery = state.decompiledSearchQuery,
+            selectedPath = state.selectedDecompiledFilePath,
+            preview = state.decompiledFilePreview,
+            isLoadingPreview = state.isLoadingDecompiledPreview,
+            onSearchQueryChange = viewModel::setDecompiledSearchQuery,
+            onSelectFile = viewModel::previewDecompiledFile,
+            onDismiss = viewModel::closeDecompiledBrowser,
+            onCopyPreview = { text ->
+                val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                clipboard.setPrimaryClip(ClipData.newPlainText("JADX preview", text))
+                Toast.makeText(context, "تم نسخ المعاينة محليًا", Toast.LENGTH_SHORT).show()
+            },
+            onExportFile = { entry ->
+                pendingDecompiledFileExportPath = entry.path
+                val suggestedName = entry.path.substringAfterLast('/').take(120).ifBlank { "racha-extracted-file" }
+                decompiledFileExportLauncher.launch(suggestedName)
+            }
+        )
+    }
+}
+
+@Composable
+private fun DecompiledFilesDialog(
+    files: List<ExtractedFileEntry>,
+    searchQuery: String,
+    selectedPath: String?,
+    preview: String?,
+    isLoadingPreview: Boolean,
+    onSearchQueryChange: (String) -> Unit,
+    onSelectFile: (String) -> Unit,
+    onDismiss: () -> Unit,
+    onCopyPreview: (String) -> Unit,
+    onExportFile: (ExtractedFileEntry) -> Unit
+) {
+    val visibleFiles = remember(files, searchQuery) {
+        val query = searchQuery.trim().lowercase()
+        if (query.isEmpty()) files else files.filter { it.path.lowercase().contains(query) }
+    }
+    val selectedFile = files.firstOrNull { it.path == selectedPath }
+
+    Dialog(onDismissRequest = onDismiss) {
+        Surface(
+            modifier = Modifier.fillMaxWidth().heightIn(min = 420.dp, max = 720.dp),
+            shape = RoundedCornerShape(20.dp),
+            color = Color(0xFF0F172A)
+        ) {
+            Column(modifier = Modifier.fillMaxWidth().padding(14.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text("ملفات JADX المستخرجة", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 17.sp)
+                        Text("${files.size} ملف — المعاينة والتصدير محليان فقط", color = Color.LightGray, fontSize = 11.sp)
+                    }
+                    IconButton(onClick = onDismiss) {
+                        Icon(Icons.Default.Close, contentDescription = "إغلاق المتصفح", tint = Color.White)
+                    }
+                }
+
+                OutlinedTextField(
+                    value = searchQuery,
+                    onValueChange = onSearchQueryChange,
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true,
+                    label = { Text("بحث في مسارات الملفات") },
+                    leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) }
+                )
+
+                Spacer(modifier = Modifier.height(8.dp))
+                Surface(
+                    modifier = Modifier.fillMaxWidth().heightIn(min = 112.dp, max = 190.dp),
+                    color = Color(0xFF111C30),
+                    shape = RoundedCornerShape(12.dp)
+                ) {
+                    Column(modifier = Modifier.verticalScroll(rememberScrollState()).padding(10.dp)) {
+                        Text(selectedPath ?: "اختر ملفًا من القائمة لمعاينته", color = Color(0xFF7DD3FC), fontSize = 11.sp)
+                        Spacer(modifier = Modifier.height(6.dp))
+                        when {
+                            isLoadingPreview -> CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
+                            preview != null -> SelectionContainer {
+                                Text(preview, color = Color.White, fontSize = 11.sp, lineHeight = 16.sp, fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace)
+                            }
+                            else -> Text("المعاينة النصية محدودة إلى 128 KB. الملفات الثنائية يمكن تصديرها لفتحها محليًا.", color = Color.LightGray, fontSize = 11.sp)
+                        }
+                    }
+                }
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.End,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    TextButton(
+                        enabled = selectedFile?.isTextPreviewable == true && !preview.isNullOrBlank(),
+                        onClick = { preview?.let(onCopyPreview) }
+                    ) { Text("نسخ المعاينة") }
+                    TextButton(
+                        enabled = selectedFile != null,
+                        onClick = { selectedFile?.let(onExportFile) }
+                    ) { Text("تصدير الملف") }
+                }
+
+                Divider(color = Color.White.copy(alpha = 0.16f))
+                Text("الملفات الناتجة (${visibleFiles.size})", color = Color.White, fontSize = 12.sp, modifier = Modifier.padding(vertical = 6.dp))
+                LazyColumn(modifier = Modifier.weight(1f).fillMaxWidth()) {
+                    items(visibleFiles, key = { it.path }) { entry ->
+                        val isSelected = entry.path == selectedPath
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(8.dp))
+                                .background(if (isSelected) Color(0xFF164E63) else Color.Transparent)
+                                .clickable { onSelectFile(entry.path) }
+                                .padding(horizontal = 8.dp, vertical = 7.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(
+                                imageVector = if (entry.isTextPreviewable) Icons.Default.Description else Icons.Default.InsertDriveFile,
+                                contentDescription = null,
+                                tint = if (entry.isTextPreviewable) Color(0xFF7DD3FC) else Color.LightGray,
+                                modifier = Modifier.size(18.dp)
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(entry.path, color = Color.White, fontSize = 10.sp, maxLines = 2, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
+                                Text("${entry.sizeBytes / 1024} KB", color = Color.LightGray, fontSize = 9.sp)
+                            }
+                        }
+                    }
+                }
             }
         }
     }

@@ -15,13 +15,17 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.withContext
+import java.io.ByteArrayOutputStream
 import java.io.File
 import java.io.FileOutputStream
+import java.io.OutputStream
+import java.nio.charset.StandardCharsets
 import java.util.UUID
 import java.util.function.Function
 import java.util.function.Predicate
 import kotlin.coroutines.coroutineContext
 import java.util.zip.ZipEntry
+import java.util.zip.ZipFile
 import java.util.zip.ZipOutputStream
 
 /**
@@ -33,13 +37,22 @@ object ApkSourceDecompiler {
     private const val MAX_APK_BYTES = 160L * 1024L * 1024L
     private const val MAX_OUTPUT_BYTES = 100L * 1024L * 1024L
     private const val COPY_BUFFER_BYTES = 32 * 1024
+    private const val MAX_PREVIEW_BYTES = 128 * 1024
+    private val TEXT_EXTENSIONS = setOf("java", "kt", "kts", "xml", "txt", "json", "properties", "smali", "md", "yaml", "yml", "gradle")
+
+    data class ExtractedFileEntry(
+        val path: String,
+        val sizeBytes: Long,
+        val isTextPreviewable: Boolean
+    )
 
     data class Result(
         val archive: File,
         val packageName: String,
         val javaFileCount: Int,
         val jadxErrors: Int,
-        val archiveBytes: Long
+        val archiveBytes: Long,
+        val files: List<ExtractedFileEntry>
     )
 
     suspend fun decompileMainPackage(
@@ -127,16 +140,21 @@ object ApkSourceDecompiler {
                 }
             }
 
+            val indexedFiles = filesToArchive.map { file ->
+                val relative = archivePath(file, sourceRoot, resourceRoot)
+                ExtractedFileEntry(
+                    path = relative,
+                    sizeBytes = file.length(),
+                    isTextPreviewable = file.extension.lowercase() in TEXT_EXTENSIONS
+                )
+            }.sortedBy { it.path.lowercase() }
+
             FileOutputStream(archive).use { fileOutput ->
                 ZipOutputStream(fileOutput.buffered()).use { zip ->
                     filesToArchive.forEach { file ->
                         currentCoroutineContext().ensureActive()
                         if (shouldCancel()) throw CancellationException("تم إلغاء التصدير.")
-                        val relative = if (file.absolutePath.startsWith(sourceRoot.absolutePath + File.separator)) {
-                            "sources/" + file.relativeTo(sourceRoot).invariantSeparatorsPath
-                        } else {
-                            "resources/" + file.relativeTo(resourceRoot).invariantSeparatorsPath
-                        }
+                        val relative = archivePath(file, sourceRoot, resourceRoot)
                         zip.putNextEntry(ZipEntry(relative))
                         file.inputStream().buffered().use { input ->
                             val buffer = ByteArray(COPY_BUFFER_BYTES)
@@ -157,7 +175,8 @@ object ApkSourceDecompiler {
                 packageName = packageName,
                 javaFileCount = packageJavaFiles.size,
                 jadxErrors = jadxErrors,
-                archiveBytes = archive.length()
+                archiveBytes = archive.length(),
+                files = indexedFiles
             )
         } catch (cancelled: CancellationException) {
             archive.delete()
@@ -169,6 +188,67 @@ object ApkSourceDecompiler {
             stagedApk.delete()
             outputDir.deleteRecursively()
         }
+    }
+
+    fun readTextPreview(archive: File, relativePath: String): String {
+        val safePath = validateArchivePath(relativePath)
+        val extension = safePath.substringAfterLast('.', "").lowercase()
+        require(extension in TEXT_EXTENSIONS) { "هذا الملف ليس من الأنواع النصية القابلة للمعاينة." }
+        ZipFile(archive).use { zip ->
+            val entry = zip.getEntry(safePath)
+                ?: throw IllegalArgumentException("الملف غير موجود داخل ناتج JADX.")
+            require(!entry.isDirectory) { "المسار المحدد مجلد وليس ملفًا." }
+            val output = ByteArrayOutputStream()
+            zip.getInputStream(entry).use { input ->
+                val buffer = ByteArray(COPY_BUFFER_BYTES)
+                var total = 0
+                var truncated = false
+                while (true) {
+                    val count = input.read(buffer)
+                    if (count < 0) break
+                    val remaining = MAX_PREVIEW_BYTES - total
+                    val accepted = minOf(count, remaining)
+                    if (accepted > 0) output.write(buffer, 0, accepted)
+                    total += accepted
+                    if (accepted < count) {
+                        truncated = true
+                        break
+                    }
+                    if (total >= MAX_PREVIEW_BYTES) {
+                        truncated = input.read() >= 0
+                        break
+                    }
+                }
+                val text = String(output.toByteArray(), StandardCharsets.UTF_8)
+                return if (truncated) "$text\n\n[اقتُطعت المعاينة عند 128 KB؛ صدّر الملف لقراءة الباقي.]" else text
+            }
+        }
+    }
+
+    fun copyArchiveEntry(archive: File, relativePath: String, destination: OutputStream) {
+        val safePath = validateArchivePath(relativePath)
+        ZipFile(archive).use { zip ->
+            val entry = zip.getEntry(safePath)
+                ?: throw IllegalArgumentException("الملف غير موجود داخل ناتج JADX.")
+            require(!entry.isDirectory) { "المسار المحدد مجلد وليس ملفًا." }
+            zip.getInputStream(entry).use { input -> input.copyTo(destination, COPY_BUFFER_BYTES) }
+        }
+    }
+
+    private fun archivePath(file: File, sourceRoot: File, resourceRoot: File): String =
+        if (file.absolutePath.startsWith(sourceRoot.absolutePath + File.separator)) {
+            "sources/" + file.relativeTo(sourceRoot).invariantSeparatorsPath
+        } else {
+            "resources/" + file.relativeTo(resourceRoot).invariantSeparatorsPath
+        }
+
+    private fun validateArchivePath(path: String): String {
+        val normalized = path.replace('\\', '/')
+        require(normalized.isNotBlank() && !normalized.startsWith('/') &&
+            normalized.split('/').none { it == ".." || it.isBlank() }) {
+            "مسار الملف داخل ZIP غير صالح."
+        }
+        return normalized
     }
 
     private suspend fun saveWithProgress(
