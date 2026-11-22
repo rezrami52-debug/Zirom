@@ -1246,19 +1246,18 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                 query,
                 limit = 2
             )
-
-            val enrichedQuery =
-                if (learnedContext.isNotBlank()) {
-                    "$learnedContext\nسؤال رمزي: $query"
-                } else {
-                    query
-                }
-
             val selectedProvider = appPrefs.getLLMProvider()
+            val qwenReady = qwenService.isReady()
+            val enrichedQuery = ConversationContextBuilder.build(
+                messages = _uiState.value.messages,
+                currentQuestion = query,
+                learnedContext = learnedContext,
+                maxChars = if (selectedProvider == "qwen" && qwenReady) 1_500 else ConversationContextBuilder.DEFAULT_MAX_CHARS
+            )
 
             if (
                 selectedProvider == "qwen" &&
-                qwenService.isReady()
+                qwenReady
             ) {
                 try {
                     val localReply = withTimeout(60_000L) {
@@ -1336,7 +1335,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                         enrichedQuery
                             .replace("<|im_start|>", "[بداية]")
                             .replace("<|im_end|>", "[نهاية]")
-                            .take(1500) // حد أقصى آمن لمنع انهيار MediaPipe
+                            .takeLast(1500) // أبقِ السؤال الحالي عند اقتطاع السياق للنموذج المحلي.
                     )
                     }
 
