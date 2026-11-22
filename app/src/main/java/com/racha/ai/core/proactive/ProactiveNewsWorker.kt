@@ -9,8 +9,6 @@ import androidx.work.CoroutineWorker
 import androidx.work.WorkerParameters
 import com.racha.ai.R
 import com.racha.ai.core.eve.EveState
-import com.racha.ai.core.security.SecurePreferences
-import com.racha.ai.data.api.GeminiService
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
@@ -26,13 +24,6 @@ class ProactiveNewsWorker(
     }
 
     override suspend fun doWork(): Result = withContext(Dispatchers.IO) {
-        val securePrefs = SecurePreferences(context)
-        val apiKey = securePrefs.getApiKey()
-
-        if (apiKey.isNullOrBlank()) {
-            return@withContext Result.success()
-        }
-
         val sharedPrefs = context.getSharedPreferences("proactive_prefs", Context.MODE_PRIVATE)
         val lastSent = sharedPrefs.getLong(PREF_LAST_NEWS_TIME, 0L)
         val now = System.currentTimeMillis()
@@ -43,18 +34,17 @@ class ProactiveNewsWorker(
 
         try {
             val headlines = NewsFetcher.fetchTopHeadlines(4)
-            if (headlines.isNotEmpty()) {
-                val gemini = GeminiService(apiKey)
-                val summary = gemini.summarizeNewsAsJarvis(headlines)
+            if (headlines.isEmpty()) return@withContext Result.success()
 
-                showJarvisNotification(summary)
-                EveState.addNotification()
-
-                sharedPrefs.edit().putLong(PREF_LAST_NEWS_TIME, now).apply()
-            }
+            // Use only source headlines with verified publication timestamps; do not ask an LLM
+            // to invent a narrative that could make an old event sound current.
+            val brief = NewsFetcher.formatBrief(headlines)
+            showJarvisNotification(brief)
+            EveState.addNotification()
+            sharedPrefs.edit().putLong(PREF_LAST_NEWS_TIME, System.currentTimeMillis()).apply()
             Result.success()
         } catch (e: Exception) {
-            e.printStackTrace()
+            android.util.Log.e("ProactiveNewsWorker", "تعذر إنشاء إشعار الأخبار", e)
             Result.retry()
         }
     }
