@@ -103,6 +103,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
     private var screenLearningJob: Job? = null
     private var fileAnalysisJob: Job? = null
     private var apkDecompilationJob: Job? = null
+    private var sendJob: Job? = null
     private var lastLearnedScreenText: String? = null
     private var lastScreenAnalysisAt: Long = 0L
 
@@ -712,6 +713,8 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
 
     fun sendMessage() {
         val currentState = _uiState.value
+        // Do not allow duplicate AI/file requests from repeated taps.
+        if (currentState.isLoading) return
         val userText = currentState.inputText
         val trimmed = userText.trim()
         val imagePath = currentState.pendingImagePath
@@ -1247,7 +1250,13 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                 limit = 2
             )
             val selectedProvider = appPrefs.getLLMProvider()
-            val qwenReady = qwenService.isReady()
+            // isReady() is false on first use even when the model file exists.
+            // Initialize once before selecting the local provider.
+            val qwenReady = if (selectedProvider == "qwen" && qwenService.isModelPresent()) {
+                qwenService.initialize().isSuccess
+            } else {
+                false
+            }
             val enrichedQuery = ConversationContextBuilder.build(
                 messages = _uiState.value.messages,
                 currentQuestion = query,
@@ -1621,6 +1630,12 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
     override fun onCleared() {
         screenLearningJob?.cancel()
         screenLearningJob = null
+        fileAnalysisJob?.cancel()
+        apkDecompilationJob?.cancel()
+        sendJob?.cancel()
+        // QwenService is process-shared; close() intentionally does not destroy
+        // the native model while EVE or another consumer may still use it.
+        qwenService.close()
         super.onCleared()
     }
 }

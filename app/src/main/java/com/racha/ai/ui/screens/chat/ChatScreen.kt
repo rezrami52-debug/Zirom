@@ -1,5 +1,6 @@
 package com.racha.ai.ui.screens.chat
 import com.racha.ai.services.prayer.PrayerTimesCalculator
+import androidx.core.content.ContextCompat
 import java.text.SimpleDateFormat
 import java.util.Calendar
 import java.util.Date
@@ -192,7 +193,7 @@ fun ChatScreen(
             val intent = Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:${context.packageName}"))
             context.startActivity(intent)
         } else {
-            context.startService(Intent(context, com.racha.ai.core.eve.EveBubbleService::class.java))
+            ContextCompat.startForegroundService(context, Intent(context, com.racha.ai.core.eve.EveBubbleService::class.java))
         }
     }
 
@@ -673,7 +674,7 @@ fun QuickActionBarRacha(glow: Color) {
                 val intent = Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:${ctx.packageName}"))
                 ctx.startActivity(intent)
             } else {
-                ctx.startService(Intent(ctx, com.racha.ai.core.eve.EveBubbleService::class.java))
+                ContextCompat.startForegroundService(ctx, Intent(ctx, com.racha.ai.core.eve.EveBubbleService::class.java))
             }
         }
         Spacer(modifier = Modifier.width(6.dp))
@@ -686,7 +687,7 @@ fun QuickActionBarRacha(glow: Color) {
                 putExtra(com.racha.ai.core.media.FloatingMediaService.EXTRA_MEDIA_URI, "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4")
                 putExtra(com.racha.ai.core.media.FloatingMediaService.EXTRA_MEDIA_TITLE, "Big Buck Bunny")
             }
-            ctx.startService(intent)
+            ContextCompat.startForegroundService(ctx, intent)
         }
     }
 }

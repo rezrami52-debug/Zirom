@@ -1,6 +1,7 @@
 package com.racha.ai.services.notification
 
 import android.app.KeyguardManager
+import androidx.core.content.ContextCompat
 import android.app.Notification
 import android.content.Context
 import android.content.Intent
@@ -106,7 +107,7 @@ class RachaNotificationListener : NotificationListenerService() {
         }
 
         try {
-            startService(eveIntent)
+            ContextCompat.startForegroundService(this, eveIntent)
             Log.d(
                 TAG,
                 if (screenIsLocked) {
@@ -132,7 +133,7 @@ class RachaNotificationListener : NotificationListenerService() {
         }
 
         try {
-            startService(cancelIntent)
+            ContextCompat.startForegroundService(this, cancelIntent)
         } catch (e: Exception) {
             Log.e(TAG, "فشل إلغاء إشعار EVE", e)
         }

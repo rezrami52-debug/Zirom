@@ -23,12 +23,24 @@ class QwenService(private val context: Context) : LLMProvider {
         private const val TAG = "RachaQwen"
         private const val MODEL_FILENAME = "qwen2.5-1.5b-instruct.task"
         private val modelMutex = Mutex()
+        // MediaPipe keeps a large native model in memory. Share one instance across
+        // ChatViewModel, EVE, settings, and command execution in this process.
+        private var llmInference: LlmInference? = null
+
+        /** Explicit process-level release for low-memory handling or app shutdown. */
+        fun releaseSharedModel() {
+            synchronized(this) {
+                try {
+                    llmInference?.close()
+                } catch (_: Exception) {
+                } finally {
+                    llmInference = null
+                }
+            }
+        }
     }
 
     override val name: String = "Qwen (محلي)"
-
-    private var llmInference: LlmInference? = null
-    private var isInitialized = false
 
     fun getModelFile(): File {
         val primaryPath = File("/storage/emulated/0/Racha/models", MODEL_FILENAME)
@@ -48,7 +60,7 @@ class QwenService(private val context: Context) : LLMProvider {
     suspend fun initialize(): Result<Unit> = withContext(Dispatchers.IO) {
         modelMutex.withLock {
             try {
-                if (isInitialized && llmInference != null) return@withContext Result.success(Unit)
+                if (llmInference != null) return@withContext Result.success(Unit)
 
                 val modelFile = getModelFile()
                 if (!modelFile.exists() || modelFile.length() < 100_000_000) {
@@ -61,8 +73,10 @@ class QwenService(private val context: Context) : LLMProvider {
                     .setMaxTokens(1024)
                     .build()
 
-                llmInference = LlmInference.createFromOptions(context, options)
-                isInitialized = true
+                // Re-check after taking the mutex: another service may have loaded it.
+                if (llmInference == null) {
+                    llmInference = LlmInference.createFromOptions(context.applicationContext, options)
+                }
                 Result.success(Unit)
             } catch (e: Exception) {
                 Result.failure(e)
@@ -70,7 +84,7 @@ class QwenService(private val context: Context) : LLMProvider {
         }
     }
 
-    override fun isReady(): Boolean = isInitialized && llmInference != null
+    override fun isReady(): Boolean = llmInference != null
 
     suspend fun generateResponse(prompt: String): String {
         val result = sendMessageWithContext(
@@ -187,10 +201,8 @@ class QwenService(private val context: Context) : LLMProvider {
     }
 
     override fun close() {
-        try {
-            llmInference?.close()
-            llmInference = null
-            isInitialized = false
-        } catch (_: Exception) {}
+        // Do not close a process-wide shared model from one consumer (for example
+        // when a ViewModel is recreated while EVE is still using it). Android will
+        // reclaim the native model with the process.
     }
 }

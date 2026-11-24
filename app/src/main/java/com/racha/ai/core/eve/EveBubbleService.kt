@@ -91,7 +91,10 @@ class EveBubbleService : Service() {
         qwenService = QwenService(this)
         exoPlayer = ExoPlayer.Builder(this).build()
 
-        startForegroundServiceNotification()
+        if (!startForegroundServiceNotification()) {
+            stopSelf()
+            return
+        }
         setupHighQualityArabicTts()
         setupFloatingBubble()
         setupMultiWindowObserver()
@@ -785,7 +788,7 @@ class EveBubbleService : Service() {
         }
     }
 
-    private fun startForegroundServiceNotification() {
+    private fun startForegroundServiceNotification(): Boolean {
         val channelId = "eve_bubble_channel"
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             val channel = NotificationChannel(channelId, "Racha AI (EVE)", NotificationManager.IMPORTANCE_MIN)
@@ -814,15 +817,16 @@ class EveBubbleService : Service() {
                 "فشل تشغيل خدمة إيف بسبب الصلاحيات",
                 e
             )
-            stopSelf()
+            return false
         } catch (e: Exception) {
             android.util.Log.e(
                 "EveBubbleService",
                 "فشل تشغيل خدمة إيف",
                 e
             )
-            stopSelf()
+            return false
         }
+        return true
     }
 
     override fun onDestroy() {
