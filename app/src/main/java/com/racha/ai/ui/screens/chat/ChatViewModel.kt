@@ -464,8 +464,13 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
             "image/jpeg" -> "jpg"
             "image/png" -> "png"
             "image/webp" -> "webp"
+            "image/heic" -> "heic"
+            "image/heif" -> "heif"
+            "image/avif" -> "avif"
+            "image/bmp" -> "bmp"
+            "image/gif" -> "gif"
             else -> throw IllegalArgumentException(
-                "نوع الصورة غير مدعوم. اختر JPEG أو PNG أو WebP."
+                "تعذر تحديد صيغة الصورة. اختر صورة JPEG أو PNG أو WebP أو HEIC/HEIF."
             )
         }
 

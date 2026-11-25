@@ -33,6 +33,11 @@ import android.speech.tts.TextToSpeech
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.activity.result.PickVisualMediaRequest
+import androidx.media3.common.MediaItem
+import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.ui.PlayerView
+import androidx.compose.ui.viewinterop.AndroidView
 import coil.compose.AsyncImage
 import java.io.File
 import androidx.compose.foundation.BorderStroke
@@ -131,25 +136,22 @@ fun ChatScreen(
         listOf(primaryGlow.copy(alpha = 0.6f), Color.White.copy(alpha = 0.1f))
     )
 
-    val attachmentPickerLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+    val photoPickerLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.PickVisualMedia()
+    ) { uri -> uri?.let(viewModel::onImageSelected) }
+    val videoPickerLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.PickVisualMedia()
+    ) { uri -> uri?.let(viewModel::onFileSelected) }
+    val filePickerLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.OpenDocument()
+    ) { uri -> uri?.let(viewModel::onFileSelected) }
+    val documentPickerLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.OpenDocument()
+    ) { uri ->
         if (uri != null) {
             val mimeType = context.contentResolver.getType(uri)?.substringBefore(';')?.lowercase().orEmpty()
-            val displayName = runCatching {
-                context.contentResolver.query(
-                    uri,
-                    arrayOf(android.provider.OpenableColumns.DISPLAY_NAME),
-                    null,
-                    null,
-                    null
-                )?.use { cursor ->
-                    val index = cursor.getColumnIndex(android.provider.OpenableColumns.DISPLAY_NAME)
-                    if (cursor.moveToFirst() && index >= 0) cursor.getString(index) else null
-                }
-            }.getOrNull().orEmpty()
-            val extension = displayName.substringAfterLast('.', "").lowercase()
-            val supportedImage = mimeType in setOf("image/jpeg", "image/png", "image/webp") ||
-                extension in setOf("jpg", "jpeg", "png", "webp")
-            if (supportedImage) viewModel.onImageSelected(uri) else viewModel.onFileSelected(uri)
+            if (mimeType.startsWith("image/")) viewModel.onImageSelected(uri)
+            else viewModel.onFileSelected(uri)
         }
     }
 
@@ -185,6 +187,8 @@ fun ChatScreen(
     }
 
     var isDrawerOpen by remember { mutableStateOf(false) }
+    var isAttachmentSheetOpen by remember { mutableStateOf(false) }
+    var videoPreviewUri by remember { mutableStateOf<Uri?>(null) }
 
     fun launchEveBubble() {
         val prefs = AppPreferences(context)
@@ -372,6 +376,12 @@ fun ChatScreen(
                         }
                     }
                 }
+                if (state.selectedFileName?.substringAfterLast('.', "")?.lowercase() in
+                    setOf("mp4", "m4v", "mov", "webm", "mkv", "3gp")) {
+                    IconButton(onClick = { state.selectedFileUri?.let { videoPreviewUri = Uri.parse(it) } }) {
+                        Icon(Icons.Default.PlayCircle, contentDescription = "معاينة الفيديو", tint = primaryGlow)
+                    }
+                }
                 IconButton(onClick = { viewModel.clearSelectedFile() }) {
                     Icon(Icons.Default.Close, contentDescription = "إزالة الملف", tint = Color(0xFFFF5252))
                 }
@@ -399,7 +409,7 @@ fun ChatScreen(
             glow = primaryGlow,
             selectedImagePath = state.pendingImagePath,
             hasSelectedFile = state.selectedFileUri != null,
-            onAttach = { attachmentPickerLauncher.launch(arrayOf("*/*")) },
+            onAttach = { isAttachmentSheetOpen = true },
             onRemoveAttachment = viewModel::removePendingImage
         )
 
@@ -446,6 +456,67 @@ fun ChatScreen(
             }
         }
     }
+    if (isAttachmentSheetOpen) {
+        val attachmentSheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+        ModalBottomSheet(
+            onDismissRequest = { isAttachmentSheetOpen = false },
+            sheetState = attachmentSheetState,
+            containerColor = Color(0xFF111827),
+            contentColor = Color.White
+        ) {
+            Column(
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp).padding(bottom = 24.dp),
+                verticalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                Text("إضافة إلى المحادثة", fontSize = 18.sp, fontWeight = FontWeight.Bold)
+                Text("اختر صورة أو فيديو من المعرض المرئي، أو افتح منتقي الملفات والمستندات.",
+                    color = Color.LightGray, fontSize = 12.sp)
+
+                AttachmentOptionRow(Icons.Default.Image, "صورة", "اختيار صورة من المعرض") {
+                    scope.launch {
+                        attachmentSheetState.hide()
+                        isAttachmentSheetOpen = false
+                        photoPickerLauncher.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
+                    }
+                }
+                AttachmentOptionRow(Icons.Default.VideoLibrary, "فيديو", "اختيار مقطع ومعاينته") {
+                    scope.launch {
+                        attachmentSheetState.hide()
+                        isAttachmentSheetOpen = false
+                        videoPickerLauncher.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.VideoOnly))
+                    }
+                }
+                AttachmentOptionRow(Icons.Default.AttachFile, "ملف", "اختيار أي نوع ملف") {
+                    scope.launch {
+                        attachmentSheetState.hide()
+                        isAttachmentSheetOpen = false
+                        filePickerLauncher.launch(arrayOf("*/*"))
+                    }
+                }
+                AttachmentOptionRow(Icons.Default.Description, "مستند", "PDF أو نص أو مستند مكتبي") {
+                    scope.launch {
+                        attachmentSheetState.hide()
+                        isAttachmentSheetOpen = false
+                        documentPickerLauncher.launch(arrayOf(
+                            "application/pdf",
+                            "text/*",
+                            "application/msword",
+                            "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                            "application/vnd.ms-excel",
+                            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                            "application/vnd.ms-powerpoint",
+                            "application/vnd.openxmlformats-officedocument.presentationml.presentation"
+                        ))
+                    }
+                }
+            }
+        }
+    }
+
+    videoPreviewUri?.let { uri ->
+        VideoPreviewDialog(uri = uri, onDismiss = { videoPreviewUri = null })
+    }
+
     if (state.isDecompiledBrowserOpen) {
         DecompiledFilesDialog(
             files = state.decompiledFiles,
@@ -467,6 +538,67 @@ fun ChatScreen(
                 decompiledFileExportLauncher.launch(suggestedName)
             }
         )
+    }
+}
+
+@Composable
+private fun AttachmentOptionRow(
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    title: String,
+    subtitle: String,
+    onClick: () -> Unit
+) {
+    Surface(
+        onClick = onClick,
+        shape = RoundedCornerShape(16.dp),
+        color = Color.White.copy(alpha = 0.06f),
+        border = BorderStroke(1.dp, Color.White.copy(alpha = 0.12f)),
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Icon(icon, contentDescription = null, tint = Color(0xFF22D3EE), modifier = Modifier.size(26.dp))
+            Spacer(Modifier.width(14.dp))
+            Column {
+                Text(title, color = Color.White, fontWeight = FontWeight.SemiBold)
+                Text(subtitle, color = Color.LightGray, fontSize = 11.sp)
+            }
+        }
+    }
+}
+
+@Composable
+private fun VideoPreviewDialog(uri: Uri, onDismiss: () -> Unit) {
+    val context = LocalContext.current
+    val player = remember(uri) {
+        ExoPlayer.Builder(context).build().apply {
+            setMediaItem(MediaItem.fromUri(uri))
+            prepare()
+        }
+    }
+    DisposableEffect(player) {
+        onDispose { player.release() }
+    }
+
+    Dialog(onDismissRequest = onDismiss) {
+        Surface(shape = RoundedCornerShape(18.dp), color = Color(0xFF111827)) {
+            Column(modifier = Modifier.fillMaxWidth().padding(12.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text("معاينة الفيديو", color = Color.White, fontWeight = FontWeight.Bold,
+                        modifier = Modifier.weight(1f))
+                    IconButton(onClick = onDismiss) {
+                        Icon(Icons.Default.Close, contentDescription = "إغلاق المعاينة", tint = Color.White)
+                    }
+                }
+                AndroidView(
+                    factory = { viewContext -> PlayerView(viewContext).apply { this.player = player } },
+                    update = { it.player = player },
+                    modifier = Modifier.fillMaxWidth().aspectRatio(16f / 9f)
+                )
+            }
+        }
     }
 }
 
@@ -918,7 +1050,7 @@ fun InputBarRacha(
 
         Row(verticalAlignment = Alignment.CenterVertically) {
             IconButton(onClick = onAttach, enabled = !isListening) {
-                Icon(Icons.Default.AttachFile, contentDescription = "إرفاق صورة أو ملف", tint = glow)
+                Icon(Icons.Default.Add, contentDescription = "إضافة صورة أو فيديو أو ملف", tint = glow)
             }
 
             Surface(
