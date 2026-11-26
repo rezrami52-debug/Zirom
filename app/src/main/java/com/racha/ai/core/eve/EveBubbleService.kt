@@ -177,6 +177,8 @@ class EveBubbleService : Service() {
                 val notifKey = intent.getStringExtra(EXTRA_NOTIF_KEY)
                 handleCancelNotification(notifKey)
             }
+            ACTION_STOP_MUSIC -> stopMusicPlayback(announce = false)
+            ACTION_PAUSE_MUSIC -> pauseMusicPlayback(announce = false)
             ACTION_STOP_SERVICE -> closeAndDismiss()
         }
         return START_NOT_STICKY
@@ -547,20 +549,20 @@ class EveBubbleService : Service() {
         }
     }
 
-    private fun stopMusicPlayback() {
+    private fun stopMusicPlayback(announce: Boolean = true) {
         exoPlayer?.stop()
         exoPlayer?.clearMediaItems()
         EveState.clearPlayback()
-        speakCleanText("أوقفت الموسيقى يا رمزي.", continueConversation = false)
+        if (announce) speakCleanText("أوقفت الموسيقى يا رمزي.", continueConversation = false)
     }
 
-    private fun pauseMusicPlayback() {
+    private fun pauseMusicPlayback(announce: Boolean = true) {
         val current = EveState.uiState.value.playback
         exoPlayer?.pause()
         if (current.title.isNotBlank()) {
             EveState.updatePlayback(isPlaying = false, title = current.title, artist = current.artist)
         }
-        speakCleanText("أوقفت الموسيقى مؤقتًا يا رمزي.", continueConversation = false)
+        if (announce) speakCleanText("أوقفت الموسيقى مؤقتًا يا رمزي.", continueConversation = false)
     }
 
     private fun skipNext() { speakCleanText("الأغنية التالية") }
@@ -664,9 +666,10 @@ class EveBubbleService : Service() {
                     .replace('أ', 'ا')
                     .replace('إ', 'ا')
                     .replace('آ', 'ا')
-                val isPauseCommand = listOf("ايقاف مؤقت", "وقف مؤقت", "توقفي مؤقت", "اوقفي مؤقت", "اوقف مؤقت", "pause")
-                    .any { normalized.contains(it) }
-                val isStopCommand = listOf("اوقفي", "اوقف", "توقفي", "توقف", "وقف", "stop")
+                val pauseVerbs = listOf("اوقفي", "اوقف", "توقفي", "توقف", "وقف", "اغلقي", "اغلق")
+                val isPauseCommand = normalized.contains("pause") ||
+                    (normalized.contains("مؤقت") && pauseVerbs.any { normalized.contains(it) })
+                val isStopCommand = listOf("اوقفي", "اوقف", "توقفي", "توقف", "وقف", "اغلقي", "اغلق", "اقفلي", "اقفل", "اسكتي", "اقطعي", "stop")
                     .any { normalized.contains(it) }
                 when {
                     isPauseCommand -> {
@@ -912,6 +915,8 @@ class EveBubbleService : Service() {
         const val ACTION_STOP_SERVICE = "ACTION_STOP_SERVICE"
         const val ACTION_NEW_NOTIFICATION = "ACTION_NEW_NOTIFICATION"
         const val ACTION_CANCEL_NOTIFICATION = "ACTION_CANCEL_NOTIFICATION"
+        const val ACTION_STOP_MUSIC = "ACTION_STOP_MUSIC"
+        const val ACTION_PAUSE_MUSIC = "ACTION_PAUSE_MUSIC"
         const val EXTRA_SPEECH_TEXT = "EXTRA_SPEECH_TEXT"
         const val EXTRA_NOTIF_KEY = "EXTRA_NOTIF_KEY"
         const val EXTRA_SILENT_NOTIFICATION = "EXTRA_SILENT_NOTIFICATION"

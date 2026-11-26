@@ -1,6 +1,7 @@
 package com.racha.ai.ui.screens.chat
 
 import android.app.Application
+import android.content.Intent
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.net.Uri
@@ -16,6 +17,7 @@ import com.racha.ai.core.command.RachaCommandRouter
 import com.racha.ai.core.contacts.ContactResolver
 import com.racha.ai.core.context.LocationIntentHandler
 import com.racha.ai.core.eve.EveAccessibilityService
+import com.racha.ai.core.eve.EveBubbleService
 import com.racha.ai.core.eve.EveState
 import com.racha.ai.core.eve.MediaShelfType
 import com.racha.ai.core.memory.MemoryLearningPolicy
@@ -716,6 +718,54 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
             !value.startsWith("api:")
     }
 
+    private fun handleChatMusicPlaybackCommand(text: String): Boolean {
+        val playback = EveState.uiState.value.playback
+        if (playback.title.isBlank()) return false
+
+        val normalized = text.lowercase()
+            .replace(Regex("[ًٌٍَُِّْـ]"), "")
+            .replace('أ', 'ا')
+            .replace('إ', 'ا')
+            .replace('آ', 'ا')
+            .replace('ى', 'ي')
+            .replace(Regex("\\s+"), " ")
+            .trim()
+        val pauseVerbs = listOf("اوقفي", "اوقف", "توقفي", "توقف", "وقف", "اغلقي", "اغلق")
+        val isPauseCommand = normalized.contains("pause") ||
+            (normalized.contains("مؤقت") && pauseVerbs.any { normalized.contains(it) })
+        val stopVerbs = listOf("اوقفي", "اوقف", "توقفي", "توقف", "وقف", "اغلقي", "اغلق", "اقفلي", "اقفل", "اسكتي", "اقطعي", "stop")
+        val action = when {
+            isPauseCommand -> EveBubbleService.ACTION_PAUSE_MUSIC
+            stopVerbs.any { normalized.contains(it) } -> EveBubbleService.ACTION_STOP_MUSIC
+            else -> return false
+        }
+
+        return try {
+            val app = getApplication<Application>()
+            app.startService(Intent(app, EveBubbleService::class.java).setAction(action))
+            appendMessage(
+                ChatMessage(
+                    text = if (action == EveBubbleService.ACTION_PAUSE_MUSIC) {
+                        "أوقفت الموسيقى مؤقتًا يا رمزي."
+                    } else {
+                        "أوقفت الموسيقى وأزلت مؤشرها من فقاعة إيف يا رمزي."
+                    },
+                    isFromUser = false
+                )
+            )
+            true
+        } catch (error: Exception) {
+            android.util.Log.e("ChatViewModel", "تعذر إرسال أمر التحكم بالموسيقى إلى إيف", error)
+            appendMessage(
+                ChatMessage(
+                    text = "تعذر إيقاف الموسيقى من المحادثة الآن. جرّب التحكم من فقاعة إيف.",
+                    isFromUser = false
+                )
+            )
+            true
+        }
+    }
+
     fun sendMessage() {
         val currentState = _uiState.value
         // Do not allow duplicate AI/file requests from repeated taps.
@@ -818,6 +868,8 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                 isFromUser = true
             )
         )
+
+        if (handleChatMusicPlaybackCommand(trimmed)) return
 
         if (MemoryLearningPolicy.isLearningTrigger(trimmed)) {
             toggleScreenLearningMode()
