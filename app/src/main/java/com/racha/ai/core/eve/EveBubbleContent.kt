@@ -40,6 +40,9 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.items as gridItems
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -322,6 +325,7 @@ fun EveStandaloneShelfWindow(
     val eveUiState by EveState.uiState.collectAsState()
 
     var activePreviewItem by remember { mutableStateOf<MediaItemData?>(null) }
+    var isPhotoOptionsExpanded by remember { mutableStateOf(false) }
     val activeTvChannel = if (shelfType == MediaShelfType.LIVE_TV) eveUiState.activeTvChannel else null
     var isTvLoading by remember { mutableStateOf(false) }
 
@@ -406,7 +410,8 @@ fun EveStandaloneShelfWindow(
                         Text(
                             text = when {
                                 activeTvChannel != null -> "📺 ${activeTvChannel.name} 🔴"
-                                activePreviewItem != null -> "🎬 المشغل السينمائي"
+                                activePreviewItem?.type == "PHOTO" -> "🖼️ معاينة الصورة"
+                                activePreviewItem != null -> "🎬 مشغل الفيديو"
                                 shelfType == MediaShelfType.LIVE_TV -> "التلفاز والسينما (${tvChannels.size}) 🎬"
                                 shelfType == MediaShelfType.NOTIFICATIONS -> "الإشعارات (${notifications.size}) 🔔"
                                 shelfType == MediaShelfType.MUSIC -> "الموسيقى (${mediaItems.size}) 🎶"
@@ -424,6 +429,40 @@ fun EveStandaloneShelfWindow(
                     }
 
                     Row(verticalAlignment = Alignment.CenterVertically) {
+                        if (activePreviewItem?.type == "PHOTO") {
+                            Box {
+                                IconButton(
+                                    onClick = { isPhotoOptionsExpanded = true },
+                                    modifier = Modifier.size(24.dp)
+                                ) {
+                                    Icon(Icons.Default.MoreVert, contentDescription = "خيارات الصورة", tint = Color(0xFF00E5FF), modifier = Modifier.size(18.dp))
+                                }
+                                DropdownMenu(
+                                    expanded = isPhotoOptionsExpanded,
+                                    onDismissRequest = { isPhotoOptionsExpanded = false }
+                                ) {
+                                    DropdownMenuItem(
+                                        text = { Text("تعيين كخلفية لشاشة الهاتف") },
+                                        leadingIcon = { Icon(Icons.Default.Wallpaper, contentDescription = null) },
+                                        onClick = {
+                                            isPhotoOptionsExpanded = false
+                                            activePreviewItem?.let { item -> setAsPhoneWallpaper(context, item.uri) }
+                                        }
+                                    )
+                                    DropdownMenuItem(
+                                        text = { Text("تعيين خلفية لتطبيق Racha") },
+                                        leadingIcon = { Icon(Icons.Default.Palette, contentDescription = null) },
+                                        onClick = {
+                                            isPhotoOptionsExpanded = false
+                                            activePreviewItem?.let { item ->
+                                                appPrefs.setBackgroundImagePath(item.uri.toString())
+                                                Toast.makeText(context, "تم تعيين الصورة خلفية لتطبيق Racha", Toast.LENGTH_SHORT).show()
+                                            }
+                                        }
+                                    )
+                                }
+                            }
+                        }
                         IconButton(
                             onClick = onToggleFullscreen,
                             modifier = Modifier.size(24.dp)
@@ -890,16 +929,39 @@ fun EveStandaloneShelfWindow(
                             }
                         }
                     } else if (currentItem.type == "PHOTO") {
-                        val bmp = remember(currentItem) {
-                            try {
-                                context.contentResolver.openInputStream(currentItem.uri)?.use { stream -> BitmapFactory.decodeStream(stream)?.asImageBitmap() }
-                            } catch (_: Exception) { null }
+                        var imageLoadFailed by remember(currentItem.uri) { mutableStateOf(false) }
+                        val bmp by produceState<androidx.compose.ui.graphics.ImageBitmap?>(null, currentItem.uri) {
+                            val decoded = withContext(Dispatchers.IO) {
+                                try {
+                                    val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+                                    context.contentResolver.openInputStream(currentItem.uri)?.use { stream ->
+                                        BitmapFactory.decodeStream(stream, null, bounds)
+                                    }
+                                    if (bounds.outWidth <= 0 || bounds.outHeight <= 0) {
+                                        null
+                                    } else {
+                                        var sampleSize = 1
+                                        while (maxOf(bounds.outWidth, bounds.outHeight) / sampleSize > 2048) {
+                                            sampleSize *= 2
+                                        }
+                                        context.contentResolver.openInputStream(currentItem.uri)?.use { stream ->
+                                            BitmapFactory.decodeStream(
+                                                stream,
+                                                null,
+                                                BitmapFactory.Options().apply { inSampleSize = sampleSize }
+                                            )?.asImageBitmap()
+                                        }
+                                    }
+                                } catch (_: Exception) { null }
+                            }
+                            imageLoadFailed = decoded == null
+                            value = decoded
                         }
                         var zoomScale by remember(currentItem.uri) { mutableFloatStateOf(1f) }
                         var panOffsetX by remember(currentItem.uri) { mutableFloatStateOf(0f) }
                         var panOffsetY by remember(currentItem.uri) { mutableFloatStateOf(0f) }
                         var horizontalSwipe by remember(currentItem.uri) { mutableFloatStateOf(0f) }
-                        var showPhotoOptions by remember(currentItem.uri) { mutableStateOf(false) }
+                        val swipeThreshold = with(androidx.compose.ui.platform.LocalDensity.current) { 64.dp.toPx() }
 
                         Column(modifier = Modifier.weight(1f).fillMaxWidth()) {
                             Box(
@@ -926,7 +988,7 @@ fun EveStandaloneShelfWindow(
                                                 if (kotlin.math.abs(pan.x) > kotlin.math.abs(pan.y)) {
                                                     horizontalSwipe += pan.x
 
-                                                    if (kotlin.math.abs(horizontalSwipe) >= 120f) {
+                                                    if (kotlin.math.abs(horizontalSwipe) >= swipeThreshold) {
                                                         val targetIndex =
                                                             if (horizontalSwipe < 0f) {
                                                                 currentIndex + 1
@@ -950,7 +1012,7 @@ fun EveStandaloneShelfWindow(
                             ) {
                                 if (bmp != null) {
                                     Image(
-                                        bitmap = bmp,
+                                        bitmap = bmp!!,
                                         contentDescription = null,
                                         modifier = Modifier
                                             .fillMaxSize()
@@ -962,12 +1024,14 @@ fun EveStandaloneShelfWindow(
                                             ),
                                         contentScale = ContentScale.Fit
                                     )
+                                } else {
+                                    if (imageLoadFailed) {
+                                        Text("تعذّر تحميل الصورة", color = Color.LightGray, fontSize = 12.sp)
+                                    } else {
+                                        CircularProgressIndicator(color = Color(0xFF00E5FF), modifier = Modifier.size(28.dp), strokeWidth = 2.dp)
+                                    }
                                 }
                             }
-
-                            Spacer(modifier = Modifier.height(4.dp))
-                            Text(text = "💡 اسحب الصورة لأعلى أو لأسفل لتحويلها لخلفية الهاتف", color = Color(0xFF38BDF8), fontSize = 9.sp, modifier = Modifier.align(Alignment.CenterHorizontally))
-                            Spacer(modifier = Modifier.height(4.dp))
 
                             Surface(
                                 shape = RoundedCornerShape(12.dp),
@@ -979,14 +1043,50 @@ fun EveStandaloneShelfWindow(
                                     IconButton(onClick = { if (currentIndex > 0) activePreviewItem = mediaItems[currentIndex - 1] }, enabled = currentIndex > 0, modifier = Modifier.size(30.dp)) {
                                         Icon(Icons.Default.SkipPrevious, contentDescription = null, tint = if (currentIndex > 0) Color(0xFF00E5FF) else Color.DarkGray)
                                     }
-                                    TextButton(onClick = {
-                                        appPrefs.setBackgroundImagePath(currentItem.uri.toString())
-                                        Toast.makeText(context, "✅ تم تعيين الصورة كخلفية لتطبيق Racha", Toast.LENGTH_SHORT).show()
-                                    }) {
-                                        Text("خلفية للتطبيق 🎨", color = Color(0xFF00E5FF), fontSize = 10.sp)
-                                    }
+                                    Text("${currentIndex + 1} / ${mediaItems.size}", color = Color.LightGray, fontSize = 10.sp)
                                     IconButton(onClick = { if (currentIndex != -1 && currentIndex < mediaItems.lastIndex) activePreviewItem = mediaItems[currentIndex + 1] }, enabled = currentIndex != -1 && currentIndex < mediaItems.lastIndex, modifier = Modifier.size(30.dp)) {
                                         Icon(Icons.Default.SkipNext, contentDescription = null, tint = if (currentIndex != -1 && currentIndex < mediaItems.lastIndex) Color(0xFF00E5FF) else Color.DarkGray)
+                                    }
+                                }
+                            }
+                        }
+                    }
+                } else if (shelfType == MediaShelfType.PHOTOS) {
+                    if (mediaItems.isEmpty()) {
+                        Box(modifier = Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
+                            Text("لا توجد صور لعرضها", color = Color.Gray, fontSize = 11.sp)
+                        }
+                    } else {
+                        LazyVerticalGrid(
+                            columns = GridCells.Adaptive(minSize = 88.dp),
+                            modifier = Modifier.weight(1f).fillMaxWidth(),
+                            contentPadding = PaddingValues(bottom = 28.dp),
+                            horizontalArrangement = Arrangement.spacedBy(6.dp),
+                            verticalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            gridItems(mediaItems, key = { it.id }) { item ->
+                                Surface(
+                                    onClick = { activePreviewItem = item },
+                                    shape = RoundedCornerShape(10.dp),
+                                    color = Color.White.copy(alpha = 0.05f),
+                                    modifier = Modifier.fillMaxWidth()
+                                ) {
+                                    Column {
+                                        MediaItemThumbnail(
+                                            item = item,
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .aspectRatio(1f)
+                                                .clip(RoundedCornerShape(9.dp))
+                                        )
+                                        Text(
+                                            text = item.title,
+                                            color = Color.White,
+                                            fontSize = 9.sp,
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis,
+                                            modifier = Modifier.fillMaxWidth().padding(horizontal = 5.dp, vertical = 4.dp)
+                                        )
                                     }
                                 }
                             }

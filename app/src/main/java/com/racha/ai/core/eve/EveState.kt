@@ -76,6 +76,10 @@ object EveState {
         )
     }
 
+    fun clearPlayback() {
+        _uiState.value = _uiState.value.copy(playback = MediaPlaybackState())
+    }
+
     fun openShelf(type: MediaShelfType) {
         if (type != MediaShelfType.NONE) {
             // إضافة النافذة الجديدة مع إبقاء النوافذ الأخرى مفتوحة

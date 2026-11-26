@@ -21,6 +21,7 @@ import android.view.animation.DecelerateInterpolator
 import androidx.compose.ui.platform.ComposeView
 import androidx.core.app.NotificationCompat
 import androidx.media3.common.MediaItem
+import androidx.media3.common.Player
 import androidx.media3.exoplayer.ExoPlayer
 import com.racha.ai.core.apps.AppResolver
 import com.racha.ai.core.apps.IntentHandler
@@ -89,7 +90,20 @@ class EveBubbleService : Service() {
         intentHandler = IntentHandler(this, AppResolver(this), ContactResolver(this))
         commandExecutor = RachaCommandExecutor(this, intentHandler)
         qwenService = QwenService(this)
-        exoPlayer = ExoPlayer.Builder(this).build()
+        exoPlayer = ExoPlayer.Builder(this).build().apply {
+            addListener(object : Player.Listener {
+                override fun onIsPlayingChanged(isPlaying: Boolean) {
+                    val current = EveState.uiState.value.playback
+                    if (current.title.isNotBlank()) {
+                        EveState.updatePlayback(isPlaying, current.title, current.artist)
+                    }
+                }
+
+                override fun onPlaybackStateChanged(playbackState: Int) {
+                    if (playbackState == Player.STATE_ENDED) EveState.clearPlayback()
+                }
+            })
+        }
 
         if (!startForegroundServiceNotification()) {
             stopSelf()
@@ -533,6 +547,22 @@ class EveBubbleService : Service() {
         }
     }
 
+    private fun stopMusicPlayback() {
+        exoPlayer?.stop()
+        exoPlayer?.clearMediaItems()
+        EveState.clearPlayback()
+        speakCleanText("أوقفت الموسيقى يا رمزي.", continueConversation = false)
+    }
+
+    private fun pauseMusicPlayback() {
+        val current = EveState.uiState.value.playback
+        exoPlayer?.pause()
+        if (current.title.isNotBlank()) {
+            EveState.updatePlayback(isPlaying = false, title = current.title, artist = current.artist)
+        }
+        speakCleanText("أوقفت الموسيقى مؤقتًا يا رمزي.", continueConversation = false)
+    }
+
     private fun skipNext() { speakCleanText("الأغنية التالية") }
     private fun skipPrev() { speakCleanText("الأغنية السابقة") }
 
@@ -627,6 +657,28 @@ class EveBubbleService : Service() {
     private fun processSpokenText(text: String) {
         serviceScope.launch(Dispatchers.Main) {
             val lower = text.lowercase().trim()
+
+            val playback = EveState.uiState.value.playback
+            if (playback.title.isNotBlank()) {
+                val normalized = lower
+                    .replace('أ', 'ا')
+                    .replace('إ', 'ا')
+                    .replace('آ', 'ا')
+                val isPauseCommand = listOf("ايقاف مؤقت", "وقف مؤقت", "توقفي مؤقت", "اوقفي مؤقت", "اوقف مؤقت", "pause")
+                    .any { normalized.contains(it) }
+                val isStopCommand = listOf("اوقفي", "اوقف", "توقفي", "توقف", "وقف", "stop")
+                    .any { normalized.contains(it) }
+                when {
+                    isPauseCommand -> {
+                        pauseMusicPlayback()
+                        return@launch
+                    }
+                    isStopCommand -> {
+                        stopMusicPlayback()
+                        return@launch
+                    }
+                }
+            }
 
             if (lower.contains("نامي") || lower.contains("سبات") || lower.contains("تصبحين على خير") || lower.contains("يكفي") || lower.contains("اغلقي")) {
                 conversationHistory.clear()
