@@ -32,6 +32,38 @@ class KnowledgeRepository(context: Context) {
         return search(query, limit = 1).firstOrNull()
     }
 
+    suspend fun getUserLexiconEntries(): List<KnowledgeEntity> = try {
+        dao.getUserLexiconEntries()
+    } catch (e: Exception) {
+        Log.e(TAG, "فشل تحميل معجم المستخدم", e)
+        emptyList()
+    }
+
+    suspend fun quickSaveVerified(
+        question: String,
+        answer: String,
+        topic: String = "",
+        keywords: String = "",
+        source: String = "user"
+    ): Boolean {
+        if (question.isBlank() || answer.isBlank()) return false
+        return try {
+            dao.insert(
+                KnowledgeEntity(
+                    question = question.trim(),
+                    answer = answer.trim(),
+                    topic = topic,
+                    keywords = keywords,
+                    source = source
+                )
+            )
+            true
+        } catch (e: Exception) {
+            Log.e(TAG, "فشل حفظ تعريف المستخدم", e)
+            false
+        }
+    }
+
     suspend fun save(entry: KnowledgeEntity) {
         try {
             dao.insert(entry)

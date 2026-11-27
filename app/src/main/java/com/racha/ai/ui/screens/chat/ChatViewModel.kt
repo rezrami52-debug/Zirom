@@ -11,9 +11,11 @@ import androidx.lifecycle.viewModelScope
 import com.racha.ai.core.agent.SelfEvolutionAgent
 import com.racha.ai.core.apps.AppResolver
 import com.racha.ai.core.apps.IntentHandler
+import com.racha.ai.core.apps.IntentClassifier
 import com.racha.ai.core.apps.PendingAction
 import com.racha.ai.core.command.RachaCommand
 import com.racha.ai.core.command.RachaCommandRouter
+import com.racha.ai.core.command.LearnedLexiconResolver
 import com.racha.ai.core.contacts.ContactResolver
 import com.racha.ai.core.context.LocationIntentHandler
 import com.racha.ai.core.eve.EveAccessibilityService
@@ -29,10 +31,13 @@ import com.racha.ai.core.tools.LocalApkCommandMatcher
 import com.racha.ai.data.api.GeminiService
 import com.racha.ai.core.memory.SmartScreenProcessor
 import com.racha.ai.data.llm.QwenService
+import com.racha.ai.data.local.KnowledgeEntity
 import com.racha.ai.data.local.ChatMessageEntity
 import com.racha.ai.data.local.ConversationEntity
 import com.racha.ai.data.local.RachaDatabase
 import com.racha.ai.data.repository.KnowledgeRepository
+import com.racha.ai.services.location.LocationHelper
+import com.racha.ai.services.weather.WeatherService
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Job
@@ -108,6 +113,9 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
     private var sendJob: Job? = null
     private var lastLearnedScreenText: String? = null
     private var lastScreenAnalysisAt: Long = 0L
+    @Volatile private var userLexiconEntries: List<KnowledgeEntity> = emptyList()
+    @Volatile private var userLexiconLoaded = false
+    private var userLexiconLoadJob: Job? = null
 
     init {
         _uiState.update {
@@ -120,6 +128,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch(Dispatchers.IO) {
             restoreLatestConversation()
         }
+
     }
 
     fun startNewChat() {
@@ -766,10 +775,75 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    private suspend fun refreshUserLexicon() {
+        userLexiconEntries = knowledgeRepo.getUserLexiconEntries()
+        userLexiconLoaded = true
+    }
+
+    private fun isCurrentWeatherQuestion(text: String): Boolean {
+        val normalized = text.lowercase()
+            .replace(Regex("[ًٌٍَُِّْـ]"), "")
+            .replace(Regex("[أإآٱ]"), "ا")
+            .replace('ى', 'ي')
+        return listOf("طقس", "الجو", "درجة الحرارة", "حرارة اليوم", "weather", "forecast")
+            .any { normalized.contains(it) }
+    }
+
+    private fun isWeatherRetry(text: String, previousMessages: List<ChatMessage>): Boolean {
+        val normalized = text.lowercase()
+            .replace(Regex("[ًٌٍَُِّْـ]"), "")
+            .replace(Regex("[أإآٱ]"), "ا")
+            .replace('ى', 'ي')
+        val retry = listOf("جرب", "حاول", "اعد", "مرة ثانية", "مرة اخرى", "من جديد", "try again", "retry")
+            .any { normalized.contains(it) }
+        return retry && previousMessages.takeLast(12).any {
+            it.isFromUser && isCurrentWeatherQuestion(LearnedLexiconResolver.expand(it.text, userLexiconEntries))
+        }
+    }
+
+    private fun fetchWeatherForChat() {
+        if (_uiState.value.isLoading) return
+        _uiState.update { it.copy(isLoading = true) }
+        viewModelScope.launch {
+            try {
+                val app = getApplication<Application>()
+                val location = runCatching { LocationHelper.getCurrentLocation(app) }.getOrNull()
+                val latitude = location?.latitude ?: 35.8256
+                val longitude = location?.longitude ?: 10.6369
+                val city = location?.cityName?.takeIf { it.isNotBlank() } ?: "سوسة"
+                val weather = WeatherService.fetchWeather(latitude, longitude, city)
+                val locationNote = if (location == null) "لم أتمكن من قراءة موقع الهاتف، فاستخدمت إحداثيات سوسة كافتراض. " else ""
+                val reply = if (weather == null) {
+                    "تعذر جلب تحديث الطقس الآن. قد تكون البطاقة تعرض آخر قراءة ناجحة؛ تحقق من الإنترنت ثم قل «جرّب الآن» لإعادة المحاولة."
+                } else {
+                    "$locationNote الطقس الحالي في ${weather.cityName.ifBlank { city }}: ${weather.description()}، الحرارة ${weather.temperature.toInt()}°م، المحسوسة ${weather.feelsLike.toInt()}°م، الرطوبة ${weather.humidity}%، والرياح ${weather.windSpeed.toInt()} كم/س."
+                }
+                appendMessage(ChatMessage(text = reply, isFromUser = false))
+            } catch (error: Exception) {
+                android.util.Log.e("ChatViewModel", "تعذر جلب الطقس للمحادثة", error)
+                appendMessage(ChatMessage(text = "تعذر تحديث الطقس الآن. تحقق من الإنترنت ثم قل «جرّب الآن» لإعادة المحاولة.", isFromUser = false))
+            } finally {
+                _uiState.update { it.copy(isLoading = false) }
+            }
+        }
+    }
+
     fun sendMessage() {
         val currentState = _uiState.value
         // Do not allow duplicate AI/file requests from repeated taps.
         if (currentState.isLoading) return
+        if (!userLexiconLoaded) {
+            if (userLexiconLoadJob?.isActive != true) {
+                val expectedInput = currentState.inputText
+                userLexiconLoadJob = viewModelScope.launch(Dispatchers.IO) {
+                    refreshUserLexicon()
+                    withContext(Dispatchers.Main) {
+                        if (_uiState.value.inputText == expectedInput) sendMessage()
+                    }
+                }
+            }
+            return
+        }
         val userText = currentState.inputText
         val trimmed = userText.trim()
         val imagePath = currentState.pendingImagePath
@@ -869,7 +943,12 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
             )
         )
 
-        if (handleChatMusicPlaybackCommand(trimmed)) return
+        val routedText = LearnedLexiconResolver.expand(trimmed, userLexiconEntries)
+        val routedFinalQuery = if (routedText != trimmed) {
+            "$routedText\n[الصياغة الأصلية للمستخدم: $trimmed]$fileContext$imageContext"
+        } else finalQuery
+
+        if (handleChatMusicPlaybackCommand(routedText)) return
 
         if (MemoryLearningPolicy.isLearningTrigger(trimmed)) {
             toggleScreenLearningMode()
@@ -947,13 +1026,14 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                     )
                     .trim()
 
-                knowledgeRepo.quickSave(
+                val saved = knowledgeRepo.quickSaveVerified(
                     question = pendingTerm,
                     answer = cleanMeaning,
-                    topic = "معجم رمزي",
+                    topic = LearnedLexiconResolver.LEXICON_TOPIC,
                     keywords = "$pendingTerm,$cleanMeaning",
                     source = "user"
                 )
+                if (saved) refreshUserLexicon()
 
                 val originalQuestion = originalPendingQuestion
                 pendingLearningTerm = null
@@ -961,7 +1041,11 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
 
                 appendMessage(
                     ChatMessage(
-                        text = "✅ فهمتك يا رمزي! حفظت أن «$pendingTerm» تعني «$cleanMeaning».",
+                        text = if (saved) {
+                            "✅ حفظت معنى «$pendingTerm» واستخدمه الآن عند تفسير الطلبات التي تحتويه."
+                        } else {
+                            "تعذر حفظ المعنى محليًا هذه المرة، لذلك لن أدّعي أنني سأطبقه لاحقًا."
+                        },
                         isFromUser = false
                     )
                 )
@@ -981,17 +1065,22 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
             val (term, meaning) = directLearnMatch
 
             viewModelScope.launch(Dispatchers.IO) {
-                knowledgeRepo.quickSave(
+                val saved = knowledgeRepo.quickSaveVerified(
                     question = term,
                     answer = meaning,
-                    topic = "معجم رمزي",
+                    topic = LearnedLexiconResolver.LEXICON_TOPIC,
                     keywords = "$term,$meaning",
                     source = "user"
                 )
+                if (saved) refreshUserLexicon()
 
                 appendMessage(
                     ChatMessage(
-                        text = "✅ سجلتها في ذاكرتي: «$term» تعني «$meaning».",
+                        text = if (saved) {
+                            "✅ حفظت «$term» بمعنى «$meaning»، وسأستخدم هذا المعنى لفهم طلباتك التالية."
+                        } else {
+                            "تعذر حفظ هذا التعريف محليًا؛ لم أتمكن من تفعيله للاستعمال لاحقًا."
+                        },
                         isFromUser = false
                     )
                 )
@@ -999,7 +1088,12 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
             return
         }
 
-        val centralCommand = RachaCommandRouter.classify(trimmed)
+        if (isCurrentWeatherQuestion(routedText) || isWeatherRetry(routedText, currentState.messages)) {
+            fetchWeatherForChat()
+            return
+        }
+
+        val centralCommand = RachaCommandRouter.classify(routedText)
 
         if (centralCommand is RachaCommand.GetLocation) {
             viewModelScope.launch(Dispatchers.IO) {
@@ -1034,7 +1128,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
 
         // تنفيذ أوامر الوسائط مباشرة حتى لا تذهب إلى نموذج الذكاء الاصطناعي
         // أو تتوقف عند IntentHandler إذا اختلفت صياغة الأمر.
-        val normalizedMediaCommand = trimmed
+        val normalizedMediaCommand = routedText
             .lowercase()
             .replace(Regex("[ًٌٍَُِّْـ]"), "")
             .replace(Regex("\\s+"), " ")
@@ -1047,6 +1141,19 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                 normalizedMediaCommand.contains("قنوات") ||
                 normalizedMediaCommand.contains("iptv") ||
                 normalizedMediaCommand.contains("بث مباشر")
+
+        val normalizedMusicRequest = routedText.lowercase()
+            .replace(Regex("[ًٌٍَُِّْـ]"), "")
+            .replace(Regex("[أإآٱ]"), "ا")
+        val opensMusic = listOf("موسيقى", "موسيقي", "اغاني", "اغنية", "صوتيات", "music", "song")
+            .any { normalizedMusicRequest.contains(it) } &&
+            listOf("افتح", "افتحي", "شغل", "شغلي", "تشغيل", "اعرض", "اعرضي", "play", "open", "show")
+                .any { normalizedMusicRequest.contains(it) }
+        if (opensMusic) {
+            EveState.openShelf(MediaShelfType.MUSIC)
+            appendMessage(ChatMessage(text = "فتحت قائمة الموسيقى المحلية يا رمزي؛ اختر أغنية لبدء تشغيلها.", isFromUser = false))
+            return
+        }
 
         if (centralCommand is RachaCommand.OpenPhotos) {
             EveState.openShelf(MediaShelfType.PHOTOS)
@@ -1081,29 +1188,12 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
             return
         }
 
-        if (centralCommand is RachaCommand.AskAI) {
-            viewModelScope.launch {
-                _uiState.update { it.copy(isLoading = true) }
-
-                try {
-                    handleAiQuery(finalQuery)
-                } catch (e: Exception) {
-                    android.util.Log.e(
-                        "ChatViewModel",
-                        "فشل الموجّه المركزي",
-                        e
-                    )
-
-                    appendMessage(
-                        ChatMessage(
-                            text = "عذراً يا رمزي، تعذر معالجة طلبك حالياً.",
-                            isFromUser = false
-                        )
-                    )
-
-                    _uiState.update { it.copy(isLoading = false) }
-                }
-            }
+        val conversationalIntent = IntentClassifier.classify(routedText)
+        if (conversationalIntent == IntentClassifier.IntentType.GREETING ||
+            conversationalIntent == IntentClassifier.IntentType.SMALL_TALK ||
+            conversationalIntent == IntentClassifier.IntentType.CORRECTION
+        ) {
+            handleAiQuery(routedFinalQuery)
             return
         }
 
@@ -1112,7 +1202,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
 
             try {
                 val result = withContext(Dispatchers.IO) {
-                    intentHandler.handle(trimmed)
+                    intentHandler.handle(routedText)
                 }
 
                 when (result) {
@@ -1156,7 +1246,17 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                     }
 
                     is IntentHandler.HandlerResult.Unknown -> {
-                        handleAiQuery(finalQuery)
+                        if (LearnedLexiconResolver.looksLikeAction(routedText)) {
+                            appendMessage(
+                                ChatMessage(
+                                    text = "فهمت طلبك بعد تطبيق المعنى الذي علمتني إياه، لكن لا توجد في هذا الإصدار وظيفة محلية لتنفيذه. لم أنفذ أي إجراء.",
+                                    isFromUser = false
+                                )
+                            )
+                            _uiState.update { it.copy(isLoading = false) }
+                        } else {
+                            handleAiQuery(routedFinalQuery)
+                        }
                     }
                 }
             } catch (e: Exception) {

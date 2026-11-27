@@ -23,6 +23,13 @@ interface KnowledgeDao {
     """)
     suspend fun search(query: String, limit: Int = 5): List<KnowledgeEntity>
 
+    @Query("""
+        SELECT * FROM knowledge_entries
+        WHERE source = 'user' AND topic = 'معجم رمزي'
+        ORDER BY lastUsed DESC
+    """)
+    suspend fun getUserLexiconEntries(): List<KnowledgeEntity>
+
     @Query("SELECT * FROM knowledge_entries WHERE id = :id LIMIT 1")
     suspend fun getById(id: String): KnowledgeEntity?
 

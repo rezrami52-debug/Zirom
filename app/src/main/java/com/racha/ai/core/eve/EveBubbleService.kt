@@ -32,8 +32,12 @@ import com.racha.ai.core.overlay.OverlayLifecycleOwner
 import com.racha.ai.core.preferences.AppPreferences
 import com.racha.ai.core.security.SecurePreferences
 import com.racha.ai.core.voice.VoiceInputHelper
+import com.racha.ai.core.command.LearnedLexiconResolver
 import com.racha.ai.data.api.GeminiService
 import com.racha.ai.data.llm.QwenService
+import com.racha.ai.data.repository.KnowledgeRepository
+import com.racha.ai.services.location.LocationHelper
+import com.racha.ai.services.weather.WeatherService
 import kotlinx.coroutines.*
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -64,6 +68,8 @@ class EveBubbleService : Service() {
     private lateinit var securePreferences: SecurePreferences
     private lateinit var appPreferences: AppPreferences
     private lateinit var qwenService: QwenService
+    private lateinit var knowledgeRepository: KnowledgeRepository
+    private var lastRequestWasWeather: Boolean = false
 
     private var exoPlayer: ExoPlayer? = null
     private var pendingPlaybackTitle: String? = null
@@ -91,6 +97,7 @@ class EveBubbleService : Service() {
         intentHandler = IntentHandler(this, AppResolver(this), ContactResolver(this))
         commandExecutor = RachaCommandExecutor(this, intentHandler)
         qwenService = QwenService(this)
+        knowledgeRepository = KnowledgeRepository(this)
         exoPlayer = ExoPlayer.Builder(this).build().apply {
             addListener(object : Player.Listener {
                 override fun onIsPlayingChanged(isPlaying: Boolean) {
@@ -660,9 +667,55 @@ class EveBubbleService : Service() {
         return "الوقت الآن: $time | البطارية: $currentBatteryPct% ($chargingStr) | التطبيق المفتوح: $activeApp | المستخدم: رمزي | الموقع: سوسة، تونس."
     }
 
+    private fun isWeatherQuestion(text: String): Boolean {
+        val value = text.lowercase()
+            .replace(Regex("[ًٌٍَُِّْـ]"), "")
+            .replace(Regex("[أإآٱ]"), "ا")
+        return listOf("طقس", "الجو", "درجة الحرارة", "weather", "forecast").any { value.contains(it) }
+    }
+
+    private fun isWeatherRetry(text: String): Boolean {
+        val value = text.lowercase()
+            .replace(Regex("[ًٌٍَُِّْـ]"), "")
+            .replace(Regex("[أإآٱ]"), "ا")
+        return listOf("جرب", "حاول", "اعد", "مرة ثانية", "مرة اخرى", "من جديد", "retry", "try again")
+            .any { value.contains(it) }
+    }
+
+    private fun fetchAndSpeakWeather() {
+        serviceScope.launch {
+            try {
+                val location = withContext(Dispatchers.IO) { runCatching { LocationHelper.getCurrentLocation(this@EveBubbleService) }.getOrNull() }
+                val city = location?.cityName?.takeIf { it.isNotBlank() } ?: "سوسة"
+                val weather = WeatherService.fetchWeather(location?.latitude ?: 35.8256, location?.longitude ?: 10.6369, city)
+                val locationNote = if (location == null) "لم أتمكن من قراءة موقع الهاتف، فاستخدمت إحداثيات سوسة كافتراض. " else ""
+                val reply = if (weather == null) {
+                    "تعذر جلب تحديث الطقس الآن. تحقق من الإنترنت ثم قل جرّبي الآن لإعادة المحاولة."
+                } else {
+                    "$locationNote الطقس الحالي في ${weather.cityName.ifBlank { city }}: ${weather.description()}، الحرارة ${weather.temperature.toInt()} درجة، المحسوسة ${weather.feelsLike.toInt()}، الرطوبة ${weather.humidity}%."
+                }
+                speakCleanText(reply, continueConversation = false)
+            } catch (error: Exception) {
+                android.util.Log.e("EveBubbleService", "تعذر جلب الطقس صوتيًا", error)
+                speakCleanText("تعذر تحديث الطقس الآن. تحقق من الاتصال ثم أعد طلبك.", continueConversation = false)
+            }
+        }
+    }
+
     private fun processSpokenText(text: String) {
         serviceScope.launch(Dispatchers.Main) {
-            val lower = text.lowercase().trim()
+            val lexiconEntries = withContext(Dispatchers.IO) { knowledgeRepository.getUserLexiconEntries() }
+            val routedText = LearnedLexiconResolver.expand(text, lexiconEntries)
+            val lower = routedText.lowercase().trim()
+
+            val weatherQuestion = isWeatherQuestion(routedText)
+            val weatherRetry = isWeatherRetry(routedText) && lastRequestWasWeather
+            if (weatherQuestion || weatherRetry) {
+                lastRequestWasWeather = true
+                fetchAndSpeakWeather()
+                return@launch
+            }
+            lastRequestWasWeather = false
 
             val playback = EveState.uiState.value.playback
             if (playback.title.isNotBlank()) {
@@ -703,7 +756,7 @@ class EveBubbleService : Service() {
 
             val hasVideo = lower.contains("فيديو") || lower.contains("فيديوهات") || lower.contains("مقاطع")
             val hasPhoto = lower.contains("صور") || lower.contains("صورة") || lower.contains("معرض") || lower.contains("البوم")
-            val hasMusic = lower.contains("موسيقى") || lower.contains("اغاني") || lower.contains("أغاني") || lower.contains("صوتيات")
+            val hasMusic = lower.contains("موسيقى") || lower.contains("اغاني") || lower.contains("أغاني") || lower.contains("صوتيات") || lower.contains("music") || lower.contains("song")
             val hasNotif = lower.contains("اشعار") || lower.contains("اشعارات") || lower.contains("إشعار")
 
             val mediaCount = listOf(hasVideo, hasPhoto, hasMusic, hasNotif).count { it }
@@ -732,13 +785,13 @@ class EveBubbleService : Service() {
             } else if (isShow && hasPhoto) {
                 EveState.openShelf(MediaShelfType.PHOTOS)
                 speakCleanText("تفضل ألبوم الصور", continueConversation = false)
-            } else if (isShow && hasMusic) {
+            } else if ((isShow || listOf("شغل", "شغلي", "تشغيل", "play", "open", "show", "ابدأ", "ابدئي").any { lower.contains(it) }) && hasMusic) {
                 EveState.openShelf(MediaShelfType.MUSIC)
                 speakCleanText("تفضل قائمة الموسيقى", continueConversation = false)
             } else if (lower.contains("ماذا ترى") || lower.contains("شوفي الشاشة") || lower.contains("حللي الشاشة")) {
                 handleScreenVisionQuery()
             } else {
-                val cleanCommand = text.replace(Regex("(?i)eve|racha|ايف|إيف|ايڤ|اف|راشا|رشا|روشا|يا "), "").trim()
+                val cleanCommand = routedText.replace(Regex("(?i)eve|racha|ايف|إيف|ايڤ|اف|راشا|رشا|روشا|يا "), "").trim()
 
                 if (cleanCommand.length > 2) {
                     val result = withContext(Dispatchers.IO) { commandExecutor.executeForVoice(cleanCommand) }
@@ -750,11 +803,23 @@ class EveBubbleService : Service() {
                             speakCleanText(result.message, continueConversation = true)
                         }
                         else -> {
+                            if (LearnedLexiconResolver.looksLikeAction(routedText)) {
+                                speakCleanText("فهمت الأمر باستخدام المعنى الذي علمتني إياه، لكن لا توجد لدي وظيفة محلية لتنفيذه. لم أنفذ أي إجراء.", continueConversation = true)
+                                return@launch
+                            }
+                            val learnedContext = withContext(Dispatchers.IO) {
+                                knowledgeRepository.buildContextFor(text, limit = 3)
+                            }
+                            val aiQuestion = buildString {
+                                append(cleanCommand)
+                                if (routedText != text) append("\n[المعنى بعد تطبيق معجم المستخدم: $routedText]")
+                                if (learnedContext.isNotBlank()) append("\n$learnedContext")
+                            }
                             val selectedProvider = appPreferences.getLLMProvider()
 
                             if (selectedProvider == "qwen" && qwenService.isModelPresent()) {
                                 try {
-                                    val qwenReply = withContext(Dispatchers.IO) { qwenService.generateResponse(cleanCommand) }
+                                    val qwenReply = withContext(Dispatchers.IO) { qwenService.generateResponse(aiQuestion) }
                                     speakCleanText(qwenReply, continueConversation = true)
                                     return@launch
                                 } catch (_: Exception) {}
@@ -764,7 +829,7 @@ class EveBubbleService : Service() {
                             if (!apiKey.isNullOrBlank()) {
                                 try {
                                     val liveContext = getLiveDeviceContext()
-                                    val contextualPrompt = "[$liveContext]\nسؤال رمزي: $cleanCommand"
+                                    val contextualPrompt = "[$liveContext]\nسؤال رمزي: $aiQuestion"
 
                                     val aiReply = withContext(Dispatchers.IO) {
                                         GeminiService(apiKey).generateResponse(contextualPrompt)
@@ -780,7 +845,7 @@ class EveBubbleService : Service() {
                                     speakCleanText(aiReply, continueConversation = true)
                                 } catch (e: Exception) {
                                     if (qwenService.isModelPresent()) {
-                                        val fallback = withContext(Dispatchers.IO) { qwenService.generateResponse(cleanCommand) }
+                                        val fallback = withContext(Dispatchers.IO) { qwenService.generateResponse(aiQuestion) }
                                         speakCleanText(fallback, continueConversation = true)
                                     } else {
                                         speakCleanText("أنا معك يا رمزي، تفضل بأمرك.", continueConversation = true)
@@ -788,7 +853,7 @@ class EveBubbleService : Service() {
                                 }
                             } else {
                                 if (qwenService.isModelPresent()) {
-                                    val fallback = withContext(Dispatchers.IO) { qwenService.generateResponse(cleanCommand) }
+                                    val fallback = withContext(Dispatchers.IO) { qwenService.generateResponse(aiQuestion) }
                                     speakCleanText(fallback, continueConversation = true)
                                 } else {
                                     speakCleanText("أنا معك يا رمزي، تفضل بأمرك.", continueConversation = true)
