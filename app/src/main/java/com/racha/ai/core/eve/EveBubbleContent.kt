@@ -1095,7 +1095,13 @@ fun EveStandaloneShelfWindow(
                 } else {
                     if (mediaItems.isEmpty()) {
                         Box(modifier = Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
-                            Text("لا توجد ملفات أو جاري الفحص...", color = Color.Gray, fontSize = 11.sp)
+                            val emptyMessage = when (shelfType) {
+                                MediaShelfType.MUSIC -> "لا تظهر ملفات موسيقى. امنح رشا صلاحية الوصول إلى الملفات الصوتية ثم أعد المحاولة."
+                                MediaShelfType.VIDEOS -> "لا توجد مقاطع فيديو يمكن الوصول إليها."
+                                MediaShelfType.PHOTOS -> "لا توجد صور يمكن الوصول إليها."
+                                else -> "لا توجد ملفات أو جاري الفحص..."
+                            }
+                            Text(emptyMessage, color = Color.Gray, fontSize = 11.sp)
                         }
                     } else {
                         LazyColumn(modifier = Modifier.weight(1f).fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(4.dp)) {

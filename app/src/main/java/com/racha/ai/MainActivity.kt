@@ -33,8 +33,31 @@ class MainActivity : ComponentActivity() {
         } else {
             Toast.makeText(this, "⚠️ الإشعارات معطلة. قد لا تعمل الاستباقية أو الفقاعة.", Toast.LENGTH_LONG).show()
         }
+        requestAudioLibraryPermissionIfNeeded()
     }
 
+    private val requestAudioPermission = registerForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { isGranted ->
+        if (!isGranted) {
+            Toast.makeText(
+                this,
+                "لإظهار الموسيقى المحلية، اسمح لرشا بالوصول إلى الملفات الصوتية من إعدادات التطبيق.",
+                Toast.LENGTH_LONG
+            ).show()
+        }
+    }
+
+    private fun requestAudioLibraryPermissionIfNeeded() {
+        val permission = when {
+            Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU -> Manifest.permission.READ_MEDIA_AUDIO
+            Build.VERSION.SDK_INT >= Build.VERSION_CODES.M -> Manifest.permission.READ_EXTERNAL_STORAGE
+            else -> return
+        }
+        if (ContextCompat.checkSelfPermission(this, permission) != PackageManager.PERMISSION_GRANTED) {
+            requestAudioPermission.launch(permission)
+        }
+    }
 
     private fun ensureShizukuPermission() {
         try {
@@ -78,11 +101,13 @@ class MainActivity : ComponentActivity() {
 
 
         // طلب إذن الإشعارات (Android 13+)
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            if (ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS)
-                != PackageManager.PERMISSION_GRANTED) {
-                requestNotificationPermission.launch(Manifest.permission.POST_NOTIFICATIONS)
-            }
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+            ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS)
+                != PackageManager.PERMISSION_GRANTED
+        ) {
+            requestNotificationPermission.launch(Manifest.permission.POST_NOTIFICATIONS)
+        } else {
+            requestAudioLibraryPermissionIfNeeded()
         }
 
         checkOverlayPermission()

@@ -66,6 +66,7 @@ class EveBubbleService : Service() {
     private lateinit var qwenService: QwenService
 
     private var exoPlayer: ExoPlayer? = null
+    private var pendingPlaybackTitle: String? = null
     private var screenReceiver: BroadcastReceiver? = null
     private var batteryReceiver: BroadcastReceiver? = null
     private var currentBatteryPct = 100
@@ -97,10 +98,27 @@ class EveBubbleService : Service() {
                     if (current.title.isNotBlank()) {
                         EveState.updatePlayback(isPlaying, current.title, current.artist)
                     }
+                    if (isPlaying) {
+                        pendingPlaybackTitle?.let { title ->
+                            pendingPlaybackTitle = null
+                            speakCleanText("بدأ تشغيل $title يا رمزي.", continueConversation = false)
+                        }
+                    }
                 }
 
                 override fun onPlaybackStateChanged(playbackState: Int) {
                     if (playbackState == Player.STATE_ENDED) EveState.clearPlayback()
+                }
+
+                override fun onPlayerError(error: androidx.media3.common.PlaybackException) {
+                    val title = pendingPlaybackTitle ?: EveState.uiState.value.playback.title
+                    pendingPlaybackTitle = null
+                    EveState.clearPlayback()
+                    speakCleanText(
+                        if (title.isBlank()) "تعذّر تشغيل الملف الصوتي. تحقق من صلاحية الوصول إلى الموسيقى."
+                        else "تعذّر تشغيل $title. تحقق من صلاحية الوصول إلى الملف الصوتي.",
+                        continueConversation = false
+                    )
                 }
             })
         }
@@ -378,61 +396,38 @@ class EveBubbleService : Service() {
         }
     }
 
-    // التبديل بين أربع درجات لحجم نافذة الوسائط
+    // مراحل تكبير متصاعدة فعليًا من حجم النافذة الحالي حتى ملء المساحة المتاحة.
     private fun toggleShelfFullscreen(type: MediaShelfType) {
         activeShelfWindows[type]?.let { holder ->
             val dm = resources.displayMetrics
             val density = dm.density
-
-            val normalW = (290 * density).toInt()
-            val normalH = (390 * density).toInt()
-
             val screenW = dm.widthPixels
             val screenH = dm.heightPixels
+            val availableW = (screenW - 20).coerceAtLeast(1)
+            val availableH = (screenH - 120).coerceAtLeast(1)
+            val normalW = (290 * density).toInt().coerceAtMost(availableW)
+            val normalH = (390 * density).toInt().coerceAtMost(availableH)
+            val zoomLevels = listOf(0.82f, 0.88f, 0.94f, 0.97f, 1.0f)
+            val currentFraction = holder.layoutParams.width.toFloat() / availableW
+            val nextFraction = zoomLevels.firstOrNull { it > currentFraction + 0.015f }
 
-            val availableW = (screenW - 20).coerceAtLeast(normalW)
-            val availableH = (screenH - 120).coerceAtLeast(normalH)
-
-            val mediumW = (screenW * 0.58f).toInt()
-            val mediumH = (availableH * 0.58f).toInt()
-
-            val largeW = (screenW * 0.78f).toInt()
-            val largeH = (availableH * 0.78f).toInt()
-
-            val fullscreenW = availableW
-            val fullscreenH = availableH
-
-            val currentW = holder.layoutParams.width
-
-            val nextSize = when {
-                currentW <= normalW + 40 -> {
-                    // المستوى الثاني: تكبير متوسط
-                    intArrayOf(mediumW, mediumH)
-                }
-
-                currentW <= mediumW + 40 -> {
-                    // المستوى الثالث: تكبير كبير
-                    intArrayOf(largeW, largeH)
-                }
-
-                currentW <= largeW + 40 -> {
-                    // المستوى الرابع: ملء الشاشة
-                    intArrayOf(fullscreenW, fullscreenH)
-                }
-
-                else -> {
-                    // العودة إلى الحجم الطبيعي
-                    intArrayOf(normalW, normalH)
-                }
+            val newW: Int
+            val newH: Int
+            val isFullscreen: Boolean
+            if (nextFraction == null) {
+                // من آخر مستوى: ارجع إلى الحجم الطبيعي.
+                newW = normalW
+                newH = normalH
+                isFullscreen = false
+            } else {
+                newW = (availableW * nextFraction).toInt().coerceAtMost(availableW)
+                newH = (availableH * nextFraction).toInt().coerceAtMost(availableH)
+                isFullscreen = nextFraction >= 0.999f
             }
-
-            val newW = nextSize[0]
-            val newH = nextSize[1]
 
             holder.layoutParams.width = newW
             holder.layoutParams.height = newH
-
-            if (newW >= fullscreenW - 30 && newH >= fullscreenH - 30) {
+            if (isFullscreen) {
                 holder.layoutParams.x = 10
                 holder.layoutParams.y = 70
             } else {
@@ -441,10 +436,7 @@ class EveBubbleService : Service() {
             }
 
             try {
-                windowManager.updateViewLayout(
-                    holder.view,
-                    holder.layoutParams
-                )
+                windowManager.updateViewLayout(holder.view, holder.layoutParams)
             } catch (_: Exception) {
             }
         }
@@ -524,14 +516,25 @@ class EveBubbleService : Service() {
     }
 
     private fun playSelectedAudio(item: MediaItemData) {
-        if (item.type == "AUDIO") {
-            exoPlayer?.stop()
-            exoPlayer?.clearMediaItems()
-            exoPlayer?.setMediaItem(MediaItem.fromUri(item.uri))
-            exoPlayer?.prepare()
-            exoPlayer?.play()
-            EveState.updatePlayback(isPlaying = true, title = item.title)
-            speakCleanText("جاري تشغيل ${item.title}")
+        if (item.type != "AUDIO") return
+        val player = exoPlayer
+        if (player == null) {
+            speakCleanText("مشغل الموسيقى غير جاهز الآن.", continueConversation = false)
+            return
+        }
+        try {
+            pendingPlaybackTitle = item.title
+            player.stop()
+            player.clearMediaItems()
+            player.setMediaItem(MediaItem.fromUri(item.uri))
+            EveState.updatePlayback(isPlaying = false, title = item.title)
+            player.prepare()
+            player.play()
+        } catch (error: Exception) {
+            pendingPlaybackTitle = null
+            EveState.clearPlayback()
+            android.util.Log.e("EveBubbleService", "تعذر بدء تشغيل الملف الصوتي", error)
+            speakCleanText("تعذّر تشغيل ${item.title}. تحقق من صلاحية الوصول إلى الملف.", continueConversation = false)
         }
     }
 
@@ -550,6 +553,7 @@ class EveBubbleService : Service() {
     }
 
     private fun stopMusicPlayback(announce: Boolean = true) {
+        pendingPlaybackTitle = null
         exoPlayer?.stop()
         exoPlayer?.clearMediaItems()
         EveState.clearPlayback()
