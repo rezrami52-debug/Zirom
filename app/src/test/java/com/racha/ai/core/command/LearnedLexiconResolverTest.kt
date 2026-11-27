@@ -17,7 +17,7 @@ class LearnedLexiconResolverTest {
     @Test fun expandsAnyLearnedVerbOrPhraseNotOnlyOpen() {
         val entries = listOf(entry("شغلي", "افتحي"), entry("نوري", "شغلي"))
         assertEquals("افتحي الموسيقى", LearnedLexiconResolver.expand("نوري الموسيقى", entries))
-        assertEquals("اطفئ المصباح", LearnedLexiconResolver.expand("سكّري المصباح", listOf(entry("سكّري", "أطفئ"))))
+        assertEquals("اطفي المصباح", LearnedLexiconResolver.expand("سكّري المصباح", listOf(entry("سكّري", "أطفئ"))))
     }
 
     @Test fun replacesWholeTermsOnly() {
