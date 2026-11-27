@@ -1193,7 +1193,10 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
             conversationalIntent == IntentClassifier.IntentType.SMALL_TALK ||
             conversationalIntent == IntentClassifier.IntentType.CORRECTION
         ) {
-            handleAiQuery(routedFinalQuery)
+            viewModelScope.launch {
+                _uiState.update { it.copy(isLoading = true) }
+                handleAiQuery(routedFinalQuery)
+            }
             return
         }
 
