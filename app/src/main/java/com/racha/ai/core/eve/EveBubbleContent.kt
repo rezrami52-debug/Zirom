@@ -688,7 +688,7 @@ fun EveStandaloneShelfWindow(
                                         modifier = Modifier.size(26.dp)
                                     ) {
                                         Icon(
-                                            imageVector = if (videoVolume == 0f) Icons.AutoMirrored.Filled.VolumeOff else Icons.AutoMirrored.Filled.VolumeUp,
+                                            imageVector = if (videoVolume == 0f) Icons.Default.VolumeOff else Icons.Default.VolumeUp,
                                             contentDescription = "الصوت",
                                             tint = Color(0xFF00E5FF),
                                             modifier = Modifier.size(18.dp)
@@ -863,7 +863,7 @@ fun EveStandaloneShelfWindow(
 
                             Row(modifier = Modifier.fillMaxWidth().padding(horizontal = 6.dp), verticalAlignment = Alignment.CenterVertically) {
                                 Icon(
-                                    imageVector = if (videoVolume == 0f) Icons.AutoMirrored.Filled.VolumeOff else Icons.AutoMirrored.Filled.VolumeUp,
+                                    imageVector = if (videoVolume == 0f) Icons.Default.VolumeOff else Icons.Default.VolumeUp,
                                     contentDescription = null,
                                     tint = Color(0xFF00E5FF),
                                     modifier = Modifier.size(16.dp).clickable {

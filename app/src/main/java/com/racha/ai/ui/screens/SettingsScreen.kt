@@ -104,7 +104,7 @@ fun SettingsScreen(
                 title = { Text("لوحة التحكم والإعدادات", fontWeight = FontWeight.Bold) },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "رجوع")
+                        Icon(Icons.Default.ArrowBack, contentDescription = "رجوع")
                     }
                 }
             )
@@ -623,7 +623,7 @@ fun SettingsScreen(
                         modifier = Modifier.fillMaxWidth().clickable { onOpenSecurityLog() }.padding(vertical = 8.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Icon(Icons.AutoMirrored.Filled.List, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+                        Icon(Icons.Default.List, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
                         Spacer(modifier = Modifier.width(12.dp))
                         Text("عرض سجل المحاولات", fontWeight = FontWeight.Bold)
                     }

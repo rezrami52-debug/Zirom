@@ -696,7 +696,7 @@ private fun DecompiledFilesDialog(
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             Icon(
-                                imageVector = if (entry.isTextPreviewable) Icons.Default.Description else Icons.AutoMirrored.Filled.InsertDriveFile,
+                                imageVector = if (entry.isTextPreviewable) Icons.Default.Description else Icons.Default.InsertDriveFile,
                                 contentDescription = null,
                                 tint = if (entry.isTextPreviewable) Color(0xFF7DD3FC) else Color.LightGray,
                                 modifier = Modifier.size(18.dp)
@@ -989,7 +989,7 @@ fun MessageBubbleRacha(
                             onClick = { onSpeak(message.text) },
                             modifier = Modifier.size(26.dp)
                         ) {
-                            Icon(Icons.AutoMirrored.Filled.VolumeUp, contentDescription = "استماع", tint = glow, modifier = Modifier.size(17.dp))
+                            Icon(Icons.Default.VolumeUp, contentDescription = "استماع", tint = glow, modifier = Modifier.size(17.dp))
                         }
                     }
                 }
@@ -1090,7 +1090,7 @@ fun InputBarRacha(
                         CircularProgressIndicator(color = glow, modifier = Modifier.size(22.dp), strokeWidth = 2.dp)
                     } else {
                         Icon(
-                            imageVector = if (text.isNotBlank() || selectedImagePath != null || hasSelectedFile) Icons.AutoMirrored.Filled.Send else Icons.Default.Mic,
+                            imageVector = if (text.isNotBlank() || selectedImagePath != null || hasSelectedFile) Icons.Default.Send else Icons.Default.Mic,
                             contentDescription = "إرسال الرسالة أو الصورة",
                             tint = glow,
                             modifier = Modifier.size(22.dp)

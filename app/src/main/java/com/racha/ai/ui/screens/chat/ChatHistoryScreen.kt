@@ -35,7 +35,7 @@ fun ChatHistoryScreen(
             verticalAlignment = Alignment.CenterVertically
         ) {
             IconButton(onClick = onBack) {
-                Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "رجوع")
+                Icon(Icons.Default.ArrowBack, contentDescription = "رجوع")
             }
             Text("سجل المحادثات", fontSize = 20.sp, fontWeight = FontWeight.Bold)
             IconButton(onClick = onNewChat) {
@@ -68,7 +68,7 @@ fun ChatHistoryScreen(
                             modifier = Modifier.padding(16.dp).fillMaxWidth(),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Icon(Icons.AutoMirrored.Filled.Chat, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+                            Icon(Icons.Default.Chat, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
                             Spacer(modifier = Modifier.width(12.dp))
                             Column(modifier = Modifier.weight(1f)) {
                                 Text(conv.title, fontWeight = FontWeight.Bold, fontSize = 16.sp)

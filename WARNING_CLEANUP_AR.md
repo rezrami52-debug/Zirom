@@ -5,7 +5,7 @@
 ## التعديلات الآمنة المنفذة
 
 - استبدال `Divider` بـ `HorizontalDivider` في شاشات Compose.
-- تحديث الأيقونات القديمة إلى مسار `Icons.AutoMirrored.Filled` للأيقونات الاتجاهية أو ذات الاتجاه.
+- تمت مراجعة تحذيرات الأيقونات، لكن إصدار مكتبة الأيقونات الحالي في المشروع لا يوفر `Icons.AutoMirrored.Filled` لهذه الرموز؛ لذلك أُبقيت على `Icons.Default` المتوافق مع المشروع بدل التضحية بالبناء من أجل إزالة تحذير منخفض الخطورة.
 - تحديث `stopForeground(true)` إلى `stopForeground(STOP_FOREGROUND_REMOVE)`.
 - توحيد اسم معامل Room Migration إلى `db` بما يطابق الواجهة الأصلية.
 - إزالة متغير `normalized` غير المستخدم في `TunisiaKnowledge`.

@@ -52,7 +52,7 @@ fun CustomizationScreen(
                 title = { Text("التخصيص 🎨", fontSize = 20.sp) },
                 navigationIcon = {
                     IconButton(onClick = onBackClick) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "رجوع")
+                        Icon(Icons.Default.ArrowBack, contentDescription = "رجوع")
                     }
                 }
             )
