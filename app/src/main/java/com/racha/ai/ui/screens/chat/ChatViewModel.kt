@@ -959,8 +959,6 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
             "$routedText\n[الصياغة الأصلية للمستخدم: $trimmed]$fileContext$imageContext"
         } else finalQuery
 
-        if (handleChatMusicPlaybackCommand(routedText)) return
-
         if (MemoryLearningPolicy.isLearningTrigger(trimmed)) {
             toggleScreenLearningMode()
             return
@@ -1037,13 +1035,16 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                     )
                     .trim()
 
-                val saved = knowledgeRepo.quickSaveVerified(
+                val saved = runCatching {
+                    knowledgeRepo.saveOrUpdate(
                     question = pendingTerm,
                     answer = cleanMeaning,
                     topic = LearnedLexiconResolver.LEXICON_TOPIC,
                     keywords = "$pendingTerm,$cleanMeaning",
                     source = "user"
-                )
+                    )
+                    true
+                }.getOrDefault(false)
                 if (saved) refreshUserLexicon()
 
                 val originalQuestion = originalPendingQuestion
@@ -1076,13 +1077,16 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
             val (term, meaning) = directLearnMatch
 
             viewModelScope.launch(Dispatchers.IO) {
-                val saved = knowledgeRepo.quickSaveVerified(
-                    question = term,
-                    answer = meaning,
-                    topic = LearnedLexiconResolver.LEXICON_TOPIC,
-                    keywords = "$term,$meaning",
-                    source = "user"
-                )
+                val saved = runCatching {
+                    knowledgeRepo.saveOrUpdate(
+                        question = term,
+                        answer = meaning,
+                        topic = LearnedLexiconResolver.LEXICON_TOPIC,
+                        keywords = "$term,$meaning",
+                        source = "user"
+                    )
+                    true
+                }.getOrDefault(false)
                 if (saved) refreshUserLexicon()
 
                 appendMessage(
@@ -1098,6 +1102,8 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
             }
             return
         }
+
+        if (handleChatMusicPlaybackCommand(routedText)) return
 
         if (isCurrentWeatherQuestion(routedText) || isWeatherRetry(routedText, currentState.messages)) {
             fetchWeatherForChat()
@@ -1551,19 +1557,33 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
 
     private fun matchDirectLearning(text: String): Pair<String, String>? {
         val patterns = listOf(
-            Regex("(?i)^(.+?)\\s+(?:تعني|يعني)\\s+(.+)$"),
-            Regex("(?i)^(.+?)\\s+(?:هو|هي)\\s+(?:عبارة عن|بمعنى|معناها)\\s+(.+)$"),
-            Regex("(?i)^احفظي\\s+(?:أن|ان|إن|إنو|انو)?\\s*(.+?)\\s+(?:تعني|يعني|هو|هي)\\s+(.+)$")
+            Regex("(?i)^(.+?)\\s+(?:مرادف|مرادفة|مرادفٌ|مرادفةٌ)\\s+(?:لـ|ل|الى|إلى)?\\s*(.+)$"),
+            Regex("(?i)^(.+?)\\s+(?:تعني|يعني|معناها|معناه|بمعنى)\\s+(.+)$"),
+            Regex("(?i)^(.+?)\\s+(?:هو|هي)\\s+(?:عبارة عن|بمعنى|معناها|مرادف(?:ة)?)\\s+(.+)$"),
+            Regex("(?i)^(.+?)\\s+(?:اقصد بها|أقصد بها|نقصد بها|نقصد بيها)\\s+(.+)$"),
+            Regex("(?i)^احفظي?\\s+(?:أن|ان|إن|إنو|انو)?\\s*(.+?)\\s+(?:تعني|يعني|مرادف|مرادفة|بمعنى)\\s+(?:لـ|ل)?\\s*(.+)$"),
+            Regex("(?i)^اذا قلت\\s+(.+?)\\s+(?:فافهمها|فافهمه|فالمقصود)\\s+(.+)$"),
+            Regex("(?i)^إذا قلت\\s+(.+?)\\s+(?:فافهمها|فافهمه|فالمقصود)\\s+(.+)$")
         )
 
         for (pattern in patterns) {
             val match = pattern.find(text)
 
             if (match != null && match.groupValues.size >= 3) {
-                val term = match.groupValues[1].trim()
-                val meaning = match.groupValues[2].trim()
+                val term = match.groupValues[1]
+                    .trim()
+                    .replace(Regex("(?i)^(هذه\\s+الكلمة|هذي\\s+الكلمة|هذه|هذي|الكلمة|كلمة|اللفظ|عبارة)\\s+"), "")
+                    .replace(Regex("(?i)\\s+(هي|هو)\\s*$"), "")
+                    .trim('"', '“', '”', '«', '»', '\'')
+                val meaning = match.groupValues[2]
+                    .trim()
+                    .replace(Regex("(?i)^(?:ال)?كلمة\\s+"), "")
+                    .trimEnd('.', '،', ',', '!', '؟', '?')
+                    .trim()
+                    .trim('"', '“', '”', '«', '»', '\'')
 
-                if (term.length in 2..35 && meaning.isNotBlank()) {
+                if (term.length in 2..50 && meaning.length in 2..120 &&
+                    term != meaning && term.any { it.isLetter() } && meaning.any { it.isLetter() }) {
                     return Pair(term, meaning)
                 }
             }

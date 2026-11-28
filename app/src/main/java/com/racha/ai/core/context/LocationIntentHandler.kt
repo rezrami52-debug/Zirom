@@ -174,29 +174,6 @@ object LocationIntentHandler {
             ?: location.cityName
             ?: "موقعي"
 
-        if (isAppInstalled(context, GOOGLE_EARTH)) {
-            try {
-                val earthIntent = context.packageManager
-                    .getLaunchIntentForPackage(GOOGLE_EARTH)
-
-                if (earthIntent != null) {
-                    earthIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-
-                    val uri = Uri.parse(
-                        "geo:$lat,$lon?q=$lat,$lon($label)"
-                    )
-
-                    earthIntent.data = uri
-                    context.startActivity(earthIntent)
-
-                    Log.d(TAG, "✅ فُتح Google Earth")
-                    return "🌍 تم فتح موقعك في Google Earth"
-                }
-            } catch (e: Exception) {
-                Log.w(TAG, "فشل Google Earth", e)
-            }
-        }
-
         if (isAppInstalled(context, GOOGLE_MAPS)) {
             try {
                 val uri = Uri.parse(
@@ -217,6 +194,22 @@ object LocationIntentHandler {
                 return "🗺️ تم فتح موقعك في Google Maps"
             } catch (e: Exception) {
                 Log.w(TAG, "فشل Google Maps", e)
+            }
+        }
+
+        if (isAppInstalled(context, GOOGLE_EARTH)) {
+            try {
+                val earthIntent = context.packageManager
+                    .getLaunchIntentForPackage(GOOGLE_EARTH)
+                if (earthIntent != null) {
+                    earthIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                    earthIntent.data = Uri.parse("geo:$lat,$lon?q=$lat,$lon($label)")
+                    context.startActivity(earthIntent)
+                    Log.d(TAG, "✅ فُتح Google Earth كخيار احتياطي")
+                    return "🌍 تم فتح موقعك في Google Earth"
+                }
+            } catch (e: Exception) {
+                Log.w(TAG, "فشل Google Earth الاحتياطي", e)
             }
         }
 

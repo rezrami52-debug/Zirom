@@ -48,10 +48,13 @@ object IntentClassifier {
 
         val isMediaCmd = lower.contains("استعرض") || lower.contains("استعرضي") || lower.contains("اعرض") ||
                          lower.contains("اعرضي") || lower.contains("افتح") || lower.contains("افتحي") ||
-                         lower.contains("وريني") || lower.contains("أرني") || lower.contains("ارني") ||
-                         lower.contains("شوفي") || lower.contains("شوف") || lower.contains("هاتي") ||
-                         lower.contains("هات") || lower.contains("حل") || lower.contains("حليلي") ||
-                         lower.contains("فرجني") || lower.contains("فرّجني") || lower.contains("خرجلي")
+                         lower.contains("شغل") || lower.contains("شغّل") || lower.contains("شغلي") ||
+                         lower.contains("شغّلي") || lower.contains("تشغيل") || lower.contains("ابدأ") ||
+                         lower.contains("ابدئي") || lower.contains("وريني") || lower.contains("أرني") ||
+                         lower.contains("ارني") || lower.contains("شوفي") || lower.contains("شوف") ||
+                         lower.contains("هاتي") || lower.contains("هات") || lower.contains("حل") ||
+                         lower.contains("حليلي") || lower.contains("فرجني") || lower.contains("فرّجني") ||
+                         lower.contains("خرجلي")
 
         val hasVideo = lower.contains("فيديو") || lower.contains("فيديوهات") || lower.contains("مقاطع") || lower.contains("مقطع")
         val hasPhoto = lower.contains("صور") || lower.contains("صورة") || lower.contains("صوري") || lower.contains("البوم") || lower.contains("ألبوم") || lower.contains("معرض")
