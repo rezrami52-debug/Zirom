@@ -119,7 +119,7 @@ fun WeatherBannerWithPrayerTimes(weather: WeatherInfo?, modifier: Modifier = Mod
                 }
 
                 Spacer(modifier = Modifier.height(12.dp))
-                Divider(color = Color.White.copy(alpha = 0.3f), thickness = 1.dp)
+                HorizontalDivider(color = Color.White.copy(alpha = 0.3f), thickness = 1.dp)
                 Spacer(modifier = Modifier.height(12.dp))
 
                 Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {

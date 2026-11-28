@@ -104,7 +104,7 @@ fun SettingsScreen(
                 title = { Text("لوحة التحكم والإعدادات", fontWeight = FontWeight.Bold) },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
-                        Icon(Icons.Default.ArrowBack, contentDescription = "رجوع")
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "رجوع")
                     }
                 }
             )
@@ -311,7 +311,7 @@ fun SettingsScreen(
                         }
                     }
 
-                    Divider(modifier = Modifier.padding(vertical = 6.dp))
+                    HorizontalDivider(modifier = Modifier.padding(vertical = 6.dp))
 
                     Row(
                         modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
@@ -333,7 +333,7 @@ fun SettingsScreen(
                         }
                     }
 
-                    Divider(modifier = Modifier.padding(vertical = 6.dp))
+                    HorizontalDivider(modifier = Modifier.padding(vertical = 6.dp))
 
                     Row(
                         modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
@@ -554,7 +554,7 @@ fun SettingsScreen(
                         }
                     }
 
-                    Divider(modifier = Modifier.padding(vertical = 4.dp))
+                    HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
 
                     Row(
                         modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp),
@@ -571,7 +571,7 @@ fun SettingsScreen(
                         )
                     }
 
-                    Divider(modifier = Modifier.padding(vertical = 4.dp))
+                    HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
 
                     // 🔒 مفتاح تفعيل قفل التطبيق بالبصمة أو الوجه
                     Row(
@@ -598,7 +598,7 @@ fun SettingsScreen(
                         )
                     }
 
-                    Divider(modifier = Modifier.padding(vertical = 4.dp))
+                    HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
 
                     Row(
                         modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp),
@@ -617,13 +617,13 @@ fun SettingsScreen(
                         }
                     }
 
-                    Divider(modifier = Modifier.padding(vertical = 4.dp))
+                    HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
 
                     Row(
                         modifier = Modifier.fillMaxWidth().clickable { onOpenSecurityLog() }.padding(vertical = 8.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Icon(Icons.Default.List, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+                        Icon(Icons.AutoMirrored.Filled.List, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
                         Spacer(modifier = Modifier.width(12.dp))
                         Text("عرض سجل المحاولات", fontWeight = FontWeight.Bold)
                     }

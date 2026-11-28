@@ -91,7 +91,7 @@ fun PrayerScreen(onBack: () -> Unit) {
                     title = { Text("🧭 البوصلة المباشرة واتجاه القبلة", color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.Bold) },
                     navigationIcon = {
                         IconButton(onClick = onBack) {
-                            Icon(Icons.Default.ArrowBack, contentDescription = "رجوع", tint = Color.White)
+                            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "رجوع", tint = Color.White)
                         }
                     },
                     colors = TopAppBarDefaults.topAppBarColors(containerColor = Color(0x44000000))

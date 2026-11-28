@@ -143,6 +143,7 @@ class SpywareDetector(
                 }
             }
 
+            @Suppress("DEPRECATION")
             fun appOpAllowed(operation: String, uid: Int, packageName: String): Boolean? {
                 val manager = appOps
                 if (manager == null) {
@@ -279,6 +280,7 @@ class SpywareDetector(
                 )
             }
 
+            @Suppress("DEPRECATION")
             val activeVpnDetected: Boolean? = try {
                 val connectivity = context.getSystemService(
                     Context.CONNECTIVITY_SERVICE

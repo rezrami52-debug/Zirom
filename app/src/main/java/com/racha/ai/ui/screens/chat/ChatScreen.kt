@@ -681,7 +681,7 @@ private fun DecompiledFilesDialog(
                     ) { Text("تصدير الملف") }
                 }
 
-                Divider(color = Color.White.copy(alpha = 0.16f))
+                HorizontalDivider(color = Color.White.copy(alpha = 0.16f))
                 Text("الملفات الناتجة (${visibleFiles.size})", color = Color.White, fontSize = 12.sp, modifier = Modifier.padding(vertical = 6.dp))
                 LazyColumn(modifier = Modifier.weight(1f).fillMaxWidth()) {
                     items(visibleFiles, key = { it.path }) { entry ->
@@ -696,7 +696,7 @@ private fun DecompiledFilesDialog(
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             Icon(
-                                imageVector = if (entry.isTextPreviewable) Icons.Default.Description else Icons.Default.InsertDriveFile,
+                                imageVector = if (entry.isTextPreviewable) Icons.Default.Description else Icons.AutoMirrored.Filled.InsertDriveFile,
                                 contentDescription = null,
                                 tint = if (entry.isTextPreviewable) Color(0xFF7DD3FC) else Color.LightGray,
                                 modifier = Modifier.size(18.dp)
@@ -898,7 +898,7 @@ fun WeatherCardRacha(
             }
 
             Spacer(modifier = Modifier.height(8.dp))
-            Divider(color = Color.White.copy(alpha = 0.12f), thickness = 1.dp)
+            HorizontalDivider(color = Color.White.copy(alpha = 0.12f), thickness = 1.dp)
             Spacer(modifier = Modifier.height(6.dp))
 
             // مواقيت الصلاة مرتبة بالاتجاه العربي (الفجر في اليمين -> العشاء في اليسار)
@@ -989,7 +989,7 @@ fun MessageBubbleRacha(
                             onClick = { onSpeak(message.text) },
                             modifier = Modifier.size(26.dp)
                         ) {
-                            Icon(Icons.Default.VolumeUp, contentDescription = "استماع", tint = glow, modifier = Modifier.size(17.dp))
+                            Icon(Icons.AutoMirrored.Filled.VolumeUp, contentDescription = "استماع", tint = glow, modifier = Modifier.size(17.dp))
                         }
                     }
                 }
@@ -1090,7 +1090,7 @@ fun InputBarRacha(
                         CircularProgressIndicator(color = glow, modifier = Modifier.size(22.dp), strokeWidth = 2.dp)
                     } else {
                         Icon(
-                            imageVector = if (text.isNotBlank() || selectedImagePath != null || hasSelectedFile) Icons.Default.Send else Icons.Default.Mic,
+                            imageVector = if (text.isNotBlank() || selectedImagePath != null || hasSelectedFile) Icons.AutoMirrored.Filled.Send else Icons.Default.Mic,
                             contentDescription = "إرسال الرسالة أو الصورة",
                             tint = glow,
                             modifier = Modifier.size(22.dp)
@@ -1229,7 +1229,7 @@ fun SideDrawerRacha(
             }
 
             Spacer(modifier = Modifier.height(20.dp))
-            Divider(color = Color.White.copy(alpha = 0.12f), thickness = 1.dp)
+            HorizontalDivider(color = Color.White.copy(alpha = 0.12f), thickness = 1.dp)
             Spacer(modifier = Modifier.height(16.dp))
 
             // عناصر القائمة

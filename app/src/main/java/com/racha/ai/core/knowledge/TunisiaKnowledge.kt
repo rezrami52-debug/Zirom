@@ -66,7 +66,6 @@ object TunisiaKnowledge {
     // ==========================================
     suspend fun tryHandleTransportQuery(query: String, context: Context): String? {
         // تطبيع النص أولاً عبر قاموس الدارجة
-        val normalized = normalizeDerja(query)
         val lower = query.lowercase().trim()
 
         // 1. بروتوكول النجاة والخروج من المسالك الفلاحية والجبال (Rural & Mountain Exit)

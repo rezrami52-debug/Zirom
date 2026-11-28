@@ -25,6 +25,7 @@ import androidx.compose.ui.unit.sp
 import java.util.concurrent.Executor
 
 @Composable
+@Suppress("UNUSED_PARAMETER")
 fun BiometricLockScreen(
     onSuccess: () -> Unit,
     onCancel: () -> Unit,

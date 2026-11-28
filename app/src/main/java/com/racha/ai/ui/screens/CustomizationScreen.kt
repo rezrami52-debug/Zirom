@@ -52,7 +52,7 @@ fun CustomizationScreen(
                 title = { Text("التخصيص 🎨", fontSize = 20.sp) },
                 navigationIcon = {
                     IconButton(onClick = onBackClick) {
-                        Icon(Icons.Default.ArrowBack, contentDescription = "رجوع")
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "رجوع")
                     }
                 }
             )
@@ -92,7 +92,7 @@ fun CustomizationScreen(
                 }
             }
 
-            Divider()
+            HorizontalDivider()
 
             // 2. لون فقاعة المستخدم
             Text("لون فقاعتك:", style = MaterialTheme.typography.titleMedium)

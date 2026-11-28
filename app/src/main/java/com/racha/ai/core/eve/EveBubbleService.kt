@@ -165,6 +165,7 @@ class EveBubbleService : Service() {
                             }
                         }
                     }
+                    @Suppress("DEPRECATION")
                     override fun onError(utteranceId: String?) {}
                 })
             }
@@ -499,7 +500,7 @@ class EveBubbleService : Service() {
             bubbleView?.let { windowManager.removeView(it) }
             bubbleView = null
         } catch (_: Exception) {}
-        stopForeground(true)
+        stopForeground(STOP_FOREGROUND_REMOVE)
         stopSelf()
     }
 

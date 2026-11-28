@@ -99,7 +99,7 @@ object NewsFetcher {
                         if (title.isNotBlank() && publishedAt != null) {
                             results += NewsArticle(
                                 title = title,
-                                source = completed?.source?.toString()?.trim().orEmpty(),
+                                source = completed.source.toString().trim(),
                                 publishedAtMillis = publishedAt
                             )
                         }

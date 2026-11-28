@@ -28,6 +28,7 @@ class NetworkUsageManager(private val context: Context) {
     /**
      * التحقق من الصلاحية أو منحها تلقائياً عبر Shizuku
      */
+    @Suppress("DEPRECATION")
     private fun ensureUsageStatsPermission() {
         if (ShizukuShellRunner.isShizukuAvailable()) {
             ShizukuShellRunner.execCommand("appops set ${context.packageName} GET_USAGE_STATS allow")
@@ -50,6 +51,7 @@ class NetworkUsageManager(private val context: Context) {
         }
     }
 
+    @Suppress("DEPRECATION")
     suspend fun getTodayTopDataConsumers(limit: Int = 5): List<AppNetworkUsage> = withContext(Dispatchers.IO) {
         ensureUsageStatsPermission()
         val list = mutableListOf<AppNetworkUsage>()

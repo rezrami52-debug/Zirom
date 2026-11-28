@@ -32,16 +32,16 @@ abstract class RachaDatabase : RoomDatabase() {
         private const val DATABASE_NAME = "racha_database"
 
         private val MIGRATION_2_3 = object : Migration(2, 3) {
-            override fun migrate(database: SupportSQLiteDatabase) {
-                database.execSQL("ALTER TABLE chat_messages ADD COLUMN imagePath TEXT")
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE chat_messages ADD COLUMN imagePath TEXT")
             }
         }
 
         private val MIGRATION_1_2 = object : Migration(1, 2) {
             override fun migrate(
-                database: SupportSQLiteDatabase
+                db: SupportSQLiteDatabase
             ) {
-                database.execSQL(
+                db.execSQL(
                     """
                     CREATE TABLE IF NOT EXISTS conversations (
                         id TEXT NOT NULL,
@@ -52,7 +52,7 @@ abstract class RachaDatabase : RoomDatabase() {
                     """.trimIndent()
                 )
 
-                database.execSQL(
+                db.execSQL(
                     """
                     CREATE TABLE IF NOT EXISTS chat_messages (
                         id TEXT NOT NULL,
@@ -66,7 +66,7 @@ abstract class RachaDatabase : RoomDatabase() {
                     """.trimIndent()
                 )
 
-                database.execSQL(
+                db.execSQL(
                     """
                     CREATE TABLE IF NOT EXISTS user_profile (
                         id INTEGER NOT NULL,
@@ -98,7 +98,7 @@ abstract class RachaDatabase : RoomDatabase() {
                     """.trimIndent()
                 )
 
-                database.execSQL(
+                db.execSQL(
                     """
                     CREATE TABLE IF NOT EXISTS knowledge_entries (
                         id TEXT NOT NULL,
@@ -115,7 +115,7 @@ abstract class RachaDatabase : RoomDatabase() {
                     """.trimIndent()
                 )
 
-                database.execSQL(
+                db.execSQL(
                     """
                     CREATE TABLE IF NOT EXISTS lock_attempts (
                         id TEXT NOT NULL,
