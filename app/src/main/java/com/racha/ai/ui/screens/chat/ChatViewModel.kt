@@ -1072,9 +1072,16 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         }
 
         val directLearnMatch = matchDirectLearning(trimmed)
+        val contextualLearnMatch = if (directLearnMatch == null) {
+            matchContextualLearning(trimmed, currentState.messages)
+        } else {
+            null
+        }
 
-        if (directLearnMatch != null) {
-            val (term, meaning) = directLearnMatch
+        val learnMatch = directLearnMatch ?: contextualLearnMatch
+
+        if (learnMatch != null) {
+            val (term, meaning) = learnMatch
 
             viewModelScope.launch(Dispatchers.IO) {
                 val saved = runCatching {
@@ -1590,6 +1597,47 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         }
 
         return null
+    }
+
+    /**
+     * Supports contextual teaching, for example:
+     * 1) "شغلي"
+     * 2) "أقصد افتحي"
+     * The previous user phrase becomes the learned term.
+     */
+    private fun matchContextualLearning(
+        text: String,
+        messages: List<ChatMessage>
+    ): Pair<String, String>? {
+        val meaning = Regex(
+            "(?i)^(?:اقصد|أقصد|اقصد بها|أقصد بها|اعني|أعني|نعني|نقصد|نقصد بها)\\s+(.+)$"
+        ).matchEntire(text.trim())?.groupValues?.getOrNull(1)
+            ?.trim()
+            ?.trimEnd('.', '،', ',', '!', '؟', '?')
+            ?.trim('"', '“', '”', '«', '»', '\'')
+            ?: return null
+
+        val previousUserText = messages.asReversed()
+            .firstOrNull { it.isFromUser && it.text.isNotBlank() }
+            ?.text
+            ?.trim()
+            ?.trimEnd('.', '،', ',', '!', '؟', '?')
+            ?.trim('"', '“', '”', '«', '»', '\'')
+            ?: return null
+
+        val term = previousUserText
+            .replace(Regex("(?i)^(هذه\\s+الكلمة|هذي\\s+الكلمة|كلمة|اللفظ)\\s+"), "")
+            .trim()
+
+        if (term.length !in 2..50 || meaning.length !in 2..120 ||
+            term.equals(meaning, ignoreCase = true) ||
+            term.none { it.isLetter() } || meaning.none { it.isLetter() } ||
+            term.contains("؟") || term.contains("?") ||
+            meaning.startsWith("لم") || meaning.startsWith("لا")) {
+            return null
+        }
+
+        return term to meaning
     }
 
     private fun isUnclearResponse(reply: String): Boolean {
