@@ -5,7 +5,10 @@ import android.content.Intent
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.net.Uri
+import android.os.Build
 import android.provider.OpenableColumns
+import android.provider.Settings
+import androidx.core.content.ContextCompat
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.racha.ai.core.agent.SelfEvolutionAgent
@@ -22,6 +25,7 @@ import com.racha.ai.core.eve.EveAccessibilityService
 import com.racha.ai.core.eve.EveBubbleService
 import com.racha.ai.core.eve.EveState
 import com.racha.ai.core.eve.MediaShelfType
+import com.racha.ai.core.web.FloatingWebService
 import com.racha.ai.core.memory.MemoryLearningPolicy
 import com.racha.ai.core.preferences.AppPreferences
 import com.racha.ai.core.security.SecurePreferences
@@ -848,6 +852,13 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         val trimmed = userText.trim()
         val imagePath = currentState.pendingImagePath
 
+        FloatingWebService.normalizeHttpUrl(trimmed)?.let { url ->
+            appendMessage(ChatMessage(text = trimmed, isFromUser = true))
+            _uiState.update { it.copy(inputText = "") }
+            openFloatingUrl(url)
+            return
+        }
+
         if (LocalApkCommandMatcher.matches(trimmed)) {
             if (trimmed.isNotBlank()) appendMessage(ChatMessage(text = trimmed, isFromUser = true))
             _uiState.update { it.copy(inputText = "") }
@@ -1606,6 +1617,15 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                 actionBody == "OPEN_VIDEOS" -> "اعرضي مقاطع الفيديو"
                 actionBody == "OPEN_PHOTOS" -> "اعرضي ألبوم الصور"
 
+                actionBody.startsWith("OPEN_URL") -> {
+                    val url = actionBody
+                        .substringAfter("(", "")
+                        .substringBeforeLast(")")
+                        .trim()
+                    openFloatingUrl(url)
+                    null
+                }
+
                 actionBody.contains("FLASHLIGHT(on)") ->
                     "شغلي الفلاش"
 
@@ -1655,6 +1675,43 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         }
 
         return rawText.replace(actionRegex, "").trim()
+    }
+
+    private fun openFloatingUrl(rawUrl: String) {
+        val safeUrl = FloatingWebService.normalizeHttpUrl(rawUrl) ?: run {
+            appendMessage(
+                ChatMessage(
+                    text = "تعذر فتح الرابط: يجب أن يبدأ الرابط بـ http:// أو https://.",
+                    isFromUser = false
+                )
+            )
+            return
+        }
+        try {
+            val app = getApplication<Application>()
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M && !Settings.canDrawOverlays(app)) {
+                appendMessage(
+                    ChatMessage(
+                        text = "فعّل إذن الظهور فوق التطبيقات أولًا حتى أفتح الرابط في نافذة عائمة.",
+                        isFromUser = false
+                    )
+                )
+                return
+            }
+            val intent = Intent(app, FloatingWebService::class.java).apply {
+                action = FloatingWebService.ACTION_OPEN_URL
+                putExtra(FloatingWebService.EXTRA_URL, safeUrl)
+            }
+            ContextCompat.startForegroundService(app, intent)
+        } catch (error: Exception) {
+            android.util.Log.e("ChatViewModel", "فشل فتح الرابط في نافذة عائمة", error)
+            appendMessage(
+                ChatMessage(
+                    text = "تعذر فتح الرابط في نافذة عائمة. تأكد من تفعيل إذن الظهور فوق التطبيقات.",
+                    isFromUser = false
+                )
+            )
+        }
     }
 
     fun onAppChosen(
